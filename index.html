@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autobahn Tool </title>
+<script src="turf.min.js"></script>
+<style>
+/* --- OPTIK & DARK MODE VARIABLEN --- */
+:root {
+    --bg-body: #f4f6f8;
+    --bg-card: white;
+    --text-main: #333;
+    --text-secondary: #00529b;
+    --input-bg: white;
+    --input-border: #ccc;
+    --table-head: #eee;
+    --result-bg: #f0f4f8;
+    --accent: #007BFF;
+}
+
+[data-theme="dark"] {
+    --bg-body: #121212;
+    --bg-card: #1e1e1e;
+    --text-main: #e0e0e0;
+    --text-secondary: #4dabff;
+    --input-bg: #2d2d2d;
+    --input-border: #444;
+    --table-head: #333;
+    --result-bg: #2a2d31;
+}
+
+body { 
+    font-family: Arial, sans-serif; 
+    margin: 20px; 
+    background: var(--bg-body); 
+    display: flex; 
+    gap: 20px; 
+    flex-wrap: wrap; 
+    justify-content: center; 
+    color: var(--text-main); 
+    transition: background 0.3s, color 0.3s; 
+}
+
+.card { 
+    background: var(--bg-card); 
+    padding: 20px; 
+    border-radius: 12px; 
+    box-shadow: 0 3px 15px rgba(0,0,0,0.2); 
+    max-width: 450px; 
+    width: 100%; 
+    box-sizing: border-box; 
+    position: relative; 
+}
+
+h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 20px; }
+
+/* Dark Mode Toggle */
+.theme-switch { 
+    position: absolute; 
+    top: 15px; 
+    right: 15px; 
+    cursor: pointer; 
+    font-size: 22px; 
+    user-select: none;
+}
+
+/* Design-Fix: Alle Felder exakt gleich breit */
+select, input, button { 
+    width: 100%; 
+    margin-top: 12px; 
+    padding: 12px; 
+    border-radius: 8px; 
+    border: 1px solid var(--input-border); 
+    box-sizing: border-box; 
+    font-size: 16px; 
+    background: var(--input-bg); 
+    color: var(--text-main); 
+    font-family: inherit;
+}
+
+button { background: var(--accent); color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+button:hover { filter: brightness(1.1); }
+button.active { background: #dc3545; }
+
+table { width: 100%; margin-top: 20px; border-collapse: collapse; font-size: 0.9em; }
+th, td { border: 1px solid var(--input-border); padding: 10px 8px; text-align: left; }
+th { background: var(--table-head); }
+
+.bar { margin-top: 15px; height: 18px; background: #444; border-radius: 9px; overflow: hidden; }
+.fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
+.result { 
+    margin-top: 15px; 
+    padding: 15px; 
+    background: var(--result-bg); 
+    border-radius: 8px; 
+    border-left: 4px solid var(--accent); 
+}
+.result p { margin: 6px 0; }
+
+#gps-info { 
+    font-size: 0.85em; 
+    background: var(--bg-card); 
+    padding: 10px; 
+    border: 1px solid var(--input-border); 
+    border-radius: 8px; 
+    margin-top: 12px; 
+    text-align: center; 
+    line-height: 1.4;
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+    <div class="theme-switch" onclick="toggleTheme()">🌓</div>
+    
+<h2>Zuständigkeitsfinder</h2>
+    
+    <select id="prioMode">
+        <option value="bab">🛣️ Priorität: Autobahn</option>
+        <option value="bund">🚙 Priorität: Bundesstraße</option>
+        <option value="land">🌲 Priorität: Landstraße</option>
+    </select>
+    
+    <select id="autobahn" onchange="manuellerFokus = this.value; zeigeListe(); updateRichtung(); berechnen();">
+        <option value="A1">A1</option>
+        <option value="A3">A3</option>
+        <option value="A44">A44</option>
+        <option value="A46">A46</option>
+        <option value="A57">A57</option>
+        <option value="A59">A59</option>
+        <option value="A535">A535</option>
+        <option value="A542">A542</option>
+    </select>
+
+    <input id="km" placeholder="Kilometer eingeben" inputmode="decimal" oninput="berechnen()">
+
+    <button id="gpsBtn" onclick="toggleGPS()">GPS Live-Erfassung starten</button>
+    <div id="gps-info">Lade NRW Geodaten... Bitte warten.</div>
+
+    <button onclick="berechnen()">Manuell Berechnen</button>
+
+    <div class="result">
+        <p><strong>Bereich:</strong> <span id="b"></span></p>
+        <p><strong>Gemeinde:</strong> <span id="g"></span></p>
+        <p><strong>Meisterei:</strong> <span id="m"></span></p>
+        <p><strong>Adresse:</strong> <span id="m_address"></span></p>
+        <div class="bar"><div id="progress" class="fill"></div></div>
+    </div>
+
+    <table>
+        <thead><tr><th>Typ</th><th>Name</th><th>Km</th></tr></thead>
+        <tbody id="liste"></tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Weg-Zeit Rechner</h2>
+    <input id="start_km" placeholder="Start km" inputmode="decimal">
+    <input id="speed" placeholder="Geschwindigkeit (km/h)" inputmode="numeric">
+    <select id="richtung"></select>
+    <input id="zeit" placeholder="Zeit (h)" inputmode="decimal">
+    <button onclick="berechneWeg()">Berechnen</button>
+
+    <div class="result">
+        <p><strong>Ziel km:</strong> <span id="ziel_km"></span></p>
+        <p><strong>Nächste AS:</strong> <span id="next_as"></span></p>
+    </div>
+</div>
+
+<script>
+// --- DEINE DATEN (Original belassen) ---
+const grenzen={A1:[363.315,381.646],A3:[101.2,122.819],A44:[1.215,17.599],A46:[70.815,114.763],A57:[88.5,100.912],A59:[0.578,14.467],A535:[0.262,12.811],A542:[4.055,8.754]};
+const listen={
+A1:[["AS","W.-Langerfeld","365,700"],["PP","Kucksiepen","367,900"],["PP","Ehrenberg","368,200"],["AS","W.-Ronsdorf","373,300"],["AS","RS-Lennep","376,800"],["AS","Remscheid","379,100"]],
+A3:[["PP","Stindertal RF Köln","103,400"],["PP","Stinderhof RF Arnheim","103,400"],["AK","Hilden","108,700"],["PP","Heidi","113,100"],["AS","Solingen","117,400"],["AK","Langenfeld","118,400"],["PP","Reusrather Heide","121,600"]],
+A44:[["AS","Heiligenhaus","1,200"],["AS","Hetterscheidt","6,000"],["Tunnel","Birth","7,090-7,930"],["AS","Velbert-Nord","8,400"],["AD","Velbert-Nord","9,500"],["AS","Langenberg","11,900"],["AS","E.-Kupferd.-Dilldorf","14,100"],["AS","E.-Kupferdreh","14,700"],["AS","E.-Überruhr","16,800"],["AS","E.-Heisingen","17,600"]],
+A46:[["AK","Neuss-Süd","70,800"],["AS","NE-Uedesheim","72,300"],["AS","D.-Bilk","76,300"],["Tunnel","Universität","76,136-77,170"],["AS","D.-Wersten","78,200"],["Tunnel","Wersten","78,140-79,010"],["AS","D.-Holthausen","80,000"],["AS","D.-Eller","81,200"],["AK","Düsseldorf-Süd","82,000"],["AS","Erkrath","85,000"],["AK","Hilden","87,000"],["AS","Hilden","87,400"],["AS","Haan-West","89,400"],["PP","Höfgen","92,600"],["PP","Stropmütze","92,600"],["AS","Haan-Ost","94,200"],["AS","W.-Cronenberg","98,400"],["Kreuz","Sonnborn","99,500"],["AS","W.-Varresbeck","101,600"],["AS","W.-Katernberg","103,900"],["AS","W.-Elberfeld","105,700"],["AS","W.-Barmen","107,800"],["AS","W.-Wichlinghausen","110,000"],["PP","Sternenberg","110,900"],["AS","W.-Oberbarmen","113,900"]],
+A57:[["AK","Neuss-Süd","90,300"],["TuR","Nievenheim","94,900"],["AS","Dormagen","99,400"]],
+A59:[["AK","Düsseldorf Süd","0,578"],["AS","D.-Benrath","1,800"],["AS","D.-Garath","4,600"],["PP","Wolfhagen","8,000"],["AS","Richrath","9,000"],["PP","Berghausen","9,900"],["AS","Monheim","11,400"],["AK","Monheim-Süd","13,100"]],
+A535:[["AD","Velbert-Nord","0,262"],["AS","Velbert","1,800"],["AS","Tönnisheide","4,500"],["AS","Wülfrath","6,600"],["Tunnel","Großer Busch","11,030-11,300"],["AS","W.-Dornap","11,700"]],
+A542:[["AD","Monheim-Süd","4,055"],["AS","Reusrath","5,700"],["AS","Immigrath","8,000"],["AD","Langenfeld","8,754"]]
+};
+const gemeinden={A1:[{from:363.315,to:365.711,name:"Schwelm"},{from:365.711,to:373.815,name:"Wuppertal"},{from:373.815,to:381.646,name:"Remscheid"}],A3:[{from:101.2,to:102.996,name:"Düsseldorf"},{from:102.996,to:108.347,name:"Erkrath"},{from:108.347,to:112.770,name:"Hilden"},{from:112.770,to:114.266,name:"Solingen"},{from:114.264,to:122.819,name:"Langenfeld"}],A44:[{from:1.215,to:4.096,name:"Heiligenhaus"},{from:4.096,to:4.907,name:"Wülfrath"},{from:4.907,to:5.466,name:"Velbert"},{from:5.466,to:5.607,name:"Heiligenhaus"},{from:5.607,to:12.754,name:"Velbert"},{from:12.754,to:17.599,name:"Essen"}],A46:[{from:70.815,to:74.919,name:"Neuss"},{from:74.919,to:85.416,name:"Düsseldorf"},{from:85.416,to:94.706,name:"Haan"},{from:94.706,to:114.763,name:"Wuppertal"}],A57:[{from:88.5,to:91.6,name:"Neuss"},{from:91.6,to:100.912,name:"Dormagen"}],A59:[{from:0.578,to:7.714,name:"Düsseldorf"},{from:7.714,to:14.467,name:"Langenfeld"}],A535:[{from:0.262,to:7.128,name:"Velbert"},{from:7.128,to:9.326,name:"Wülfrath"},{from:9.326,to:12.811,name:"Wuppertal"}],A542:[{from:4.055,to:8.754,name:"Langenfeld"}]};
+const richtungen={A1:["RF Köln (+)","RF Dortmund (-)"],A3:["RF Köln (+)","RF Arnheim (-)"],A44:["RF Kassel (+)","RF Aachen (-)"],A46:["RF Brilon (+)","RF Heinsberg (-)"],A57:["RF Köln (+)","RF Nijmegen (-)"],A59:["RF Köln (+)","RF Dinslaken (-)"],A535:["RF Wuppertal (+)","RF Velbert (-)"],A542:["RF Langenfeld (+)","RF Monheim (-)"]};
+const meistereien={A1:[{from:363.315,to:365.649,name:"AM Hagen",address:"In d. Krone 20, 58099 Hagen"},{from:365.649,to:381.646,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A3:[{from:101.2,to:107.925,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"},{from:107.925,to:122.819,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],A44:[{from:1.215,to:17.599,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"}],A46:[{from:70.815,to:80.770,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:80.770,to:88.340,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"},{from:88.340,to:114.763,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A57:[{from:88.5,to:93.343,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:93.343,to:100.912,name:"AM Köln",address:"Dürener Str. 462, 50858 Köln"}],A59:[{from:0.578,to:14.467,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],A535:[{from:0.262,to:12.811,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A542:[{from:4.055,to:8.754,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}]};
+
+// --- OPTIK-FUNKTION (Dark Mode) ---
+function toggleTheme() {
+    const doc = document.documentElement;
+    if (doc.getAttribute("data-theme") === "dark") {
+        doc.setAttribute("data-theme", "light");
+    } else {
+        doc.setAttribute("data-theme", "dark");
+    }
+}
+
+// --- GPS & DATEI LOGIK ---
+let datenLand=[], datenBAB=[], referenzPunkte=[];
+let datenGeladen=false, watchId=null;
+
+
+//Helfer für das Autobahnkreuz
+let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
+let manuellerFokus = null;
+    
+Promise.all([
+    fetch('Abschnitt.json').then(res=>res.json()),
+    fetch('AbschnittBAB.json').then(res=>res.json()),
+    fetch('BABKM.json').then(res=>res.json())
+]).then(([land, bab, punkte])=>{
+    datenLand=extrahiere(land, true);
+    datenBAB=extrahiere(bab, true);
+    referenzPunkte=extrahiere(punkte, false);
+    datenGeladen=true;
+    document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Datenbank bereit</span>';
+}).catch(err=>{
+    document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Dateien</span>';
+});
+
+function extrahiere(json, erwarteLinien){
+    let list=[]; if(!json||!json.features) return list;
+    json.features.forEach(f=>{
+        try { turf.flatten(f).features.forEach(sub=>{
+            if(erwarteLinien&&(!sub.geometry||!sub.geometry.type.includes('LineString'))) return;
+            list.push(sub);
+        }); } catch(e){}
+    });
+    return list;
+}
+
+function toggleGPS(){
+    const btn=document.getElementById("gpsBtn"), info=document.getElementById("gps-info");
+    if(watchId){
+        navigator.geolocation.clearWatch(watchId); watchId=null;
+        btn.innerHTML="📡 GPS Live-Erfassung starten"; btn.classList.remove("active");
+        info.innerHTML="GPS pausiert.";
+    } else {
+        if(!navigator.geolocation) return info.innerText="GPS nicht unterstützt";
+        btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); info.innerHTML="⏳ Suche Signal...";
+        
+        // Ändere diese Stelle:
+watchId = navigator.geolocation.watchPosition(pos => {
+    try { verarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); }
+    catch(e) { info.innerHTML = "❌ Fehler: " + e.message; }
+}, err => { 
+    info.innerHTML = "❌ GPS-Fehler: " + err.message; 
+    
+}, { 
+    enableHighAccuracy: true, 
+    maximumAge: 30000, // Erlaubt 30 Sek. alte Daten
+    timeout: 10000     // Bricht nach 10 Sek. die Suche ab und gibt einen Fehler aus
+});
+    }
+}
+
+function verarbeiteGPS(lat, lon, acc){
+    letzteLat = lat; letzteLon = lon; letzteAcc = acc;
+    const pt = turf.point([lon, lat]);
+    const meineAutobahnen = Object.keys(grenzen);
+    let prio = document.getElementById("prioMode") ? document.getElementById("prioMode").value : "bab";
+    
+    // 1. WIR SUCHEN ÜBERALL: Beide Dateien zusammenlegen
+    let alleDaten = datenBAB.concat(datenLand);
+
+    // 2. KANDIDATEN SAMMELN (Suche in ALLEN Daten nach den entsprechenden Mustern)
+    let babHits = findeKandidaten(alleDaten, pt, meineAutobahnen, 2.0); 
+    let bundHits = findeKandidaten(alleDaten, pt, "BUND", 2.0);
+    let landHits = findeKandidaten(alleDaten, pt, "LAND", 2.0);
+    
+    let alleKandidaten = [...babHits, ...bundHits, ...landHits];
+    
+    // Duplikate filtern (falls eine Straße in beiden Dateien gleich heißt)
+    let uniqueKandidaten = [];
+    let seenNames = new Set();
+    alleKandidaten.forEach(k => {
+        if (!seenNames.has(k.name)) {
+            seenNames.add(k.name);
+            uniqueKandidaten.push(k);
+        }
+    });
+
+    if(uniqueKandidaten.length > 0){
+        let sel = null;
+        
+        // 3. NAHBEREICH FÜR BUTTONS (Erhöht auf 800 Meter für große Kreuze!)
+        let nahBereich = uniqueKandidaten.filter(k => k.dist <= 0.8); 
+
+        // 4. STICKY FOCUS PRÜFEN
+        if (manuellerFokus) {
+            let focusMatch = nahBereich.find(k => k.name === manuellerFokus);
+            if (focusMatch) sel = focusMatch; 
+        }
+
+        // 5. PRIORITÄT WÄHLEN (Falls kein Fokus gesetzt oder Fokus außer Reichweite ist)
+        if (!sel) {
+            if (prio === "bab") sel = babHits[0] || bundHits[0] || landHits[0];
+            else if (prio === "bund") sel = bundHits[0] || babHits[0] || landHits[0];
+            else sel = landHits[0] || bundHits[0] || babHits[0];
+        }
+
+        const props = sel.feature.properties || {};
+        const strName = sel.name; 
+        const drop = document.getElementById("autobahn");
+        let htmlOutput = "";
+        
+        // --- AUTOBAHN ODER LANDSTRASSE BERECHNEN ---
+        if(Array.from(drop.options).some(o=>o.value===strName)){
+            let bkm = berechneGoldgriffBKM(pt, strName);
+            document.getElementById("km").value = bkm.toFixed(3).replace('.',',');
+            drop.value = strName;
+            manuellerFokus = strName; // Synchronisieren
+            htmlOutput = `<span style="color:green;font-weight:bold;">✅ ${strName} erkannt</span> | BKM: ${bkm.toFixed(3)} | Gen.: ±${acc.toFixed(0)}m`;
+            zeigeListe(); updateRichtung(); berechnen();
+        } else {
+            let abschnitt = props.ABSNR || "Unbekannt";
+            let ast = props.ABSAST && props.ABSAST !== "" ? ` (${props.ABSAST})` : "";
+            let snapped = turf.nearestPointOnLine(sel.feature, pt);
+            let aktuellerKM = (parseFloat(props.STATANF) || 0) + (snapped.properties.location || 0);
+            let icon = (props.STRKL === "B" || props.STRKL === "b") ? "🚙" : "🌲";
+            
+            htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${ast}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small>`;
+            
+            document.getElementById("km").value = "";
+            document.getElementById("b").innerText="-"; document.getElementById("g").innerText="-";
+            document.getElementById("m").innerText="-"; document.getElementById("m_address").innerText="-";
+            document.getElementById("progress").style.width="0%"; document.getElementById("liste").innerHTML="";
+        }
+
+        // --- KREUZUNGS-UI (Die Wechsel-Buttons bauen) ---
+        let andereImKreuz = nahBereich.filter(k => k.name !== sel.name);
+        if (andereImKreuz.length > 0) {
+            htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
+            htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
+            
+            andereImKreuz.forEach(k => {
+                let btnText = "";
+                if (Array.from(drop.options).some(o=>o.value===k.name)) {
+                    let k_bkm = berechneGoldgriffBKM(pt, k.name);
+                    btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)})`;
+                } else {
+                    let k_icon = (k.props.STRKL === "B" || k.props.STRKL === "b") ? "🚙" : "🌲";
+                    btnText = `${k_icon} ${k.name}`;
+                }
+                htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
+            });
+            htmlOutput += `</div>`;
+        }
+        document.getElementById("gps-info").innerHTML = htmlOutput;
+    } else {
+        document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
+    }
+}
+
+function wechsleFokus(zielName) {
+    manuellerFokus = zielName;
+    
+    // 1. UI sofort erzwingen, damit die Liste sofort auftaucht!
+    let drop = document.getElementById("autobahn");
+    if (Array.from(drop.options).some(o => o.value === zielName)) {
+        drop.value = zielName;
+        zeigeListe();       // Lädt die Anschlussstellen
+        updateRichtung();   // Lädt die Richtungen
+        berechnen();        // Aktualisiert den Balken
+    }
+    
+    // 2. Danach GPS neu berechnen, damit der BKM oben links stimmt
+    if (letzteLat !== 0) {
+        verarbeiteGPS(letzteLat, letzteLon, letzteAcc);
+    }
+}
+
+    
+// --- DER VERBESSERTE SCANNER ---
+function findeKandidaten(liste, pt, filter, maxDist){
+    let hits = {};
+    liste.forEach(f=>{
+        try{ 
+            const props = f.properties || {};
+            // Wir bauen den Namen STRUKTURIERT zusammen (A + 46 = A46)
+            const strKl = String(props.STRKL || "").toUpperCase();
+            const strNr = String(props.STRNR || "");
+            const name = (strKl + strNr).toUpperCase().replace(/\s/g,'');
+            
+            if (filter) {
+                if (Array.isArray(filter) && !filter.includes(name)) return;
+                if (filter === "BUND" && strKl !== "B") return;
+                if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
+            }
+
+            let d = turf.pointToLineDistance(pt, f); 
+            if (d <= maxDist) {
+                if (!hits[name] || d < hits[name].dist) {
+                    hits[name] = { feature: f, dist: d, name: name, props: props };
+                }
+            } 
+        } catch(e){}
+    });
+    return Object.values(hits).sort((a, b) => a.dist - b.dist);
+}
+
+
+    
+    
+// --- DIE SCHLAUE SUCHFUNKTION ---
+function findeNaechsteLinie(liste, pt, filter){
+    let min=Infinity, found=null;
+    liste.forEach(f=>{
+        try{ 
+            const props = f.properties || {};
+            const strKl = (props.STRKL || "").toUpperCase();
+            const name = (strKl + (props.STRNR || "")).toUpperCase().replace(/\s/g,'');
+            
+            if (filter) {
+                // 1. Array übergeben (z.B. VIP-Autobahnen) -> Exakter Namensabgleich
+                if (Array.isArray(filter) && !filter.includes(name)) return;
+                
+                // 2. Suche nach Bundesstraße -> Darf NUR "B" sein
+                if (filter === "BUND" && strKl !== "B") return;
+                
+                // 3. Suche nach Landstraße -> Alles ignorieren, was Autobahn oder Bundesstraße ist
+                if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
+            }
+
+            let d=turf.pointToLineDistance(pt, f); 
+            if(d<min){min=d; found=f;} 
+        } catch(e){}
+    });
+    return found ? {feature:found, dist:min} : null;
+}
+
+
+    
+// Die verbesserte Suchfunktion mit eingebautem Filter
+function findeNaechsteLinie(liste, pt, filterNamen){
+    let min=Infinity, found=null;
+    liste.forEach(f=>{
+        try{ 
+            // Wenn ein Filter gesetzt ist, prüfen wir den Straßennamen zuerst
+            if (filterNamen) {
+                const props=f.properties||{};
+                const name=((props.STRKL||"")+(props.STRNR||"")).toUpperCase().replace(/\s/g,'');
+                // Wenn der Name NICHT in unseren VIP-Autobahnen ist, überspringen wir die Linie!
+                if (!filterNamen.includes(name)) return;
+            }
+
+            let d=turf.pointToLineDistance(pt, f); 
+            if(d<min){min=d; found=f;} 
+        } catch(e){}
+    });
+    return found ? {feature:found, dist:min} : null;
+}
+
+function berechneGoldgriffBKM(meinPunkt, strName){
+    let suchName=strName.replace(/\s/g,'').replace('A','');
+    let passende=referenzPunkte.filter(f=>{
+        if(!f.properties||!f.properties.Bez) return false;
+        return String(f.properties.Bez).toUpperCase().replace(/\s/g,'').replace('A','')===suchName;
+    });
+    
+    if(passende.length > 1){
+        // 1. Berechne die Distanz zu allen passenden Referenzpunkten
+        passende.forEach(p => {
+            p.tempDist = turf.distance(meinPunkt, p);
+        });
+        
+        // 2. Sortiere die Punkte nach Distanz (die nächsten beiden sind dann Index 0 und 1)
+        passende.sort((a, b) => a.tempDist - b.tempDist);
+        
+        let closest = passende[0];
+        let secondClosest = passende[1];
+        
+        let refKM1 = parseFloat(String(closest.properties.Kilometer).replace(',','.'));
+        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer).replace(',','.'));
+        
+        // 3. Logik: Befinden wir uns "vor" oder "hinter" dem nächsten Punkt?
+        // Wenn der zweitnächste Punkt einen KLEINEREN Kilometerwert hat, 
+        // sind wir VOR dem nächsten Punkt -> wir müssen die Distanz ABZIEHEN!
+        if (refKM2 < refKM1) {
+            return refKM1 - closest.tempDist;
+        } else {
+            // Ansonsten sind wir HINTER dem Punkt -> Distanz ADDIEREN!
+            return refKM1 + closest.tempDist;
+        }
+        
+    } else if (passende.length === 1) {
+        // Fallback, falls nur ein Punkt auf der ganzen Autobahn gefunden wird
+        let closest = passende[0];
+        let refKM = parseFloat(String(closest.properties.Kilometer).replace(',','.'));
+        let dist = turf.distance(meinPunkt, closest);
+        return refKM + dist;
+    }
+    
+    return 0;
+}
+
+
+function findeNaechsteLinie(liste, pt){
+    let min=Infinity, found=null;
+    liste.forEach(f=>{
+        try{ let d=turf.pointToLineDistance(pt, f); if(d<min){min=d; found=f;} } catch(e){}
+    });
+    return found ? {feature:found, dist:min} : null;
+}
+
+function zeigeListe(){
+    let a=document.getElementById("autobahn").value;
+    let tbody=document.getElementById("liste"); tbody.innerHTML="";
+    if(!grenzen[a]) return;
+    document.getElementById("b").innerText=grenzen[a][0].toFixed(3).replace('.',',')+" - "+grenzen[a][1].toFixed(3).replace('.',',');
+    if(listen[a]) listen[a].forEach(e=>{
+        let tr=document.createElement("tr");
+        tr.innerHTML=`<td>${e[0]}</td><td>${e[1]}</td><td>${e[2]}</td>`;
+        tbody.appendChild(tr);
+    });
+    updateZuständigkeit();
+}
+
+function updateZuständigkeit(){
+    let a=document.getElementById("autobahn").value, km=parseFloat(document.getElementById("km").value.replace(',','.'));
+    let gemeinde="-", meister="-", addr="-";
+    if(!isNaN(km)&&gemeinden[a]&&meistereien[a]){
+        gemeinden[a].forEach(gf=>{if(km>=gf.from&&km<=gf.to) gemeinde=gf.name;});
+        meistereien[a].forEach(mf=>{if(km>=mf.from&&km<=mf.to){meister=mf.name; addr=mf.address;}});
+    }
+    document.getElementById("g").innerText=gemeinde;
+    document.getElementById("m").innerText=meister;
+    document.getElementById("m_address").innerText=addr;
+}
+
+function updateRichtung(){
+    let a=document.getElementById("autobahn").value, sel=document.getElementById("richtung"); sel.innerHTML="";
+    if(!richtungen[a]) return;
+    richtungen[a].forEach(r=>{ let opt=document.createElement("option"); opt.value=r; opt.textContent=r; sel.appendChild(opt); });
+}
+
+function berechnen(){
+    updateZuständigkeit();
+    let km=parseFloat(document.getElementById("km").value.replace(',','.'));
+    if(isNaN(km)) return;
+    let a=document.getElementById("autobahn").value;
+    if(!grenzen[a]) return;
+    let percent=((km-grenzen[a][0])/(grenzen[a][1]-grenzen[a][0]))*100;
+    document.getElementById("progress").style.width=Math.max(0,Math.min(100,percent))+"%";
+}
+
+function berechneWeg(){
+    let km=parseFloat(document.getElementById("start_km").value.replace(',','.'));
+    let speed=parseFloat(document.getElementById("speed").value), time=parseFloat(document.getElementById("zeit").value);
+    let dir=document.getElementById("richtung").value, a=document.getElementById("autobahn").value;
+    if(isNaN(km)||isNaN(speed)||isNaN(time)||!listen[a])return;
+    let ziel=dir.includes("(+)")?km+(speed*time):km-(speed*time);
+    let next="-", bestDiff=Infinity;
+    listen[a].forEach(e=>{
+        if(e[0]!="AS") return;
+        let val=parseFloat(e[2].replace(',','.'));
+        if(dir.includes("(+)")&&val>=ziel){if(val-ziel<bestDiff){bestDiff=val-ziel; next=e[1];}}
+        if(dir.includes("(-)")&&val<=ziel){if(ziel-val<bestDiff){bestDiff=ziel-val; next=e[1];}}
+    });
+    document.getElementById("ziel_km").innerText=ziel.toFixed(3).replace('.',',');
+    document.getElementById("next_as").innerText=next;
+}
+
+zeigeListe(); updateRichtung();
+</script>
+</body>
+</html>
