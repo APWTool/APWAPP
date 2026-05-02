@@ -134,9 +134,9 @@ th { background: var(--table-head); }
 <h2>Zuständigkeitsfinder</h2>
     
     <select id="prioMode">
-        <option value="bab">🛣️ Priorität: Autobahn</option>
-        <option value="bund">🚙 Priorität: Bundesstraße</option>
-        <option value="land">🌲 Priorität: Landstraße</option>
+        <option value="bab">Priorität: Autobahn</option>
+        <option value="bund">Priorität: Bundesstraße</option>
+        <option value="land">Priorität: Landstraße</option>
     </select>
     
     <select id="autobahn" onchange="manuellerFokus = this.value; zeigeListe(); updateRichtung(); berechnen();">
@@ -198,7 +198,7 @@ A59:[["AK","Düsseldorf Süd","0,578"],["AS","D.-Benrath","1,800"],["AS","D.-Gar
 A535:[["AD","Velbert-Nord","0,262"],["AS","Velbert","1,800"],["AS","Tönnisheide","4,500"],["AS","Wülfrath","6,600"],["Tunnel","Großer Busch","11,030-11,300"],["AS","W.-Dornap","11,700"]],
 A542:[["AD","Monheim-Süd","4,055"],["AS","Reusrath","5,700"],["AS","Immigrath","8,000"],["AD","Langenfeld","8,754"]]
 };
-const gemeinden={A1:[{from:363.315,to:365.711,name:"Schwelm"},{from:365.711,to:373.815,name:"Wuppertal"},{from:373.815,to:381.646,name:"Remscheid"}],A3:[{from:101.2,to:102.996,name:"Düsseldorf"},{from:102.996,to:108.347,name:"Erkrath"},{from:108.347,to:112.770,name:"Hilden"},{from:112.770,to:114.266,name:"Solingen"},{from:114.264,to:122.819,name:"Langenfeld"}],A44:[{from:1.215,to:4.096,name:"Heiligenhaus"},{from:4.096,to:4.907,name:"Wülfrath"},{from:4.907,to:5.466,name:"Velbert"},{from:5.466,to:5.607,name:"Heiligenhaus"},{from:5.607,to:12.754,name:"Velbert"},{from:12.754,to:17.599,name:"Essen"}],A46:[{from:70.815,to:74.919,name:"Neuss"},{from:74.919,to:85.416,name:"Düsseldorf"},{from:85.416,to:94.706,name:"Haan"},{from:94.706,to:114.763,name:"Wuppertal"}],A57:[{from:88.5,to:91.6,name:"Neuss"},{from:91.6,to:100.912,name:"Dormagen"}],A59:[{from:0.578,to:7.714,name:"Düsseldorf"},{from:7.714,to:14.467,name:"Langenfeld"}],A535:[{from:0.262,to:7.128,name:"Velbert"},{from:7.128,to:9.326,name:"Wülfrath"},{from:9.326,to:12.811,name:"Wuppertal"}],A542:[{from:4.055,to:8.754,name:"Langenfeld"}]};
+const gemeinden={A1:[{from:363.315,to:365.711,name:"Schwelm"},{from:365.711,to:373.815,name:"Wuppertal"},{from:373.815,to:381.646,name:"Remscheid"}],A3:[{from:101.2,to:102.996,name:"Düsseldorf"},{from:102.996,to:108.347,name:"Erkrath"},{from:108.347,to:112.770,name:"Hilden"},{from:112.770,to:114.266,name:"Solingen"},{from:114.264,to:122.819,name:"Langenfeld"}],A44:[{from:1.215,to:4.096,name:"Heiligenhaus"},{from:4.096,to:4.907,name:"Wülfrath"},{from:4.907,to:5.466,name:"Velbert"},{from:5.466,to:5.607,name:"Heiligenhaus"},{from:5.607,to:12.754,name:"Velbert"},{from:12.754,to:17.599,name:"Essen"}],A46:[{from:70.815,to:74.919,name:"Neuss"},{from:74.919,to:85.416,name:"Düsseldorf"},{from:85.416,to:89.514,name:"Hilden"},{from:89.514,to:94.706,name:"Haan"},{from:94.706,to:114.763,name:"Wuppertal"}],A57:[{from:88.5,to:91.6,name:"Neuss"},{from:91.6,to:100.912,name:"Dormagen"}],A59:[{from:0.578,to:7.714,name:"Düsseldorf"},{from:7.714,to:14.467,name:"Langenfeld"}],A535:[{from:0.262,to:7.128,name:"Velbert"},{from:7.128,to:9.326,name:"Wülfrath"},{from:9.326,to:12.811,name:"Wuppertal"}],A542:[{from:4.055,to:8.754,name:"Langenfeld"}]};
 const richtungen={A1:["RF Köln (+)","RF Dortmund (-)"],A3:["RF Köln (+)","RF Arnheim (-)"],A44:["RF Kassel (+)","RF Aachen (-)"],A46:["RF Brilon (+)","RF Heinsberg (-)"],A57:["RF Köln (+)","RF Nijmegen (-)"],A59:["RF Köln (+)","RF Dinslaken (-)"],A535:["RF Wuppertal (+)","RF Velbert (-)"],A542:["RF Langenfeld (+)","RF Monheim (-)"]};
 const meistereien={A1:[{from:363.315,to:365.649,name:"AM Hagen",address:"In d. Krone 20, 58099 Hagen"},{from:365.649,to:381.646,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A3:[{from:101.2,to:107.925,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"},{from:107.925,to:122.819,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],A44:[{from:1.215,to:17.599,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"}],A46:[{from:70.815,to:80.770,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:80.770,to:88.340,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"},{from:88.340,to:114.763,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A57:[{from:88.5,to:93.343,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:93.343,to:100.912,name:"AM Köln",address:"Dürener Str. 462, 50858 Köln"}],A59:[{from:0.578,to:14.467,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],A535:[{from:0.262,to:12.811,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],A542:[{from:4.055,to:8.754,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}]};
 
@@ -256,7 +256,7 @@ function toggleGPS(){
         if(!navigator.geolocation) return info.innerText="GPS nicht unterstützt";
         btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); info.innerHTML="⏳ Suche Signal...";
         
-        // Ändere diese Stelle:
+        
 watchId = navigator.geolocation.watchPosition(pos => {
     try { verarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); }
     catch(e) { info.innerHTML = "❌ Fehler: " + e.message; }
@@ -277,7 +277,7 @@ function verarbeiteGPS(lat, lon, acc){
     const meineAutobahnen = Object.keys(grenzen);
     let prio = document.getElementById("prioMode") ? document.getElementById("prioMode").value : "bab";
     
-    // 1. WIR SUCHEN ÜBERALL: Beide Dateien zusammenlegen
+    // 1. SUCHEN ÜBERALL: Beide Dateien zusammenlegen
     let alleDaten = datenBAB.concat(datenLand);
 
     // 2. KANDIDATEN SAMMELN (Suche in ALLEN Daten nach den entsprechenden Mustern)
@@ -344,7 +344,7 @@ function verarbeiteGPS(lat, lon, acc){
             document.getElementById("progress").style.width="0%"; document.getElementById("liste").innerHTML="";
         }
 
-        // --- KREUZUNGS-UI (Die Wechsel-Buttons bauen) ---
+        // --- KREUZUNGS-UI (Die Wechsel-Buttons ) ---
         let andereImKreuz = nahBereich.filter(k => k.name !== sel.name);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
@@ -372,7 +372,7 @@ function verarbeiteGPS(lat, lon, acc){
 function wechsleFokus(zielName) {
     manuellerFokus = zielName;
     
-    // 1. UI sofort erzwingen, damit die Liste sofort auftaucht!
+    // 1. UI sofort erzwingen
     let drop = document.getElementById("autobahn");
     if (Array.from(drop.options).some(o => o.value === zielName)) {
         drop.value = zielName;
@@ -419,7 +419,7 @@ function findeKandidaten(liste, pt, filter, maxDist){
 
     
     
-// --- DIE SCHLAUE SUCHFUNKTION ---
+// ----- SCHLAUE SUCHFUNKTION ---
 function findeNaechsteLinie(liste, pt, filter){
     let min=Infinity, found=null;
     liste.forEach(f=>{
@@ -429,7 +429,7 @@ function findeNaechsteLinie(liste, pt, filter){
             const name = (strKl + (props.STRNR || "")).toUpperCase().replace(/\s/g,'');
             
             if (filter) {
-                // 1. Array übergeben (z.B. VIP-Autobahnen) -> Exakter Namensabgleich
+                // 1. Array übergeben -> Exakter Namensabgleich
                 if (Array.isArray(filter) && !filter.includes(name)) return;
                 
                 // 2. Suche nach Bundesstraße -> Darf NUR "B" sein
@@ -453,11 +453,11 @@ function findeNaechsteLinie(liste, pt, filterNamen){
     let min=Infinity, found=null;
     liste.forEach(f=>{
         try{ 
-            // Wenn ein Filter gesetzt ist, prüfen wir den Straßennamen zuerst
+            // Wenn ein Filter gesetzt ist, prüfe den Straßennamen zuerst
             if (filterNamen) {
                 const props=f.properties||{};
                 const name=((props.STRKL||"")+(props.STRNR||"")).toUpperCase().replace(/\s/g,'');
-                // Wenn der Name NICHT in unseren VIP-Autobahnen ist, überspringen wir die Linie!
+                // Wenn der Name NICHT in unseren Autobahnen ist, überspringe die Linie!
                 if (!filterNamen.includes(name)) return;
             }
 
@@ -481,7 +481,7 @@ function berechneGoldgriffBKM(meinPunkt, strName){
             p.tempDist = turf.distance(meinPunkt, p);
         });
         
-        // 2. Sortiere die Punkte nach Distanz (die nächsten beiden sind dann Index 0 und 1)
+        // 2. Sortiere die Punkte nach Distanz (die nächsten beiden sind Index 0 und 1)
         passende.sort((a, b) => a.tempDist - b.tempDist);
         
         let closest = passende[0];
