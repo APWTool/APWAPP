@@ -21,7 +21,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(reg => {
       console.log('Service Worker registriert!');
-    });
+    }).catch(err => console.log('SW Registrierung fehlgeschlagen', err));
   });
 }
 </script>
@@ -281,62 +281,62 @@ const amAdressen = {
 };
 
 const smAdressen = {
-    "SM Aachen": { addr: "in Bearbeitung", tel: "-" },
-    "SM Arnsberg": { addr: "in Bearbeitung", tel: "-" },
-    "SM Beckum": { addr: "in Bearbeitung", tel: "-" },
-    "SM Bergheim": { addr: "in Bearbeitung", tel: "-" },
-    "SM Blankenheim": { addr: "in Bearbeitung", tel: "-" },
-    "SM Brakel": { addr: "in Bearbeitung", tel: "-" },
-    "SM Brilon": { addr: "in Bearbeitung", tel: "-" },
-    "SM Burscheid": { addr: "in Bearbeitung", tel: "-" },
-    "SM Dortmund": { addr: "in Bearbeitung", tel: "-" },
-    "SM Eitorf": { addr: "in Bearbeitung", tel: "-" },
-    "SM Erndtebrück": { addr: "in Bearbeitung", tel: "-" },
-    "SM Erwitte": { addr: "in Bearbeitung", tel: "-" },
-    "SM Espelkamp": { addr: "in Bearbeitung", tel: "-" },
-    "SM Geldern": { addr: "in Bearbeitung", tel: "-" },
-    "SM Grevenbroich": { addr: "in Bearbeitung", tel: "-" },
-    "SM Halle": { addr: "in Bearbeitung", tel: "-" },
-    "SM Heinsberg": { addr: "in Bearbeitung", tel: "-" },
-    "SM Herscheid": { addr: "in Bearbeitung", tel: "-" },
-    "SM Iserlohn": { addr: "in Bearbeitung", tel: "-" },
-    "SM Jülich": { addr: "in Bearbeitung", tel: "-" },
-    "SM Kleve": { addr: "in Bearbeitung", tel: "-" },
-    "SM Kreuztal": { addr: "in Bearbeitung", tel: "-" },
-    "SM Legden": { addr: "in Bearbeitung", tel: "-" },
-    "SM Lemgo": { addr: "in Bearbeitung", tel: "-" },
-    "SM Lennestadt": { addr: "in Bearbeitung", tel: "-" },
-    "SM Lohmar": { addr: "in Bearbeitung", tel: "-" },
-    "SM Löhne": { addr: "in Bearbeitung", tel: "-" },
-    "SM Lüdinghausen": { addr: "in Bearbeitung", tel: "-" },
-    "SM Marl": { addr: "in Bearbeitung", tel: "-" },
-    "SM Meerbusch": { addr: "in Bearbeitung", tel: "-" },
-    "SM Meschede": { addr: "in Bearbeitung", tel: "-" },
-    "SM Minden": { addr: "in Bearbeitung", tel: "-" },
-    "SM Moers": { addr: "in Bearbeitung", tel: "-" },
-    "SM Münster": { addr: "in Bearbeitung", tel: "-" },
-    "SM Nettetal": { addr: "in Bearbeitung", tel: "-" },
-    "SM Peckelsheim": { addr: "in Bearbeitung", tel: "-" },
-    "SM Rhede": { addr: "in Bearbeitung", tel: "-" },
-    "SM Rheinbach": { addr: "in Bearbeitung", tel: "-" },
-    "SM Salzkotten": { addr: "in Bearbeitung", tel: "-" },
-    "SM Schieder": { addr: "in Bearbeitung", tel: "-" },,
-    "SM Schleiden": { addr: "in Bearbeitung", tel: "-" },
-    "SM Schwelm": { addr: "in Bearbeitung", tel: "-" },
-    "SM Simmerath": { addr: "in Bearbeitung", tel: "-" },
-    "SM Solingen": { addr: "in Bearbeitung", tel: "-" },
-    "SM Steinfurt": { addr: "in Bearbeitung", tel: "-" },
-    "SM Unna": { addr: "in Bearbeitung", tel: "-" },
-    "SM Velbert": { addr: "in Bearbeitung", tel: "-" },
-    "SM Voerde": { addr: "in Bearbeitung", tel: "-" },
-    "SM Waldbröl": { addr: "in Bearbeitung", tel: "-" },
-    "SM Weilerswist": { addr: "in Bearbeitung", tel: "-" },
-    "SM Westerkappeln": { addr: "in Bearbeitung", tel: "-" },
-    "SM Wiedenbrück": { addr: "in Bearbeitung", tel: "-" },
-    "SM Wiehl": { addr: "in Bearbeitung", tel: "-" },
-    "SM Wilnsdorf": { addr: "in Bearbeitung", tel: "-" },
-    "SM Winterberg": { addr: "in Bearbeitung", tel: "-" },
-    "SM Wipperfürth": { addr: "in Bearbeitung", tel: "-" },
+    "SM Aachen": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Arnsberg": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Beckum": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Bergheim": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Blankenheim": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Brakel": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Brilon": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Burscheid": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Dortmund": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Eitorf": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Erndtebrück": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Erwitte": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Espelkamp": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Geldern": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Grevenbroich": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Halle": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Heinsberg": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Herscheid": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Iserlohn": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Jülich": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Kleve": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Kreuztal": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Legden": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Lemgo": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Lennestadt": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Lohmar": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Löhne": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Lüdinghausen": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Marl": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Meerbusch": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Meschede": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Minden": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Moers": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Münster": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Nettetal": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Peckelsheim": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Rhede": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Rheinbach": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Salzkotten": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Schieder": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Schleiden": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Schwelm": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Simmerath": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Solingen": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Steinfurt": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Unna": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Velbert": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Voerde": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Waldbröl": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Weilerswist": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Westerkappeln": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Wiedenbrück": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Wiehl": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Wilnsdorf": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Winterberg": { addr: "Bitte Adresse eintragen", tel: "-" },
+    "SM Wipperfürth": { addr: "Bitte Adresse eintragen", tel: "-" }
 };
 
 const wachenAnker = {
@@ -354,7 +354,6 @@ let letzteLat = 0, letzteLon = 0, letzteAcc = 0;
 let bkmHistorie = []; 
 let manuellerFokus = null;
 let map = null;
-
 let mapLineLayer = null; 
 
 let wzInterval = null;
@@ -389,25 +388,44 @@ function showPage(pageId) {
     }
 }
 
-// 6 Datenbanken laden
+// --- BOOT-SEQUENZ (WICHTIG!) ---
+// Baut die UI sofort auf, egal was mit den Dateien ist. 
+loadWacheSetting();
+
+// Lade-Helfer, die niemals abstürzen, selbst wenn eine Datei fehlt
+function safeFetchJSON(url) {
+    return fetch(url).then(res => {
+        if(!res.ok) return { features: [] };
+        return res.json();
+    }).catch(() => ({ features: [] }));
+}
+function safeFetchDB(url) {
+    return fetch(url).then(res => {
+        if(!res.ok) return {};
+        return res.json();
+    }).catch(() => ({}));
+}
+
 Promise.all([
-    fetch('Abschnitt.json').then(res=>res.json()),
-    fetch('AbschnittBAB.json').then(res=>res.json()),
-    fetch('BABKM.json').then(res=>res.json()),
-    fetch('Gemeinden.json').then(res=>res.json()),
-    fetch('amDatenbank.json').then(res=>res.json()).catch(() => ({})),
-    fetch('smDatenbank.json').then(res=>res.json()).catch(() => ({})) 
-]).then(([land, bab, punkte, gem, amDB, smDB])=>{
+    safeFetchJSON('Abschnitt.json'),
+    safeFetchJSON('AbschnittBAB.json'),
+    safeFetchJSON('BABKM.json'),
+    safeFetchJSON('Gemeinden.json'),
+    safeFetchDB('amDatenbank.json'),
+    safeFetchDB('smDatenbank.json')
+]).then(([land, bab, punkte, gem, amDB, smDB]) => {
     datenLand = extrahiere(land, true);
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem); 
     amDatenbank = amDB || {};
     smDatenbank = smDB || {};
+    
     document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
-    loadWacheSetting();
-}).catch(e => { 
-    document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien.</span>';
+    
+    // Sobald die Daten da sind, ein eventuell eingetipptes Feld einmal berechnen
+    let dropMain = document.getElementById("autobahn");
+    if(dropMain && dropMain.value !== "") berechnen(false);
 });
 
 function extrahiere(json, erwarteLinien){
@@ -454,6 +472,8 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
 
     let dropMain = document.getElementById("autobahn"); 
     let dropWz = document.getElementById("wz_autobahn"); 
+    if(!dropMain) return; // Sicherung
+    
     dropMain.innerHTML = ""; 
     if(dropWz) dropWz.innerHTML = "";
 
@@ -472,7 +492,8 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
         dropMain.value = autobahnToSelect;
     }
     
-    if (document.getElementById('saveWache').checked) {
+    let chk = document.getElementById('saveWache');
+    if (chk && chk.checked) {
         localStorage.setItem('stdWache', wacheName);
     }
 
@@ -491,7 +512,7 @@ function holeKoordinateFuerKM(autobahn, km) {
     let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
     let passende = referenzPunkte.filter(f => {
         if(!f.properties) return false;
-        // Fallback für alte (Bez) und neue (STRNR) BKM Felder
+        // Unterstützt altes und neues Mapshaper-Format
         let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
         let strKl = String(f.properties.STRKL || "").toUpperCase();
         if(strKl === "B" || strKl === "L" || strKl === "K") return false; 
@@ -501,7 +522,6 @@ function holeKoordinateFuerKM(autobahn, km) {
     if(passende.length > 0) {
         let candidates = [];
         passende.forEach(p => {
-            // Fallback für Kilometer, KM_WERT und BKM (neues Shapefile)
             let kmProp = p.properties.Kilometer || p.properties.BKM || p.properties.KM_WERT || p.properties.STATION || p.properties.KM || 0;
             let pKm = parseFloat(String(kmProp).replace(',', '.'));
             if(!isNaN(pKm)) candidates.push({ pt: p, diff: Math.abs(pKm - km) });
@@ -532,7 +552,10 @@ function holeKoordinateFuerKM(autobahn, km) {
 }
 
 function updateUI() {
-    let a = document.getElementById("autobahn").value;
+    let drop = document.getElementById("autobahn");
+    if(!drop) return;
+    let a = drop.value;
+    
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
     let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
     let wachenListen = datenWachen[aktuelleWache].listen || {};
@@ -542,9 +565,10 @@ function updateUI() {
     let tbody = document.getElementById("liste");
     tbody.innerHTML = "";
 
-    if(!wachenGrenzen[a]) {
+    if(!a || !wachenGrenzen[a]) {
         document.getElementById("b").innerText = "-";
-        leftArrow.style.display = "none"; rightArrow.style.display = "none";
+        if(leftArrow) leftArrow.style.display = "none"; 
+        if(rightArrow) rightArrow.style.display = "none";
         return;
     }
 
@@ -553,9 +577,11 @@ function updateUI() {
     if(wachenRichtungen[a]) {
         document.getElementById("dir-plus-text").innerText = wachenRichtungen[a][0] || "";
         document.getElementById("dir-minus-text").innerText = wachenRichtungen[a][1] || "";
-        leftArrow.style.display = "flex"; rightArrow.style.display = "flex";
+        if(leftArrow) leftArrow.style.display = "flex"; 
+        if(rightArrow) rightArrow.style.display = "flex";
     } else {
-        leftArrow.style.display = "none"; rightArrow.style.display = "none";
+        if(leftArrow) leftArrow.style.display = "none"; 
+        if(rightArrow) rightArrow.style.display = "none";
     }
 
     if(wachenListen[a]) {
@@ -643,14 +669,17 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// NEU: Universal-Funktion für AM und SM
+// Abgesicherte Meisterei Such-Funktion
 function resolveMeisterei(feature, pointObj) {
     if (!feature) return { name: "-", addr: "-" };
     let abschnitt = feature.properties.ABSNR || feature.properties.Sk_Kennung || feature.properties.ABS || "";
     let amName = "-";
+    let currentMeters = 0;
 
-    let snapped = turf.nearestPointOnLine(feature, pointObj);
-    let currentMeters = snapped.properties.location || 0;
+    try {
+        let snapped = turf.nearestPointOnLine(feature, pointObj);
+        currentMeters = snapped.properties.location || 0;
+    } catch(e) {} // Falls Turf.js wegen Geometrie-Problemen scheitert, bleibt es bei 0
 
     // 1. Suche in der Autobahn-Datenbank
     if (amDatenbank && amDatenbank[abschnitt]) {
@@ -659,14 +688,13 @@ function resolveMeisterei(feature, pointObj) {
         if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
     }
     
-    // 2. Suche in der Landstraßen-Datenbank (falls nicht auf Autobahn gefunden)
+    // 2. Suche in der Landstraßen-Datenbank (SM)
     if (amName === "-" && smDatenbank && smDatenbank[abschnitt]) {
         let abschnitte = smDatenbank[abschnitt];
         abschnitte.forEach(e => { if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am; });
         if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
     }
 
-    // 3. Adresse zusammenbauen
     let addrHtml = "-";
     if (amName !== "-") {
         let d = amAdressen[amName] || smAdressen[amName];
@@ -717,7 +745,6 @@ async function verarbeiteGPS(lat, lon, acc){
         }
         if (!sel) sel = sortKandidaten[0];
 
-        // Die AM/SM wird live berechnet!
         let amInfo = resolveMeisterei(sel.feature, pt);
         document.getElementById("m").innerText = amInfo.name;
         document.getElementById("m_address").innerHTML = amInfo.addr;
@@ -780,8 +807,13 @@ async function verarbeiteGPS(lat, lon, acc){
         } else {
             let abschnitt = props.ABSNR || props.Sk_Kennung || "Unbekannt";
             let ast = props.ABSAST && props.ABSAST !== "" ? ` (${props.ABSAST})` : "";
-            let snapped = turf.nearestPointOnLine(sel.feature, pt);
-            let aktuellerKM = (parseFloat(props.STATANF) || 0) + (snapped.properties.location || 0);
+            
+            let aktuellerKM = parseFloat(props.STATANF) || 0;
+            try {
+                let snapped = turf.nearestPointOnLine(sel.feature, pt);
+                aktuellerKM += (snapped.properties.location || 0);
+            } catch(e){}
+
             let icon = (props.STRKL === "B" || props.STRKL === "b") ? "🚙" : "🌲";
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${ast}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
@@ -836,7 +868,6 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     let suchName=strName.toUpperCase().replace(/\s/g,'').replace('A','');
     let passende=referenzPunkte.filter(f=>{
         if(!f.properties) return false;
-        // Fallback Bez und STRNR
         let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
         return refBez === suchName;
     });
@@ -848,7 +879,6 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         let closest = passende[0];
         let secondClosest = passende[1];
         
-        // Fallback Kilometer und BKM
         let refKM1 = parseFloat(String(closest.properties.Kilometer || closest.properties.BKM || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
         let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || secondClosest.properties.BKM || secondClosest.properties.KM_WERT || secondClosest.properties.STATION || secondClosest.properties.KM || 0).replace(',','.'));
         
@@ -865,12 +895,15 @@ function berechneGoldgriffBKM(meinPunkt, strName){
 }
 
 function berechnen(isManual = false){
-    let kmRaw = document.getElementById("km").value.replace(',','.');
+    let kmInput = document.getElementById("km");
+    if(!kmInput) return;
+    
+    let kmRaw = kmInput.value.replace(',','.');
     let km = parseFloat(kmRaw);
     let drop = document.getElementById("autobahn");
-    let a = drop.value;
+    let a = drop ? drop.value : "";
     
-    if(isNaN(km)) {
+    if(isNaN(km) || !a) {
         document.getElementById("g").innerText = "-";
         document.getElementById("progress").style.width = "0%";
         document.getElementById("m").innerText = "-";
@@ -950,7 +983,6 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
     let stationKM = (stationBase + distMeter) / 1000;
 
-    // AM oder SM auslesen für Map Zettel
     let zustaendigeAM = "AM/SM Unbekannt";
     let telLink = "";
     
@@ -1043,9 +1075,13 @@ function calculateNKMap() {
         let strKl = String(props.STRKL || props.StrKl || "").toUpperCase();
         let strName = props.STRBEZ || props.StrBez || props.Str_Kennung || (strKl + (props.STRNR || props.StrNr || ""));
         
-        let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
-        let distAufLinieMeter = snapped.properties.location || 0;
-        let snappedCoord = turf.getCoord(snapped);
+        let currentMeters = 0;
+        let snappedCoord = turf.getCoord(pt); // Backup falls Linie ungültig
+        try {
+            let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
+            currentMeters = snapped.properties.location || 0;
+            snappedCoord = turf.getCoord(snapped);
+        } catch(e){}
         
         mapLineLayer = L.layerGroup().addTo(map);
 
@@ -1061,7 +1097,7 @@ function calculateNKMap() {
             style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
         }).addTo(mapLineLayer);
         
-        let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
+        let htmlZettel = holeNKHtml(props, currentMeters, true); 
         
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
             <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong>
