@@ -456,7 +456,8 @@ function saveWacheSetting() {
 function loadWacheSetting() {
     let std = localStorage.getItem('stdWache');
     if (std && datenWachen[std]) {
-        document.getElementById('saveWache').checked = true;
+        let chk = document.getElementById('saveWache');
+        if(chk) chk.checked = true;
         wechsleWache(std, false);
     } else {
         wechsleWache('Hilden', false);
@@ -563,10 +564,12 @@ function updateUI() {
     let leftArrow = document.getElementById("dir-plus");
     let rightArrow = document.getElementById("dir-minus");
     let tbody = document.getElementById("liste");
+    if(!tbody) return;
     tbody.innerHTML = "";
 
     if(!a || !wachenGrenzen[a]) {
-        document.getElementById("b").innerText = "-";
+        let b = document.getElementById("b");
+        if(b) b.innerText = "-";
         if(leftArrow) leftArrow.style.display = "none"; 
         if(rightArrow) rightArrow.style.display = "none";
         return;
@@ -779,7 +782,8 @@ async function verarbeiteGPS(lat, lon, acc){
 
         if(Array.from(document.getElementById("autobahn").options).some(o=>o.value===strName)){
             let bkm = berechneGoldgriffBKM(pt, strName);
-            document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
+            let kmInput = document.getElementById("km");
+            if(kmInput) kmInput.value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
             if (document.getElementById("autobahn").value !== strName) {
                 document.getElementById("autobahn").value = strName;
                 updateUI();
@@ -818,10 +822,12 @@ async function verarbeiteGPS(lat, lon, acc){
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${ast}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
             
-            document.getElementById("km").value = "";
+            let kmInput = document.getElementById("km");
+            if(kmInput) kmInput.value = "";
             document.getElementById("b").innerText="-";
             document.getElementById("progress").style.width="0%"; 
-            document.getElementById("liste").innerHTML="";
+            let tbody = document.getElementById("liste");
+            if(tbody) tbody.innerHTML="";
         }
 
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
@@ -1139,12 +1145,14 @@ function updateWzUI() {
     let wachenListen = datenWachen[aktuelleWache].listen || {};
     
     let sel = document.getElementById("wz_richtung");
+    if(!sel) return;
     sel.innerHTML = "";
     if(wachenRichtungen[a]) {
         wachenRichtungen[a].forEach(r => sel.add(new Option(r, r)));
     }
     
     let tbody = document.getElementById("wz_liste");
+    if(!tbody) return;
     tbody.innerHTML = "";
     if(wachenListen[a]) {
         wachenListen[a].forEach(e => {
