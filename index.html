@@ -815,7 +815,6 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let bnk = props.BNK || props.Bnk || props.NETZKNOTEN_NACH || "-";
     let bb = props.BB || props.Bb || props.KNOTEN_NACH_BUCHSTABE || "-";
     
-    // Robuster Fallback: Sucht nach ABSNr (aus Mapshaper) oder den alten Namen
     let rawAbs = props.ABSNr || props.ABSNR || props.ABS || props.Sk_Kennung || "";
     if ((vnk === "-" || bnk === "-") && rawAbs.length >= 15) {
         let absStr = String(rawAbs).padEnd(16, ' ');
@@ -829,16 +828,17 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let stationKM = (stationBase + distMeter) / 1000;
 
     let debugInfo = "";
-    if (isMap) debugInfo = `<div style="font-size:0.8em; color:var(--text-secondary); margin-bottom:5px;">Snapping auf Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
+    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
 
+    // NEU: Schriftgröße auf 1.15em erhöht, padding verringert für kompakten Look
     return `
         ${debugInfo}
-        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1em;">
-            <tr><td style="border:none; padding:3px 0;">von Netzknoten A:</td><td style="border:none; padding:3px 0; text-align:right;"><b>${vnk}</b></td></tr>
-            <tr><td style="border:none; padding:3px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:3px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
-            <tr><td style="border:none; padding:3px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:3px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
-            <tr><td style="border:none; padding:3px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:3px 0; text-align:right; color:var(--text-secondary);"><b>${bb}</b></td></tr>
-            <tr><td style="border:none; padding:3px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:3px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
+        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
+            <tr><td style="border:none; padding:1px 0;">von Knoten A:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${bb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
         </table>
     `;
 }
@@ -910,7 +910,6 @@ function calculateNKMap() {
         
         mapLineLayer = L.layerGroup().addTo(map);
 
-        // 1. Alle Nachbar-Vektoren in Rot, dünn, leicht transparent
         alleImUmkreis.forEach(feat => {
             if(feat !== best) {
                 L.geoJSON(feat, {
@@ -919,30 +918,34 @@ function calculateNKMap() {
             }
         });
 
-        // 2. Den Gewinner-Vektor in Grün, etwas dicker, kräftig
         L.geoJSON(best, {
             style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
         }).addTo(mapLineLayer);
-
-        // 3. Karte direkt unter die Nadel schieben (kein roter Punkt mehr nötig)
-        map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: true});
         
         let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
         
-        resDiv.innerHTML = `<div class="nk-box" style="margin-top:0;">
-            <strong style="color:var(--text-secondary);">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong><br>
-            <div style="font-size:0.8em; color:var(--text-main); margin-top:4px; margin-bottom:8px;">
-                <em>Tipp: <span style="color:#28a745; font-weight:bold;">Grün</span> = Erfasster Vektor. <span style="color:#dc3545; font-weight:bold;">Rot</span> = Weitere Vektoren.</em>
-            </div>
+        // NEU: Tipp entfernt, Box kompakter gemacht
+        resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
+            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
         </div>`;
+        
+        // NEU: DER FIX FÜR DAS VERRUTSCHEN DER NADEL
+        // Zuerst den Zettel sichtbar machen (ändert die Fensterhöhe)
+        resDiv.style.display = 'block';
+        
+        // Dann kurz warten, Map-Größe neu berechnen lassen und DANN zentrieren (ohne Animation)
+        setTimeout(() => { 
+            map.invalidateSize(); 
+            map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
+        }, 20);
+
     } else {
         resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 150m Umkreis gefunden. Bitte näher zoomen!</p>`;
+        resDiv.style.display = 'block';
+        setTimeout(() => { map.invalidateSize(); }, 20);
     }
-    
-    resDiv.style.display = 'block';
-    setTimeout(() => { map.invalidateSize(); }, 50);
 }
 
 // --- WEG ZEIT RECHNER FUNKTIONEN ---
