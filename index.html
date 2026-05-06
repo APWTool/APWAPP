@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.3</title>
+<title>Autobahn Tool v1.5</title>
 
-<!-- GoatCounter -->
+<!-- GoatCounter Analytics -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 
 <link rel="manifest" href="manifest.json">
@@ -248,15 +248,36 @@ const datenWachen = {
     "Gladbach": { grenzen: {"A44": [48.851, 77.999], "A46": [18.284, 65.294], "A52": [-0.468, 46.665], "A57": [74.000, 88.499], "A61": [-1.274, 36.465]}, listen: {"A44": [["AK","Holz","54,000"], ["AS","M'gladbach-Odenkirchen","62,200","Ausbauende"], ["AS","M'gladbach-Ost","66,900","Ausbauende"], ["AK","Neersen","69,200"], ["AS","Neersen","70,500"], ["AS","Münchheide","72,800"], ["AS","Krefeld-Forstwald","75,100"], ["AS","Krefeld-Fichtenhain","77,200"]], "A46": [["AS","Heinsberg (Ausbauende)","18,300"], ["AS","Dremmen","22,900"], ["AS","Hückelhoven-West","25,500"], ["AS","Hückelhoven-Ost","28,800"], ["AS","Erkelenz-Süd","33,600"], ["AS","Erkelenz-Ost","37,100"], ["PP","Herrather Linde-Nord","39,200","RF Heinsberg"], ["PP","Herrather Linde-Süd","39,200","RF Brilon"], ["AK","Wanlo","44,400"], ["AK","Holz","48,300"], ["AS","Jüchen","52,600"], ["AS","Grevenbroich","54,700"], ["RuT","Vierwinden-Süd","58,100","RF Brilon"], ["RuT","Vierwinden-Nord","58,600","RF Heinsberg"], ["AS","Grevenbroich-Kapellen","60,000"], ["AS","Neuss-Holzheim","63,600"]], "A52": [["AS","Elmpt","4,100"], ["AS","Niederkrüchten","10,000"], ["AS","Schwalmtal-Waldniel","13,400"], ["AS","Schwalmtal-Hostert","17,700"], ["AS","Mönchengladbach-Hardt","19,900"], ["AK","Mönchengladbach","22,200"], ["PP","Bockerter Heide","24,200","RF Roermond"], ["PP","Wolfskull","24,200","RF AK Marl-Nord"], ["AS","Mönchengladbach-Nord","26,600"], ["AS","Mönchengladbach-Neuwerk","28,200"], ["AK","Neersen","30,700"], ["RuT","Cloerbruch-Nord","32,600","RF Roermond"], ["RuT","Cloerbruch-Süd","32,600","RF AK Marl-Nord"], ["AS","Schiefbahn","34,500"], ["AS","Kaarst-Nord","40,300"], ["AK","Kaarst","41,700"], ["AS","Büderich","46,400"]], "A57": [["AK","Kaarst","76,900"], ["AS","Holzbüttgen","78,700"], ["PP","Morgensternsheide-Ost","79,800","RF Nijmegen"], ["PP","Morgensternsheide-West","80,000","RF Köln"], ["AS","Büttgen","81,200"], ["AK","Neuss-West","83,300"], ["AS","Neuss-Reuschenberg","84,300"], ["AS","Neuss-Hafen","86,000"], ["AS","Neuss-Norf","88,000"]], "A61": [["GÜ","Grenzübergang Grenzwald","-1,300"], ["AS","Nettetal-West","0,600"], ["AS","Kaldenkirchen","1,900"], ["AS","Kaldenkirchen-Süd","4,100"], ["AS","Breyell","7,300","nur Ausfahrt RF Hockenheim"], ["AS","Nettetal","9,000"], ["AS","Süchteln","14,400"], ["AS","Viersen","16,800"], ["AS","Mackenstein","18,800"], ["AK","Mönchengladbach","22,000"], ["AS","Mönchengladbach-Nordpark","23,900"], ["AS","Mönchengladbach-Holt","26,300"], ["AS","Mönchengladbach-Rheydt","29,100"], ["AS","Mönchengladbach-Wickrath","31,000"], ["AS","Güdderath","33,600"], ["AK","Wanlo","35,300"], ["AS","Wanlo","36,400"]]}, richtungen: {"A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A46": ["RF Wuppertal (+)","RF Heinsberg (-)"], "A52": ["RF Essen (+)","RF Roermond (-)"], "A57": ["RF Köln (+)","RF Goch (-)"], "A61": ["RF Koblenz (+)","RF Venlo (-)"]} }
 };
 
-const meistereien = {
-    A1: [{from:363.315,to:365.649,name:"AM Hagen",address:"In d. Krone 20, 58099 Hagen"},{from:365.649,to:381.646,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],
-    A3: [{from:101.2,to:107.925,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"},{from:107.925,to:122.819,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],
-    A44: [{from:1.215,to:17.599,name:"AM Ratingen",address:"Brachter Str. 45A, 40882 Ratingen"}],
-    A46: [{from:70.815,to:80.770,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:80.770,to:88.340,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"},{from:88.340,to:114.763,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],
-    A57: [{from:88.5,to:93.343,name:"AM Kaarst",address:"Neersener Str. 9, 41564 Kaarst"},{from:93.343,to:100.912,name:"AM Köln",address:"Dürener Str. 462, 50858 Köln"}],
-    A59: [{from:0.578,to:14.467,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}],
-    A535: [{from:0.262,to:12.811,name:"AM Remscheid",address:"Talsperre 23, 42859 Remscheid"}],
-    A542: [{from:4.055,to:8.754,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}]
+const amAdressen = {
+    "AM Weilerswist": { addr: "Kastanienweg 4, 53919 Weilerswist", tel: "02254 601410" },
+    "AM Titz": { addr: "An den Teichen 1, 52445 Titz", tel: "-" },
+    "AM Sankt Augustin": { addr: "Frankfurter Str. 140, 53757 Sankt Augustin", tel: "02241 127250" },
+    "AM St. Augustin": { addr: "Frankfurter Str. 140, 53757 Sankt Augustin", tel: "02241 127250" },
+    "AM Rheinberg": { addr: "Moerser Str. 123, 47495 Rheinberg", tel: "02843 903640" },
+    "AM Remscheid": { addr: "Talsperre 23, 42859 Remscheid", tel: "02191 469740" },
+    "AM Recklinghausen": { addr: "Friedrich-Ebert-Straße 241, 45659 Recklinghausen", tel: "02361 9420" },
+    "AM Ratingen": { addr: "Brachter Str. 45A, 40882 Ratingen", tel: "02102 20437" },
+    "AM Overath": { addr: "Balkener-Straße 1, 51491 Overath", tel: "02206 863780" },
+    "AM Oelde": { addr: "Böckenfördeweg 24, 59302 Oelde", tel: "02522 9120" },
+    "AM Münster": { addr: "Feuerstiege 16, 48163 Münster", tel: "02501 9670" },
+    "AM Mönchengladbach": { addr: "Waldnieler Str. 600, 41068 Mönchengladbach", tel: "02161 901550" },
+    "AM Lüdenscheid": { addr: "Werdohler Landstraße 10, 58511 Lüdenscheid", tel: "02351 9240" },
+    "AM Leverkusen": { addr: "Bonner Str. 71, 51379 Leverkusen", tel: "-" },
+    "AM Lengerich": { addr: "Ibbenbürener Str. 10, 49525 Lengerich", tel: "05481 9220" },
+    "AM Köln": { addr: "Dürener Str. 462, 50858 Köln", tel: "02234 20370" },
+    "AM Kamen": { addr: "Zollpost 26, 59174 Kamen", tel: "-" },
+    "AM Kaarst": { addr: "Neersener Str. 9, 41564 Kaarst", tel: "02131 898670" },
+    "AM Isselburg": { addr: "Am Wolfssee 26, 46419 Isselburg", tel: "02874 902720" },
+    "AM Herford": { addr: "Vlothoer Str. 289, 32049 Herford", tel: "05221 92350" },
+    "AM Hagen": { addr: "In d. Krone 20, 58099 Hagen", tel: "02331 6210" },
+    "AM Gelsenkirchen": { addr: "Reckfeldstraße 1, 45889 Gelsenkirchen", tel: "0209 98010" },
+    "AM Freudenberg": { addr: "Wilhelmshöhe 15, 57258 Freudenberg", tel: "02734 2870" },
+    "AM Düren": { addr: "Nordstraße 149, 52353 Düren", tel: "02421 224980" },
+    "AM Duisburg": { addr: "Carl-Benz-Straße 11, 47058 Duisburg", tel: "0203 6086040" },
+    "AM Dorsten": { addr: "Königsberger Allee 200, 46282 Dorsten", tel: "02362 9230" },
+    "AM Bonn": { addr: "Euskirchener Str. 1, 53347 Alfter", tel: "0228 3918910" },
+    "AM Werl": { addr: "Waltringer Weg 25, 59457 Werl", tel: "02922 9840" },
+    "AM Wünnenberg-Haaren": { addr: "Fiegenburg 16, 33181 Bad Wünnenberg", tel: "02957 9700" }
 };
 
 const wachenAnker = {
@@ -268,13 +289,12 @@ const wachenAnker = {
 };
 
 let aktuelleWache = "Hilden"; 
-let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[], amDatenbank={};
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let bkmHistorie = []; 
 let manuellerFokus = null;
 let map = null;
 
-// Layergruppe für Zeichnungen auf der Karte
 let mapLineLayer = null; 
 
 let wzInterval = null;
@@ -309,16 +329,19 @@ function showPage(pageId) {
     }
 }
 
+// NEU: Lädt jetzt die amDatenbank.json direkt mit in den Speicher!
 Promise.all([
     fetch('Abschnitt.json').then(res=>res.json()),
     fetch('AbschnittBAB.json').then(res=>res.json()),
     fetch('BABKM.json').then(res=>res.json()),
-    fetch('Gemeinden.json').then(res=>res.json())   
-]).then(([land, bab, punkte, gem])=>{
+    fetch('Gemeinden.json').then(res=>res.json()),
+    fetch('amDatenbank.json').then(res=>res.json()).catch(() => { return {}; }) 
+]).then(([land, bab, punkte, gem, amDB])=>{
     datenLand = extrahiere(land, true);
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem); 
+    amDatenbank = amDB || {};
     document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
     loadWacheSetting();
 }).catch(e => { 
@@ -423,29 +446,21 @@ function holeKoordinateFuerKM(autobahn, km) {
 
         if (candidates.length > 0) {
             candidates.sort((a, b) => a.diff - b.diff);
-
             let bestDiff = candidates[0].diff;
             let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
 
             if (topCandidates.length > 1) {
                 let anchorCoords = wachenAnker["Hilden"]; 
-                
-                if (letzteLat !== 0 && letzteLon !== 0) {
-                    anchorCoords = [letzteLon, letzteLat];
-                } else if (wachenAnker[aktuelleWache]) {
-                    anchorCoords = wachenAnker[aktuelleWache];
-                }
+                if (letzteLat !== 0 && letzteLon !== 0) anchorCoords = [letzteLon, letzteLat];
+                else if (wachenAnker[aktuelleWache]) anchorCoords = wachenAnker[aktuelleWache];
                 
                 let anchorPt = turf.point(anchorCoords);
-
                 topCandidates.forEach(c => {
                     let cCoord = turf.getCoord(turf.centroid(c.pt));
                     c.anchorDist = turf.distance(anchorPt, turf.point(cCoord));
                 });
-                
                 topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
             }
-            
             let finalWinner = topCandidates[0];
             return turf.getCoord(turf.centroid(finalWinner.pt)); 
         }
@@ -498,9 +513,7 @@ function updateUI() {
                 }
             }
 
-            if (rf) {
-                nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
-            }
+            if (rf) nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
 
             let tr = document.createElement("tr");
             tr.innerHTML = `<td>${typ}</td><td>${nameHtml}</td><td>${kmRaw}</td>`;
@@ -513,20 +526,15 @@ function updateUI() {
 
 function findeGemeindeFuerPunkt(pt) {
     if (datenGemeinden.length === 0) return "-";
-    
     for (let f of datenGemeinden) {
-        try { 
-            if (turf.booleanPointInPolygon(pt, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt"; 
-        } catch(e) {}
+        try { if (turf.booleanPointInPolygon(pt, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt"; } catch(e) {}
     }
-    
     try {
         let buffered = turf.buffer(pt, 0.05, {units: 'kilometers'}); 
         for (let f of datenGemeinden) {
             if (turf.booleanIntersects(buffered, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt";
         }
     } catch(e) {}
-
     return "Außerhalb NRW";
 }
 
@@ -572,6 +580,31 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
+// NEU: Universal-Funktion um AM Name & Adresse aus dem Vektor zu lesen
+function resolveMeisterei(feature, pointObj) {
+    if (!feature) return { name: "-", addr: "-" };
+    let abschnitt = feature.properties.ABSNR || feature.properties.Sk_Kennung || "";
+    let amName = "-";
+
+    if (amDatenbank && amDatenbank[abschnitt]) {
+        let snapped = turf.nearestPointOnLine(feature, pointObj);
+        let currentMeters = snapped.properties.location || 0;
+        let abschnitte = amDatenbank[abschnitt];
+        abschnitte.forEach(e => {
+            if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am;
+        });
+        if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
+    }
+
+    let addrHtml = "-";
+    if (amName !== "-" && amAdressen[amName]) {
+        let d = amAdressen[amName];
+        let telHtml = d.tel !== "-" ? ` | 📞 <a href="tel:${d.tel.replace(/\s/g, '')}" style="color:var(--accent); text-decoration:none; font-weight:bold;">${d.tel}</a>` : "";
+        addrHtml = `${d.addr}${telHtml}`;
+    }
+    return { name: amName, addr: addrHtml };
+}
+
 async function verarbeiteGPS(lat, lon, acc){
     letzteLat = lat; letzteLon = lon; letzteAcc = acc;
     const pt = turf.point([lon, lat]);
@@ -610,6 +643,11 @@ async function verarbeiteGPS(lat, lon, acc){
             if (focusMatch) sel = focusMatch; 
         }
         if (!sel) sel = sortKandidaten[0];
+
+        // NEU: AM Lookup live über GPS!
+        let amInfo = resolveMeisterei(sel.feature, pt);
+        document.getElementById("m").innerText = amInfo.name;
+        document.getElementById("m_address").innerHTML = amInfo.addr;
 
         const props = sel.feature.properties || {};
         const strName = sel.name; 
@@ -677,7 +715,6 @@ async function verarbeiteGPS(lat, lon, acc){
             
             document.getElementById("km").value = "";
             document.getElementById("b").innerText="-";
-            document.getElementById("m").innerText="-"; document.getElementById("m_address").innerText="-";
             document.getElementById("progress").style.width="0%"; 
             document.getElementById("liste").innerHTML="";
         }
@@ -784,9 +821,28 @@ function berechnen(isManual = false){
     }
 
     let coords = holeKoordinateFuerKM(a, km);
+    let meister = "-", addr = "-";
+
     if(coords) {
         let pt = turf.point([coords[0], coords[1]]);
         document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+
+        // NEU: Rechnet jetzt auch bei Handeingabe die Meisterei aus!
+        let closest = null, minDist = Infinity;
+        let strName = a.toUpperCase().replace(/\s/g, '');
+        datenBAB.forEach(f => {
+            let fName = String(f.properties.STRBEZ || f.properties.Str_Kennung || "").toUpperCase().replace(/\s/g, '');
+            if(fName === strName) {
+                try {
+                    let d = turf.pointToLineDistance(pt, f);
+                    if(d < minDist) { minDist = d; closest = f; }
+                } catch(e) {}
+            }
+        });
+        
+        let amInfo = resolveMeisterei(closest, pt);
+        meister = amInfo.name;
+        addr = amInfo.addr;
     } else {
         document.getElementById("g").innerText = "-";
     }
@@ -797,16 +853,8 @@ function berechnen(isManual = false){
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
 
-    let meister="-", addr="-";
-    if(meistereien[a]){
-        meistereien[a].forEach(mf=>{
-            if(km >= mf.from && km <= mf.to){
-                meister = mf.name; addr = mf.address;
-            }
-        });
-    }
     document.getElementById("m").innerText = meister;
-    document.getElementById("m_address").innerText = addr;
+    document.getElementById("m_address").innerHTML = addr;
 }
 
 function holeNKHtml(props, distMeter = 0, isMap = false) {
@@ -827,9 +875,25 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
     let stationKM = (stationBase + distMeter) / 1000;
 
-    let debugInfo = "";
-    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
+    // NEU: AM auf der Landkarte
+    let zustaendigeAM = "AM Unbekannt";
+    let telLink = "";
+    if (typeof amDatenbank !== 'undefined' && amDatenbank[rawAbs]) {
+        let abschnitte = amDatenbank[rawAbs];
+        abschnitte.forEach(eintrag => {
+            if (distMeter >= eintrag.von && distMeter <= eintrag.bis) {
+                zustaendigeAM = eintrag.am;
+            }
+        });
+        if (zustaendigeAM === "AM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
+    }
 
+    if(amAdressen[zustaendigeAM] && amAdressen[zustaendigeAM].tel !== "-") {
+        telLink = ` | 📞 <a href="tel:${amAdressen[zustaendigeAM].tel.replace(/\s/g,'')}" style="color:var(--accent); text-decoration:none;">${amAdressen[zustaendigeAM].tel}</a>`;
+    }
+
+    let debugInfo = "";
+    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b><br><b>${zustaendigeAM}</b>${telLink}</div>`;
 
     return `
         ${debugInfo}
@@ -870,13 +934,11 @@ function openMap() {
     }
 }
 
-
 function closeMap() { 
     document.getElementById('map-overlay').style.display = 'none'; 
     if (mapLineLayer) map.removeLayer(mapLineLayer);
 }
 
-// Netzknoten Logik Rot/Grün und Snapping
 function calculateNKMap() {
     let pos = map.getCenter(); 
     let pt = turf.point([pos.lng, pos.lat]);
@@ -924,17 +986,13 @@ function calculateNKMap() {
         
         let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
         
-
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
-            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName}/strong>
+            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
         </div>`;
         
-
         resDiv.style.display = 'block';
-        
-
         setTimeout(() => { 
             map.invalidateSize(); 
             map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
