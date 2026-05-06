@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.0</title>
+<title>Autobahn Tool v1.3</title>
 
 <!-- GoatCounter Analytics -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -274,9 +274,8 @@ let bkmHistorie = [];
 let manuellerFokus = null;
 let map = null;
 
-// NEU: Layergruppe für alle Zeichnungen auf der Karte
+// Layergruppe für alle Zeichnungen auf der Karte
 let mapLineLayer = null; 
-let mapSnapMarker = null; 
 
 let wzInterval = null;
 let wzStartTime = 0;
@@ -668,7 +667,7 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | KM: ${bkmAnzeige} ${techInfo}`;
 
         } else {
-            let abschnitt = props.ABSNR || "Unbekannt";
+            let abschnitt = props.ABSNR || props.Sk_Kennung || "Unbekannt";
             let ast = props.ABSAST && props.ABSAST !== "" ? ` (${props.ABSAST})` : "";
             let snapped = turf.nearestPointOnLine(sel.feature, pt);
             let aktuellerKM = (parseFloat(props.STATANF) || 0) + (snapped.properties.location || 0);
@@ -816,7 +815,8 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let bnk = props.BNK || props.Bnk || props.NETZKNOTEN_NACH || "-";
     let bb = props.BB || props.Bb || props.KNOTEN_NACH_BUCHSTABE || "-";
     
-    let rawAbs = props.ABSNr || props.ABSNR || props.ABS || props.ABS_NUMMER || "";
+    // Robuster Fallback: Sucht nach ABSNr (aus Mapshaper) oder den alten Namen
+    let rawAbs = props.ABSNr || props.ABSNR || props.ABS || props.Sk_Kennung || "";
     if ((vnk === "-" || bnk === "-") && rawAbs.length >= 15) {
         let absStr = String(rawAbs).padEnd(16, ' ');
         vnk = absStr.substring(0, 7).trim() || "-";
@@ -870,70 +870,61 @@ function openMap() {
     }
 }
 
-// NEU: Alte Zeichnungen beim Schließen der Karte ordentlich wegräumen
+// Alte Zeichnungen beim Schließen der Karte wegräumen
 function closeMap() { 
     document.getElementById('map-overlay').style.display = 'none'; 
     if (mapLineLayer) map.removeLayer(mapLineLayer);
-    if (mapSnapMarker) map.removeLayer(mapSnapMarker);
 }
 
-// NEU: Die aufgerüstete Visualisierungs-Logik für Netzknoten und Äste
+// Netzknoten Map-Logic mit Rot/Grün und Snapping (ohne Punkt)
 function calculateNKMap() {
     let pos = map.getCenter(); 
     let pt = turf.point([pos.lng, pos.lat]);
     
     let alleDaten = datenBAB.concat(datenLand);
     let best = null, minDist = Infinity;
-    let alleImUmkreis = []; // Hier sammeln wir alle gefundenen Vektoren
+    let alleImUmkreis = []; 
 
-    // 1. Alle Linien abscannen
     alleDaten.forEach(f => {
         try {
             let d = turf.pointToLineDistance(pt, f);
-            if (d < 0.15) { // Alle Vektoren unter 150 Meter Entfernung aufheben
+            if (d < 0.15) { 
                 alleImUmkreis.push(f);
-                if (d < minDist) { minDist = d; best = f; } // Und den allerbesten merken
+                if (d < minDist) { minDist = d; best = f; } 
             }
         } catch(e) {}
     });
 
     let resDiv = document.getElementById('nk-map-result');
     
-    // Alte Linien auf der Karte von vorherigen Klicks löschen
     if (mapLineLayer) map.removeLayer(mapLineLayer);
-    if (mapSnapMarker) map.removeLayer(mapSnapMarker);
 
     if(best) {
         let props = best.properties || {};
         let strKl = String(props.STRKL || props.StrKl || "").toUpperCase();
-        let strName = props.STRBEZ || props.StrBez || (strKl + (props.STRNR || props.StrNr || ""));
+        let strName = props.STRBEZ || props.StrBez || props.Str_Kennung || (strKl + (props.STRNR || props.StrNr || ""));
         
         let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         let distAufLinieMeter = snapped.properties.location || 0;
         let snappedCoord = turf.getCoord(snapped);
         
-        // Layer-Gruppe für die neuen Linien erstellen
         mapLineLayer = L.layerGroup().addTo(map);
 
-        // 2. Zuerst alle "Nachbar-Vektoren" (z.B. andere Äste der Abfahrt) grau und gestrichelt zeichnen
+        // 1. Alle Nachbar-Vektoren in Rot, dünn, leicht transparent
         alleImUmkreis.forEach(feat => {
             if(feat !== best) {
                 L.geoJSON(feat, {
-                    style: { color: '#6c757d', weight: 3, opacity: 0.6, dashArray: '5, 5' }
+                    style: { color: '#dc3545', weight: 2.5, opacity: 0.6 }
                 }).addTo(mapLineLayer);
             }
         });
 
-        // 3. Den Gewinner-Vektor (den du getroffen hast) dick und blau drüberzeichnen
+        // 2. Den Gewinner-Vektor in Grün, etwas dicker, kräftig
         L.geoJSON(best, {
-            style: { color: '#007BFF', weight: 7, opacity: 0.9 }
+            style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
         }).addTo(mapLineLayer);
 
-        // 4. Den kleinen roten Zielpunkt setzen
-        mapSnapMarker = L.circleMarker([snappedCoord[1], snappedCoord[0]], {
-            color: '#dc3545', fillColor: '#dc3545', fillOpacity: 1, radius: 6
-        }).addTo(map);
-        
+        // 3. Karte direkt unter die Nadel schieben (kein roter Punkt mehr nötig)
         map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: true});
         
         let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
@@ -941,7 +932,7 @@ function calculateNKMap() {
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0;">
             <strong style="color:var(--text-secondary);">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong><br>
             <div style="font-size:0.8em; color:var(--text-main); margin-top:4px; margin-bottom:8px;">
-                <em>Tipp: <span style="color:#007BFF; font-weight:bold;">Blau</span> = Erfasster Vektor. Grau = Weitere Abfahrts-Vektoren im Umkreis.</em>
+                <em>Tipp: <span style="color:#28a745; font-weight:bold;">Grün</span> = Erfasster Vektor. <span style="color:#dc3545; font-weight:bold;">Rot</span> = Weitere Vektoren.</em>
             </div>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
