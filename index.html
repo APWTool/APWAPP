@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.1</title>
+<title>Autobahn Tool v1.0</title>
 
 <!-- GoatCounter Analytics -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -27,7 +27,7 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <style>
-/* --- DARK MODE VARIABLEN --- */
+/* --- OPTIK & DARK MODE VARIABLEN --- */
 :root { --bg-body: #f4f6f8; --bg-card: white; --text-main: #333; --text-secondary: #00529b; --input-bg: white; --input-border: #ccc; --table-head: #eee; --result-bg: #f0f4f8; --accent: #007BFF; }
 [data-theme="dark"] { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --text-secondary: #4dabff; --input-bg: #2d2d2d; --input-border: #444; --table-head: #333; --result-bg: #2a2d31; }
 
@@ -259,7 +259,6 @@ const meistereien = {
     A542: [{from:4.055,to:8.754,name:"AM Leverkusen",address:"Bonner Str. 71, 51379 Leverkusen"}]
 };
 
-// Koordinaten für jede Wache 
 const wachenAnker = {
     "Hilden": [6.935, 51.168],
     "Mülheim": [6.881, 51.424],
@@ -275,7 +274,10 @@ let bkmHistorie = [];
 let manuellerFokus = null;
 let map = null;
 
-// Weg-Zeit Variablen
+// NEU: Layergruppe für alle Zeichnungen auf der Karte
+let mapLineLayer = null; 
+let mapSnapMarker = null; 
+
 let wzInterval = null;
 let wzStartTime = 0;
 let wzStartKm = 0;
@@ -401,7 +403,6 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
 
-// Für doppelte Autobahn-Kilometer
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
     let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
@@ -424,17 +425,11 @@ function holeKoordinateFuerKM(autobahn, km) {
         if (candidates.length > 0) {
             candidates.sort((a, b) => a.diff - b.diff);
 
-            // Alle Punkte finden, die nah dran sind (Toleranz 1.5)
             let bestDiff = candidates[0].diff;
             let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
 
-            
             if (topCandidates.length > 1) {
-                
-                // Bestimme Ankerpunkt: 
-                // Prio 1: Wenn GPS aktiv ist
-                // Prio 2: Nutze den Mittelpunkt der aktuell ausgewählten Wache
-                let anchorCoords = wachenAnker["Hilden"]; // Standard-Fallback
+                let anchorCoords = wachenAnker["Hilden"]; 
                 
                 if (letzteLat !== 0 && letzteLon !== 0) {
                     anchorCoords = [letzteLon, letzteLat];
@@ -444,17 +439,14 @@ function holeKoordinateFuerKM(autobahn, km) {
                 
                 let anchorPt = turf.point(anchorCoords);
 
-                // Luftlinie zum Ankerpunkt
                 topCandidates.forEach(c => {
                     let cCoord = turf.getCoord(turf.centroid(c.pt));
                     c.anchorDist = turf.distance(anchorPt, turf.point(cCoord));
                 });
                 
-                // Kandidat, der am nächsten zum Anker ist, gewinnt
                 topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
             }
             
-            // Liefere Koordinaten
             let finalWinner = topCandidates[0];
             return turf.getCoord(turf.centroid(finalWinner.pt)); 
         }
@@ -841,7 +833,7 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
 
     return `
         ${debugInfo}
-        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:2em;">
+        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1em;">
             <tr><td style="border:none; padding:3px 0;">von Netzknoten A:</td><td style="border:none; padding:3px 0; text-align:right;"><b>${vnk}</b></td></tr>
             <tr><td style="border:none; padding:3px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:3px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
             <tr><td style="border:none; padding:3px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:3px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
@@ -878,23 +870,39 @@ function openMap() {
     }
 }
 
-function closeMap() { document.getElementById('map-overlay').style.display = 'none'; }
+// NEU: Alte Zeichnungen beim Schließen der Karte ordentlich wegräumen
+function closeMap() { 
+    document.getElementById('map-overlay').style.display = 'none'; 
+    if (mapLineLayer) map.removeLayer(mapLineLayer);
+    if (mapSnapMarker) map.removeLayer(mapSnapMarker);
+}
 
+// NEU: Die aufgerüstete Visualisierungs-Logik für Netzknoten und Äste
 function calculateNKMap() {
     let pos = map.getCenter(); 
     let pt = turf.point([pos.lng, pos.lat]);
     
     let alleDaten = datenBAB.concat(datenLand);
     let best = null, minDist = Infinity;
+    let alleImUmkreis = []; // Hier sammeln wir alle gefundenen Vektoren
 
+    // 1. Alle Linien abscannen
     alleDaten.forEach(f => {
         try {
             let d = turf.pointToLineDistance(pt, f);
-            if (d < minDist && d < 0.15) { minDist = d; best = f; }
+            if (d < 0.15) { // Alle Vektoren unter 150 Meter Entfernung aufheben
+                alleImUmkreis.push(f);
+                if (d < minDist) { minDist = d; best = f; } // Und den allerbesten merken
+            }
         } catch(e) {}
     });
 
     let resDiv = document.getElementById('nk-map-result');
+    
+    // Alte Linien auf der Karte von vorherigen Klicks löschen
+    if (mapLineLayer) map.removeLayer(mapLineLayer);
+    if (mapSnapMarker) map.removeLayer(mapSnapMarker);
+
     if(best) {
         let props = best.properties || {};
         let strKl = String(props.STRKL || props.StrKl || "").toUpperCase();
@@ -902,14 +910,39 @@ function calculateNKMap() {
         
         let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         let distAufLinieMeter = snapped.properties.location || 0;
-        
         let snappedCoord = turf.getCoord(snapped);
+        
+        // Layer-Gruppe für die neuen Linien erstellen
+        mapLineLayer = L.layerGroup().addTo(map);
+
+        // 2. Zuerst alle "Nachbar-Vektoren" (z.B. andere Äste der Abfahrt) grau und gestrichelt zeichnen
+        alleImUmkreis.forEach(feat => {
+            if(feat !== best) {
+                L.geoJSON(feat, {
+                    style: { color: '#6c757d', weight: 3, opacity: 0.6, dashArray: '5, 5' }
+                }).addTo(mapLineLayer);
+            }
+        });
+
+        // 3. Den Gewinner-Vektor (den du getroffen hast) dick und blau drüberzeichnen
+        L.geoJSON(best, {
+            style: { color: '#007BFF', weight: 7, opacity: 0.9 }
+        }).addTo(mapLineLayer);
+
+        // 4. Den kleinen roten Zielpunkt setzen
+        mapSnapMarker = L.circleMarker([snappedCoord[1], snappedCoord[0]], {
+            color: '#dc3545', fillColor: '#dc3545', fillOpacity: 1, radius: 6
+        }).addTo(map);
+        
         map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: true});
         
         let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
         
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0;">
             <strong style="color:var(--text-secondary);">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong><br>
+            <div style="font-size:0.8em; color:var(--text-main); margin-top:4px; margin-bottom:8px;">
+                <em>Tipp: <span style="color:#007BFF; font-weight:bold;">Blau</span> = Erfasster Vektor. Grau = Weitere Abfahrts-Vektoren im Umkreis.</em>
+            </div>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
         </div>`;
