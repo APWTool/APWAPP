@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Autobahn Tool v1.3</title>
 
-<!-- GoatCounter Analytics -->
+<!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 
 <link rel="manifest" href="manifest.json">
@@ -274,7 +274,7 @@ let bkmHistorie = [];
 let manuellerFokus = null;
 let map = null;
 
-// Layergruppe für alle Zeichnungen auf der Karte
+// Layergruppe für Zeichnungen auf der Karte
 let mapLineLayer = null; 
 
 let wzInterval = null;
@@ -830,7 +830,7 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let debugInfo = "";
     if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
 
-    // NEU: Schriftgröße auf 1.15em erhöht, padding verringert für kompakten Look
+
     return `
         ${debugInfo}
         <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
@@ -870,13 +870,13 @@ function openMap() {
     }
 }
 
-// Alte Zeichnungen beim Schließen der Karte wegräumen
+
 function closeMap() { 
     document.getElementById('map-overlay').style.display = 'none'; 
     if (mapLineLayer) map.removeLayer(mapLineLayer);
 }
 
-// Netzknoten Map-Logic mit Rot/Grün und Snapping (ohne Punkt)
+// Netzknoten Logik Rot/Grün und Snapping
 function calculateNKMap() {
     let pos = map.getCenter(); 
     let pt = turf.point([pos.lng, pos.lat]);
@@ -924,18 +924,17 @@ function calculateNKMap() {
         
         let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
         
-        // NEU: Tipp entfernt, Box kompakter gemacht
+
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
-            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong>
+            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName}/strong>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
         </div>`;
         
-        // NEU: DER FIX FÜR DAS VERRUTSCHEN DER NADEL
-        // Zuerst den Zettel sichtbar machen (ändert die Fensterhöhe)
+
         resDiv.style.display = 'block';
         
-        // Dann kurz warten, Map-Größe neu berechnen lassen und DANN zentrieren (ohne Animation)
+
         setTimeout(() => { 
             map.invalidateSize(); 
             map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
