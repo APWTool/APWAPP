@@ -280,6 +280,65 @@ const amAdressen = {
     "AM Wünnenberg-Haaren": { addr: "Fiegenburg 16, 33181 Bad Wünnenberg", tel: "02957 9700" }
 };
 
+const smAdressen = {
+    "SM Aachen": { addr: "in Bearbeitung", tel: "-" },
+    "SM Arnsberg": { addr: "in Bearbeitung", tel: "-" },
+    "SM Beckum": { addr: "in Bearbeitung", tel: "-" },
+    "SM Bergheim": { addr: "in Bearbeitung", tel: "-" },
+    "SM Blankenheim": { addr: "in Bearbeitung", tel: "-" },
+    "SM Brakel": { addr: "in Bearbeitung", tel: "-" },
+    "SM Brilon": { addr: "in Bearbeitung", tel: "-" },
+    "SM Burscheid": { addr: "in Bearbeitung", tel: "-" },
+    "SM Dortmund": { addr: "in Bearbeitung", tel: "-" },
+    "SM Eitorf": { addr: "in Bearbeitung", tel: "-" },
+    "SM Erndtebrück": { addr: "in Bearbeitung", tel: "-" },
+    "SM Erwitte": { addr: "in Bearbeitung", tel: "-" },
+    "SM Espelkamp": { addr: "in Bearbeitung", tel: "-" },
+    "SM Geldern": { addr: "in Bearbeitung", tel: "-" },
+    "SM Grevenbroich": { addr: "in Bearbeitung", tel: "-" },
+    "SM Halle": { addr: "in Bearbeitung", tel: "-" },
+    "SM Heinsberg": { addr: "in Bearbeitung", tel: "-" },
+    "SM Herscheid": { addr: "in Bearbeitung", tel: "-" },
+    "SM Iserlohn": { addr: "in Bearbeitung", tel: "-" },
+    "SM Jülich": { addr: "in Bearbeitung", tel: "-" },
+    "SM Kleve": { addr: "in Bearbeitung", tel: "-" },
+    "SM Kreuztal": { addr: "in Bearbeitung", tel: "-" },
+    "SM Legden": { addr: "in Bearbeitung", tel: "-" },
+    "SM Lemgo": { addr: "in Bearbeitung", tel: "-" },
+    "SM Lennestadt": { addr: "in Bearbeitung", tel: "-" },
+    "SM Lohmar": { addr: "in Bearbeitung", tel: "-" },
+    "SM Löhne": { addr: "in Bearbeitung", tel: "-" },
+    "SM Lüdinghausen": { addr: "in Bearbeitung", tel: "-" },
+    "SM Marl": { addr: "in Bearbeitung", tel: "-" },
+    "SM Meerbusch": { addr: "in Bearbeitung", tel: "-" },
+    "SM Meschede": { addr: "in Bearbeitung", tel: "-" },
+    "SM Minden": { addr: "in Bearbeitung", tel: "-" },
+    "SM Moers": { addr: "in Bearbeitung", tel: "-" },
+    "SM Münster": { addr: "in Bearbeitung", tel: "-" },
+    "SM Nettetal": { addr: "in Bearbeitung", tel: "-" },
+    "SM Peckelsheim": { addr: "in Bearbeitung", tel: "-" },
+    "SM Rhede": { addr: "in Bearbeitung", tel: "-" },
+    "SM Rheinbach": { addr: "in Bearbeitung", tel: "-" },
+    "SM Salzkotten": { addr: "in Bearbeitung", tel: "-" },
+    "SM Schieder": { addr: "in Bearbeitung", tel: "-" },,
+    "SM Schleiden": { addr: "in Bearbeitung", tel: "-" },
+    "SM Schwelm": { addr: "in Bearbeitung", tel: "-" },
+    "SM Simmerath": { addr: "in Bearbeitung", tel: "-" },
+    "SM Solingen": { addr: "in Bearbeitung", tel: "-" },
+    "SM Steinfurt": { addr: "in Bearbeitung", tel: "-" },
+    "SM Unna": { addr: "in Bearbeitung", tel: "-" },
+    "SM Velbert": { addr: "in Bearbeitung", tel: "-" },
+    "SM Voerde": { addr: "in Bearbeitung", tel: "-" },
+    "SM Waldbröl": { addr: "in Bearbeitung", tel: "-" },
+    "SM Weilerswist": { addr: "in Bearbeitung", tel: "-" },
+    "SM Westerkappeln": { addr: "in Bearbeitung", tel: "-" },
+    "SM Wiedenbrück": { addr: "in Bearbeitung", tel: "-" },
+    "SM Wiehl": { addr: "in Bearbeitung", tel: "-" },
+    "SM Wilnsdorf": { addr: "in Bearbeitung", tel: "-" },
+    "SM Winterberg": { addr: "in Bearbeitung", tel: "-" },
+    "SM Wipperfürth": { addr: "in Bearbeitung", tel: "-" },
+};
+
 const wachenAnker = {
     "Hilden": [6.935, 51.168],
     "Mülheim": [6.881, 51.424],
@@ -289,7 +348,8 @@ const wachenAnker = {
 };
 
 let aktuelleWache = "Hilden"; 
-let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[], amDatenbank={};
+let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let amDatenbank={}, smDatenbank={};
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let bkmHistorie = []; 
 let manuellerFokus = null;
@@ -329,19 +389,21 @@ function showPage(pageId) {
     }
 }
 
-// NEU: Lädt jetzt die amDatenbank.json direkt mit in den Speicher!
+// 6 Datenbanken laden
 Promise.all([
     fetch('Abschnitt.json').then(res=>res.json()),
     fetch('AbschnittBAB.json').then(res=>res.json()),
     fetch('BABKM.json').then(res=>res.json()),
     fetch('Gemeinden.json').then(res=>res.json()),
-    fetch('amDatenbank.json').then(res=>res.json()).catch(() => { return {}; }) 
-]).then(([land, bab, punkte, gem, amDB])=>{
+    fetch('amDatenbank.json').then(res=>res.json()).catch(() => ({})),
+    fetch('smDatenbank.json').then(res=>res.json()).catch(() => ({})) 
+]).then(([land, bab, punkte, gem, amDB, smDB])=>{
     datenLand = extrahiere(land, true);
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem); 
     amDatenbank = amDB || {};
+    smDatenbank = smDB || {};
     document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
     loadWacheSetting();
 }).catch(e => { 
@@ -421,7 +483,6 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
     manuellerFokus = null;
     updateUI();
     berechnen(false); 
-    
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
 
@@ -430,7 +491,8 @@ function holeKoordinateFuerKM(autobahn, km) {
     let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
     let passende = referenzPunkte.filter(f => {
         if(!f.properties) return false;
-        let refBez = String(f.properties.Bez || f.properties.STRBEZ || "").toUpperCase().replace(/\s/g, '');
+        // Fallback für alte (Bez) und neue (STRNR) BKM Felder
+        let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
         let strKl = String(f.properties.STRKL || "").toUpperCase();
         if(strKl === "B" || strKl === "L" || strKl === "K") return false; 
         return refBez === suchName || refBez === "BAB" + numOnly || refBez === numOnly || refBez === "A" + numOnly;
@@ -439,7 +501,8 @@ function holeKoordinateFuerKM(autobahn, km) {
     if(passende.length > 0) {
         let candidates = [];
         passende.forEach(p => {
-            let kmProp = p.properties.Kilometer || p.properties.KM_WERT || p.properties.STATION || p.properties.KM || 0;
+            // Fallback für Kilometer, KM_WERT und BKM (neues Shapefile)
+            let kmProp = p.properties.Kilometer || p.properties.BKM || p.properties.KM_WERT || p.properties.STATION || p.properties.KM || 0;
             let pKm = parseFloat(String(kmProp).replace(',', '.'));
             if(!isNaN(pKm)) candidates.push({ pt: p, diff: Math.abs(pKm - km) });
         });
@@ -580,27 +643,37 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// NEU: Universal-Funktion um AM Name & Adresse aus dem Vektor zu lesen
+// NEU: Universal-Funktion für AM und SM
 function resolveMeisterei(feature, pointObj) {
     if (!feature) return { name: "-", addr: "-" };
-    let abschnitt = feature.properties.ABSNR || feature.properties.Sk_Kennung || "";
+    let abschnitt = feature.properties.ABSNR || feature.properties.Sk_Kennung || feature.properties.ABS || "";
     let amName = "-";
 
+    let snapped = turf.nearestPointOnLine(feature, pointObj);
+    let currentMeters = snapped.properties.location || 0;
+
+    // 1. Suche in der Autobahn-Datenbank
     if (amDatenbank && amDatenbank[abschnitt]) {
-        let snapped = turf.nearestPointOnLine(feature, pointObj);
-        let currentMeters = snapped.properties.location || 0;
         let abschnitte = amDatenbank[abschnitt];
-        abschnitte.forEach(e => {
-            if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am;
-        });
+        abschnitte.forEach(e => { if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am; });
+        if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
+    }
+    
+    // 2. Suche in der Landstraßen-Datenbank (falls nicht auf Autobahn gefunden)
+    if (amName === "-" && smDatenbank && smDatenbank[abschnitt]) {
+        let abschnitte = smDatenbank[abschnitt];
+        abschnitte.forEach(e => { if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am; });
         if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
     }
 
+    // 3. Adresse zusammenbauen
     let addrHtml = "-";
-    if (amName !== "-" && amAdressen[amName]) {
-        let d = amAdressen[amName];
-        let telHtml = d.tel !== "-" ? ` | 📞 <a href="tel:${d.tel.replace(/\s/g, '')}" style="color:var(--accent); text-decoration:none; font-weight:bold;">${d.tel}</a>` : "";
-        addrHtml = `${d.addr}${telHtml}`;
+    if (amName !== "-") {
+        let d = amAdressen[amName] || smAdressen[amName];
+        if (d) {
+            let telHtml = d.tel !== "-" ? ` | 📞 <a href="tel:${d.tel.replace(/\s/g, '')}" style="color:var(--accent); text-decoration:none; font-weight:bold;">${d.tel}</a>` : "";
+            addrHtml = `${d.addr}${telHtml}`;
+        }
     }
     return { name: amName, addr: addrHtml };
 }
@@ -644,7 +717,7 @@ async function verarbeiteGPS(lat, lon, acc){
         }
         if (!sel) sel = sortKandidaten[0];
 
-        // NEU: AM Lookup live über GPS!
+        // Die AM/SM wird live berechnet!
         let amInfo = resolveMeisterei(sel.feature, pt);
         document.getElementById("m").innerText = amInfo.name;
         document.getElementById("m_address").innerHTML = amInfo.addr;
@@ -762,8 +835,10 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     if(referenzPunkte.length === 0) return 0;
     let suchName=strName.toUpperCase().replace(/\s/g,'').replace('A','');
     let passende=referenzPunkte.filter(f=>{
-        if(!f.properties||!f.properties.Bez) return false;
-        return String(f.properties.Bez).toUpperCase().replace(/\s/g,'').replace('A','')===suchName;
+        if(!f.properties) return false;
+        // Fallback Bez und STRNR
+        let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
+        return refBez === suchName;
     });
     
     if(passende.length > 1){
@@ -773,15 +848,16 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         let closest = passende[0];
         let secondClosest = passende[1];
         
-        let refKM1 = parseFloat(String(closest.properties.Kilometer || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
-        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || secondClosest.properties.KM_WERT || secondClosest.properties.STATION || secondClosest.properties.KM || 0).replace(',','.'));
+        // Fallback Kilometer und BKM
+        let refKM1 = parseFloat(String(closest.properties.Kilometer || closest.properties.BKM || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
+        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || secondClosest.properties.BKM || secondClosest.properties.KM_WERT || secondClosest.properties.STATION || secondClosest.properties.KM || 0).replace(',','.'));
         
         if (refKM2 < refKM1) return refKM1 - closest.tempDist;
         else return refKM1 + closest.tempDist;
         
     } else if (passende.length === 1) {
         let closest = passende[0];
-        let refKM = parseFloat(String(closest.properties.Kilometer || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
+        let refKM = parseFloat(String(closest.properties.Kilometer || closest.properties.BKM || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
         let dist = turf.distance(meinPunkt, closest);
         return refKM + dist;
     }
@@ -827,7 +903,6 @@ function berechnen(isManual = false){
         let pt = turf.point([coords[0], coords[1]]);
         document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
 
-        // NEU: Rechnet jetzt auch bei Handeingabe die Meisterei aus!
         let closest = null, minDist = Infinity;
         let strName = a.toUpperCase().replace(/\s/g, '');
         datenBAB.forEach(f => {
@@ -875,21 +950,23 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
     let stationKM = (stationBase + distMeter) / 1000;
 
-    // NEU: AM auf der Landkarte
-    let zustaendigeAM = "AM Unbekannt";
+    // AM oder SM auslesen für Map Zettel
+    let zustaendigeAM = "AM/SM Unbekannt";
     let telLink = "";
-    if (typeof amDatenbank !== 'undefined' && amDatenbank[rawAbs]) {
+    
+    if (amDatenbank && amDatenbank[rawAbs]) {
         let abschnitte = amDatenbank[rawAbs];
-        abschnitte.forEach(eintrag => {
-            if (distMeter >= eintrag.von && distMeter <= eintrag.bis) {
-                zustaendigeAM = eintrag.am;
-            }
-        });
-        if (zustaendigeAM === "AM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
+        abschnitte.forEach(e => { if (distMeter >= e.von && distMeter <= e.bis) zustaendigeAM = e.am; });
+        if (zustaendigeAM === "AM/SM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
+    } else if (smDatenbank && smDatenbank[rawAbs]) {
+        let abschnitte = smDatenbank[rawAbs];
+        abschnitte.forEach(e => { if (distMeter >= e.von && distMeter <= e.bis) zustaendigeAM = e.am; });
+        if (zustaendigeAM === "AM/SM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
     }
 
-    if(amAdressen[zustaendigeAM] && amAdressen[zustaendigeAM].tel !== "-") {
-        telLink = ` | 📞 <a href="tel:${amAdressen[zustaendigeAM].tel.replace(/\s/g,'')}" style="color:var(--accent); text-decoration:none;">${amAdressen[zustaendigeAM].tel}</a>`;
+    let d = amAdressen[zustaendigeAM] || smAdressen[zustaendigeAM];
+    if(d && d.tel !== "-") {
+        telLink = ` | 📞 <a href="tel:${d.tel.replace(/\s/g,'')}" style="color:var(--accent); text-decoration:none;">${d.tel}</a>`;
     }
 
     let debugInfo = "";
