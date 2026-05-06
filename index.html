@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.5</title>
+<title>Autobahn Tool v1.4</title>
 
 <!-- GoatCounter Analytics -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -388,11 +388,9 @@ function showPage(pageId) {
     }
 }
 
-// --- BOOT-SEQUENZ (WICHTIG!) ---
-// Baut die UI sofort auf, egal was mit den Dateien ist. 
+// --- BOOT-SEQUENZ ---
 loadWacheSetting();
 
-// Lade-Helfer, die niemals abstürzen, selbst wenn eine Datei fehlt
 function safeFetchJSON(url) {
     return fetch(url).then(res => {
         if(!res.ok) return { features: [] };
@@ -423,7 +421,6 @@ Promise.all([
     
     document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
     
-    // Sobald die Daten da sind, ein eventuell eingetipptes Feld einmal berechnen
     let dropMain = document.getElementById("autobahn");
     if(dropMain && dropMain.value !== "") berechnen(false);
 });
@@ -473,7 +470,7 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
 
     let dropMain = document.getElementById("autobahn"); 
     let dropWz = document.getElementById("wz_autobahn"); 
-    if(!dropMain) return; // Sicherung
+    if(!dropMain) return; 
     
     dropMain.innerHTML = ""; 
     if(dropWz) dropWz.innerHTML = "";
@@ -513,7 +510,6 @@ function holeKoordinateFuerKM(autobahn, km) {
     let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
     let passende = referenzPunkte.filter(f => {
         if(!f.properties) return false;
-        // Unterstützt altes und neues Mapshaper-Format
         let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
         let strKl = String(f.properties.STRKL || "").toUpperCase();
         if(strKl === "B" || strKl === "L" || strKl === "K") return false; 
@@ -646,19 +642,28 @@ function toggleGPS(){
     }
 }
 
+// BULLETPROOF KANDIDATEN-SUCHE
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
     liste.forEach(f=>{
         try{ 
             const props = f.properties || {};
-            const strKl = String(props.STRKL || "").toUpperCase();
-            const strNr = String(props.STRNR || "");
-            const name = (strKl + strNr).toUpperCase().replace(/\s/g,'');
             
+            // Flexibler Namens-Parser für NWSIB & BKG
+            let name = String(props.STRBEZ || props.StrBez || props.Str_Kennung || props.Bez || "").toUpperCase().replace(/\s/g, '');
+            let kl = String(props.STRKL || props.StrKl || "").toUpperCase();
+            let nr = String(props.STRNR || props.StrNr || "");
+            
+            if (!name || name === "0") {
+                name = kl + nr;
+            }
+            if (!name || name === "") return; // Fallback fehlgeschlagen
+            
+            if (!kl && name.length > 0) kl = name.charAt(0); // "A46" -> "A"
+
             if (filter) {
-                if (Array.isArray(filter) && !filter.includes(name)) return;
-                if (filter === "BUND" && strKl !== "B") return;
-                if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
+                if (filter === "BUND" && kl !== "B") return;
+                if (filter === "LAND" && kl !== "L" && kl !== "K") return;
             }
 
             let d = turf.pointToLineDistance(pt, f); 
@@ -672,17 +677,16 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// Abgesicherte Meisterei Such-Funktion
 function resolveMeisterei(feature, pointObj) {
     if (!feature) return { name: "-", addr: "-" };
-    let abschnitt = feature.properties.ABSNR || feature.properties.Sk_Kennung || feature.properties.ABS || "";
+    let abschnitt = feature.properties.ABSNr || feature.properties.ABSNR || feature.properties.Sk_Kennung || feature.properties.ABS || "";
     let amName = "-";
     let currentMeters = 0;
 
     try {
         let snapped = turf.nearestPointOnLine(feature, pointObj);
         currentMeters = snapped.properties.location || 0;
-    } catch(e) {} // Falls Turf.js wegen Geometrie-Problemen scheitert, bleibt es bei 0
+    } catch(e) {}
 
     // 1. Suche in der Autobahn-Datenbank
     if (amDatenbank && amDatenbank[abschnitt]) {
@@ -717,7 +721,8 @@ async function verarbeiteGPS(lat, lon, acc){
     
     let alleDaten = datenBAB.concat(datenLand);
 
-    let babHits = findeKandidaten(alleDaten, pt, null, 2.0).filter(k => k.name.startsWith("A"));
+    // Autobahnen bis 2.5km suchen, damit sie sicher auftauchen
+    let babHits = findeKandidaten(alleDaten, pt, null, 2.5).filter(k => k.name.startsWith("A"));
     let bundHits = findeKandidaten(alleDaten, pt, "BUND", 2.0);
     let landHits = findeKandidaten(alleDaten, pt, "LAND", 2.0);
     
@@ -725,15 +730,11 @@ async function verarbeiteGPS(lat, lon, acc){
     let uniqueKandidaten = [];
     let seenNames = new Set();
     alleKandidaten.forEach(k => {
-        if (!seenNames.has(k.name)) {
-            seenNames.add(k.name);
-            uniqueKandidaten.push(k);
-        }
+        if (!seenNames.has(k.name)) { seenNames.add(k.name); uniqueKandidaten.push(k); }
     });
 
     if(uniqueKandidaten.length > 0) {
-        let sortKandidaten = [...uniqueKandidaten];
-        sortKandidaten.sort((a, b) => {
+        let sortKandidaten = [...uniqueKandidaten].sort((a, b) => {
             let aIsA = a.name.startsWith("A");
             let bIsA = b.name.startsWith("A");
             if (aIsA && !bIsA) return -1;
@@ -741,13 +742,9 @@ async function verarbeiteGPS(lat, lon, acc){
             return a.dist - b.dist;
         });
 
-        let sel = null;
-        if (manuellerFokus) {
-            let focusMatch = sortKandidaten.find(k => k.name === manuellerFokus);
-            if (focusMatch) sel = focusMatch; 
-        }
-        if (!sel) sel = sortKandidaten[0];
+        let sel = manuellerFokus ? (sortKandidaten.find(k => k.name === manuellerFokus) || sortKandidaten[0]) : sortKandidaten[0];
 
+        // Meisterei für den aktuellen Snap berechnen
         let amInfo = resolveMeisterei(sel.feature, pt);
         document.getElementById("m").innerText = amInfo.name;
         document.getElementById("m_address").innerHTML = amInfo.addr;
@@ -760,16 +757,12 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
 
+        // Automatischer Wechsel, WENN Autobahn
         if (strName.startsWith("A")) {
-            let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             let bkm = berechneGoldgriffBKM(pt, strName);
             
-            if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) {
-                needsSwitch = false; 
-            }
-            
-            if (needsSwitch) {
+            if (bkm > 0 && (!currentGrenzen || bkm < Math.min(...currentGrenzen) || bkm > Math.max(...currentGrenzen))) {
                 for (let wache in datenWachen) {
                     let g = datenWachen[wache].grenzen[strName];
                     if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) {
@@ -784,6 +777,7 @@ async function verarbeiteGPS(lat, lon, acc){
             let bkm = berechneGoldgriffBKM(pt, strName);
             let kmInput = document.getElementById("km");
             if(kmInput) kmInput.value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
+            
             if (document.getElementById("autobahn").value !== strName) {
                 document.getElementById("autobahn").value = strName;
                 updateUI();
@@ -809,28 +803,28 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | KM: ${bkmAnzeige} ${techInfo}`;
 
         } else {
-            let abschnitt = props.ABSNR || props.Sk_Kennung || "Unbekannt";
+            let abschnitt = props.ABSNr || props.ABSNR || props.Sk_Kennung || props.ABS || "Unbekannt";
             let ast = props.ABSAST && props.ABSAST !== "" ? ` (${props.ABSAST})` : "";
             
-            let aktuellerKM = parseFloat(props.STATANF) || 0;
+            let aktuellerKM = parseFloat(props.STATANF || props.VSTAT || 0);
             try {
                 let snapped = turf.nearestPointOnLine(sel.feature, pt);
                 aktuellerKM += (snapped.properties.location || 0);
             } catch(e){}
 
-            let icon = (props.STRKL === "B" || props.STRKL === "b") ? "🚙" : "🌲";
+            let icon = strName.startsWith("B") ? "🚙" : "🌲";
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${ast}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
             
             let kmInput = document.getElementById("km");
             if(kmInput) kmInput.value = "";
-            document.getElementById("b").innerText="-";
             document.getElementById("progress").style.width="0%"; 
             let tbody = document.getElementById("liste");
             if(tbody) tbody.innerHTML="";
         }
 
-        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
+        // Alternative Optionen anbieten (bis zu 2.5km)
+        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 2.5);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
             htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
@@ -842,7 +836,7 @@ async function verarbeiteGPS(lat, lon, acc){
                     let k_bkm = berechneGoldgriffBKM(pt, k.name);
                     btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)}) [${distMeter}m]`;
                 } else {
-                    let k_icon = (k.props.STRKL === "B" || k.props.STRKL === "b") ? "🚙" : "🌲";
+                    let k_icon = k.name.startsWith("B") ? "🚙" : "🌲";
                     btnText = `${k_icon} ${k.name} [${distMeter}m]`;
                 }
                 htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
@@ -875,7 +869,7 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     let passende=referenzPunkte.filter(f=>{
         if(!f.properties) return false;
         let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
-        return refBez === suchName;
+        return refBez === suchName || refBez === "A"+suchName || refBez === "BAB"+suchName;
     });
     
     if(passende.length > 1){
@@ -946,7 +940,9 @@ function berechnen(isManual = false){
         let strName = a.toUpperCase().replace(/\s/g, '');
         datenBAB.forEach(f => {
             let fName = String(f.properties.STRBEZ || f.properties.Str_Kennung || "").toUpperCase().replace(/\s/g, '');
-            if(fName === strName) {
+            if (!fName || fName === "") fName = String(f.properties.STRKL || "") + String(f.properties.STRNR || "");
+            
+            if(fName.toUpperCase() === strName) {
                 try {
                     let d = turf.pointToLineDistance(pt, f);
                     if(d < minDist) { minDist = d; closest = f; }
@@ -1082,7 +1078,7 @@ function calculateNKMap() {
         let strName = props.STRBEZ || props.StrBez || props.Str_Kennung || (strKl + (props.STRNR || props.StrNr || ""));
         
         let currentMeters = 0;
-        let snappedCoord = turf.getCoord(pt); // Backup falls Linie ungültig
+        let snappedCoord = turf.getCoord(pt);
         try {
             let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
             currentMeters = snapped.properties.location || 0;
@@ -1221,8 +1217,11 @@ function tickWegZeit() {
     
     let currentKm = wzStartKm + (wzDir * (wzSpeed * elapsedHours));
     
-    document.getElementById("wz_aktuell_km").innerText = currentKm.toFixed(3).replace('.',',');
-    document.getElementById("wz_zeit").innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
+    let elKm = document.getElementById("wz_aktuell_km");
+    if(elKm) elKm.innerText = currentKm.toFixed(3).replace('.',',');
+    
+    let elZeit = document.getElementById("wz_zeit");
+    if(elZeit) elZeit.innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
     
     highlightWzList(currentKm);
 }
