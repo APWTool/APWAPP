@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.4</title>
+<title>Autobahn Tool v1.4.1</title>
 
 <!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -261,7 +261,7 @@ const meistereienFallback = {
     A542: [{from:4.055,to:8.754,name:"AM Leverkusen"}]
 };
 
-// Zentrales Adressbuch: Wird genutzt, sobald die JSON eine Zuständigkeit ausspuckt
+// Zentrales Adressbuch
 const meistereiAdressen = {
     "AM Hagen": "In d. Krone 20, 58099 Hagen",
     "AM Remscheid": "Talsperre 23, 42859 Remscheid",
@@ -269,7 +269,7 @@ const meistereiAdressen = {
     "AM Leverkusen": "Bonner Str. 71, 51379 Leverkusen",
     "AM Kaarst": "Neersener Str. 9, 41564 Kaarst",
     "AM Köln": "Dürener Str. 462, 50858 Köln",
-    "SM Heinsberg": "-" // Fülle dies mit der echten Adresse, falls benötigt
+    "SM Heinsberg": "-" 
 };
 
 const wachenAnker = {
@@ -282,7 +282,7 @@ const wachenAnker = {
 
 let aktuelleWache = "Hilden"; 
 let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
-let meistereiMap = { am: {}, sm: {} }; // Die neue Netzknoten-Meisterei Zuordnung
+let meistereiMap = { am: {}, sm: {} }; 
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let bkmHistorie = []; 
 let manuellerFokus = null;
@@ -342,7 +342,6 @@ Promise.all([
     document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien.</span>';
 });
 
-// Extrahiert Linien
 function extrahiere(json, erwarteLinien){
     let list=[]; if(!json||!json.features) return list;
     json.features.forEach(f=>{
@@ -354,7 +353,6 @@ function extrahiere(json, erwarteLinien){
     return list;
 }
 
-// Extrahiert Gemeindeflächen
 function extrahiereGemeinden(json) {
     let list = []; if(!json||!json.features) return list;
     json.features.forEach(f => {
@@ -416,12 +414,11 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
 
     manuellerFokus = null;
     updateUI();
-    berechnen(true); // Is true for manual mode update
+    berechnen(true); 
     
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
 
-// Sucht KM-Koordinate in BABKM.json (Nutzt Bez & Kilometer)
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
     let suchName = autobahn.toUpperCase().replace(/\s/g, ''); 
@@ -442,7 +439,6 @@ function holeKoordinateFuerKM(autobahn, km) {
 
         if (candidates.length > 0 && candidates[0].diff < 2.0) {
             
-            // Distanz-Logik bei mehreren Knoten gleichen KM-Werts
             let bestDiff = candidates[0].diff;
             let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
 
@@ -557,7 +553,6 @@ function toggleGPS(){
     }
 }
 
-// BEREINIGT: Sucht exakt nur nach STRBEZ
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
     liste.forEach(f=>{
@@ -632,7 +627,6 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
 
-        // Gemeinsame Daten für Meisterei-Abfrage vorbereiten
         let rawAbs = props.ABS || props.ABSNr || "";
         let statAnf = parseFloat(String(props.STATANF || 0).replace(',', '.'));
         let snapped = turf.nearestPointOnLine(sel.feature, pt);
@@ -666,9 +660,8 @@ async function verarbeiteGPS(lat, lon, acc){
                 updateUI();
             }
             manuellerFokus = strName; 
-            berechnen(false); // Aktualisiert Progress Bar etc.
+            berechnen(false); 
 
-            // 1) Meisterei anhand JSON Datenbank auf der BAB überschreiben
             let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
             if (m_daten) {
                 let treffer = m_daten.find(e => stationKm >= e.von && stationKm <= e.bis);
@@ -697,13 +690,11 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | KM: ${bkmAnzeige} ${techInfo}`;
 
         } else {
-            // Landstrassen / B-Strassen
             let absNum = props.ABSNR || "";
             let ast = props.ABSAST ? ` [${props.ABSAST}]` : "";
             let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
             let icon = (kl === "B") ? "🚙" : "🌲";
             
-            // 2) Meisterei anhand JSON Datenbank auf Landstraßen bestimmen
             let m_name = "Nicht in DB", m_addr = "-";
             let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
             if (m_daten) {
@@ -840,7 +831,6 @@ function berechnen(isManual = false){
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
 
-    // Wenn manuell eingegeben (kein GPS Snapping), nutzen wir das Fallback aus dem Code
     if (isManual) {
         let meister="-", addr="-";
         if(meistereienFallback[a]){
@@ -856,7 +846,7 @@ function berechnen(isManual = false){
     }
 }
 
-// BEREINIGT: Netzknoten HTML (Zeigt exakte ID und Datenbank-Zuständigkeit)
+// BEREINIGT: Netzknoten HTML (Zeigt exakte ID und KEINE Zuständigkeit)
 function holeNKHtml(props, distMeter = 0, isMap = false) {
     let rawAbs = props.ABS || props.ABSNr || "";
     let vnk = "-", vb = "-", bnk = "-", bb = "-";
@@ -875,24 +865,17 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     let stationBase = parseFloat(String(props.STATANF || 0).replace(',', '.'));
     let stationKM = (stationBase + distMeter) / 1000;
 
-    // 3) Meisterei auf der Karte prüfen
-    let m_name = "Nicht in DB";
-    let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
-    if (m_daten) {
-        let treffer = m_daten.find(e => stationKM >= e.von && stationKM <= e.bis);
-        if (treffer) m_name = treffer.am || treffer.sm || treffer.name || "-";
-    }
-
     let debugInfo = "";
     if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${absNum}${ast}</b> (${rawAbs || "Unbekannt"})</div>`;
 
     return `
         ${debugInfo}
-        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.1em; line-height:1.2;">
-            <tr><td style="border:none; padding:1px 0;">VNK:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk} ${vb}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0;">BNK:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${bnk} ${bb}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; border-top: 1px solid var(--input-border); color:var(--text-secondary);">Zuständig:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px solid var(--input-border); color:var(--text-secondary);"><b>${m_name}</b></td></tr>
+        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
+            <tr><td style="border:none; padding:1px 0;">von Knoten A:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${bb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
         </table>
     `;
 }
@@ -989,7 +972,7 @@ function calculateNKMap() {
         }, 20);
 
     } else {
-        resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 150m Umkreis gefunden. Bitte näher zoomen!</p>`;
+        resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im Umkreis gefunden. Bitte näher zoomen!</p>`;
         resDiv.style.display = 'block';
         setTimeout(() => { map.invalidateSize(); }, 20);
     }
