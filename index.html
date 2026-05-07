@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Autobahn Tool v1.4</title>
 
-<!-- GoatCounter Analytics -->
+<!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 
 <link rel="manifest" href="manifest.json">
@@ -21,7 +21,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(reg => {
       console.log('Service Worker registriert!');
-    }).catch(err => console.log('SW Registrierung fehlgeschlagen', err));
+    });
   });
 }
 </script>
@@ -136,7 +136,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     <div class="result">
         <p><strong>Bereich:</strong> <span id="b">-</span></p>
         <p><strong>Gemeinde:</strong> <span id="g">-</span></p>
-        <p><strong>Meisterei:</strong> <span id="m">-</span></p>
+        <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
         <p><strong>Adresse:</strong> <span id="m_address">-</span></p>
         <div class="bar"><div id="progress" class="fill"></div></div>
     </div>
@@ -239,6 +239,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 </div>
 
 <script>
+// --- DATENBANK WACHEN ---
 const datenWachen = {
     "Hilden": { grenzen: {"A1": [363.315, 381.658], "A3": [101.200, 122.819], "A44": [1.215, 17.599], "A46": [70.815, 114.763], "A57": [88.500, 100.902], "A59": [0.578, 14.467], "A535": [0.262, 12.811], "A542": [4.055, 8.754], "L418": [0, 10]}, listen: {"A1": [["AS","Wuppertal-Langerfeld","365,700"], ["PP","Kucksiepen","367,900", "RF DO"], ["PP","Ehrenberg","368,200", "RF Köln"], ["AS","Wuppertal-Ronsdorf","373,000"], ["AS","Remscheid-Lennep","376,800"], ["AS","Remscheid","379,100"]], "A3": [["PP","Stindertal","103,400", "RF Köln"], ["PP","Stinderhof","103,400", "RF OB"], ["AK","Hilden","108,700"], ["TuR","Ohligser Heide","113,100"], ["AS","Solingen","117,400"], ["AK","Langenfeld","118,400"], ["PP","Reusrather Heide","121,600"]], "A44": [["AS","Hetterscheidt","1,200"], ["AS","Heiligenhaus","6,000"], ["AS","Velbert-Nord","8,400"], ["AD","Velbert-Nord","9,500"], ["AS","Langenberg","11,900"], ["AS","Essen-Kupferdreh","14,100", "Dilldorfer Höhe"], ["AS","Essen-Kupferdreh","14,700"], ["AS","Essen-Überruhr","16,800"], ["AS","Essen-Heisingen","17,600", "Übergang B 227"]], "A46": [["AK","Neuss-Süd","70,800"], ["AS","Neuss-Uedesheim","72,300"], ["AS","Düsseldorf-Bilk","76,300"], ["AS","Düsseldorf-Zentrum","78,000"], ["AS","Düsseldorf-Wersten","78,200"], ["AS","Düsseldorf-Holthausen","80,000"], ["AS","Düsseldorf-Eller","81,200"], ["AK","Düsseldorf-Süd","82,000"], ["AS","Erkrath","85,000"], ["AK","Hilden","87,000"], ["AS","Hilden","87,400"], ["AS","Haan-West","89,400"], ["PP","Höfgen","92,600", "RF Brilon"], ["PP","Stropmütze","92,600", "RF Heinsberg"], ["AS","Haan-Ost","94,200"], ["AS","Wuppertal-Cronenberg","98,400", "Abzweig L 418"], ["AK","Sonnborner Kreuz","99,500"], ["AS","Wuppertal-Varresbeck","101,600"], ["AS","Wuppertal-Katernberg","103,900"], ["AS","Wuppertal-Elberfeld","105,700"], ["AS","Wuppertal-Barmen","107,800"], ["AS","Wuppertal-Wichlinghausen","110,000"], ["TuR","Sternenberg","110,900"], ["PP","Holtkamp-Nord","112,700", "RF Heinsberg"], ["AS","Wuppertal-Oberbarmen","113,900"], ["AK","Wuppertal-Nord","114,600"]], "A57": [["AK","Neuss-Süd","90,300"], ["RuT","Nievenheim","94,900"], ["AS","Dormagen","98,300", "RF Nijmegen"], ["AS","Dormagen","99,400", "RF Köln"]], "A59": [["AK","Düsseldorf-Süd","0,000"], ["AS","Düsseldorf-Benrath","1,800"], ["AS","Düsseldorf-Garath","4,600"], ["PP","Wolfhagen","8,000", "RF Dinslaken"], ["AS","Richrath","9,000"], ["PP","Berghausen","9,900", "RF Köln"], ["AS","Monheim","11,400"], ["AK","Monheim-Süd","13,100"]], "A535": [["AD","Velbert-Nord","0,262"], ["AS","Velbert","1,800"], ["AS","Tönisheide","4,500"], ["AS","Wülfrath","6,600"], ["AS","Wuppertal-Dornap","11,700"]], "A542": [["AS","Leverkusen-Hitdorf","3,400"], ["AK","Monheim-Süd","3,500"], ["AS","Langenfeld-Reusrath","5,700"], ["AS","Langenfeld-Immigrath","8,000"], ["AK","Langenfeld","8,800"]], "L418": [["AS", "Cronenberg/Küllenhahn/MVA", "-"], ["AS", "Zentrum/W-Elberfeld", "-"], ["AS", "Universität", "-"]] }, richtungen: {"A1": ["RF Köln (+)","RF Dortmund (-)"], "A3": ["RF Köln (+)","RF Arnheim (-)"], "A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A46": ["RF Brilon (+)","RF Heinsberg (-)"], "A57": ["RF Köln (+)","RF Goch (-)"], "A59": ["RF Köln (+)","RF Dinslaken (-)"], "A535": ["RF Wuppertal (+)","RF Velbert (-)"], "A542": ["RF Langenfeld (+)","RF Monheim (-)"], "L418": ["RF Wuppertal (+)","RF Cronenberg (-)"]} },
     "Mülheim": { grenzen: {"A3": [76.000, 101.199], "A40": [42.000, 67.569], "A44": [84.114, 104.754], "A52": [54.000, 82.708], "A59": [22.500, 25.126], "A524": [7.662, 14.933]}, listen: {"A3": [["AK","Kaiserberg","77,000"], ["AS","Duisburg-Wedau","81,600"], ["PP","Stockweg","86,800","RF Oberhausen"], ["PP","Entenfang","86,800","RF Köln"], ["AK","Breitscheid","89,700"], ["RuT","Hösel","93,100","RF Oberhausen"], ["AK","Ratingen-Ost","96,500"], ["AS","Mettmann","101,000"]], "A40": [["AK","Kaiserberg","42,600"], ["AS","Duisburg-Kaiserberg","43,600"], ["AS","Mülheim","46,200","Ausf. RF DO, Zuf. RF Venlo"], ["AS","Mülheim-Styrum","47,500"], ["AS","Mülheim-Dümpten","49,700"], ["AS","Mülheim-Winkhausen","51,800"], ["AS","MH-Heißen","53,800","Ausf. RF DO, Zuf. RF Venlo"], ["AS","MH-Heißen","54,200","Zuf. RF DO, Ausf. RF Venlo"], ["AS","Mülheim-Heimaterde","55,100"], ["AS","Essen-Frohnhausen","56,600"], ["AS","Essen-Holsterhausen","57,800"], ["AS","Essen Zentrum","59,000"], ["AS","Essen-Zentrum-Ost","59,800","RF Dortmund"], ["AS","Essen-Huttrop","60,900"], ["AD","Essen-Ost","61,800"], ["AS","Essen-Frillendorf (alt)","62,700"], ["AS","Essen-Frillendorf (neu)","63,800"], ["AS","Essen-Kray","64,900"], ["AS","Gelsenkirchen-Süd","66,800"]], "A44": [["AS","Lank-Latum","84,600"], ["AS","Düsseldorf-Messe","90,200"], ["AS","Düsseldorf-Stockum","91,600"], ["AS","Düsseldorf-Flughafen","93,700"], ["AK","Düsseldorf-Nord","96,800"], ["AS","D'dorf-Reichswaldallee","99,900","Zufahrt RF Kassel"], ["AS","Ratingen-Schwarzbach","102,500"], ["AS","Ratingen-Ost","104,100"], ["AK","Ratingen-Ost","104,700","Ausbauende / A3"]], "A52": [["AS","Düsseldorf-Rath","55,400"], ["AK","Düsseldorf-Nord","56,800"], ["T","Hohenstein","57,200","RF Essen"], ["AS","Ratingen","58,500","58,3 RF Essen; 58,7 RF D'dorf"], ["PP","Tiefenbroich","59,400","RF Essen"], ["AS","Tiefenbroich","61,400"], ["AD","Breitscheid","64,400"], ["AK","Breitscheid","65,000"], ["AS","Breitscheid","65,700"], ["PP","Auberg","68,400","RF Essen"], ["PP","Ickten","70,800","RF Düsseldorf"], ["AS","Essen-Kettwig","73,900"], ["AS","Essen-Haarzopf","76,100"], ["AS","Essen-Rüttenscheid","77,200","Zuf. RF D'dorf, Ausf. RF Essen"], ["AS","Essen-Rüttenscheid","78,200"], ["AS","Essen-Süd","80,300"], ["AS","Essen-Bergerhausen","81,600"], ["AD","Essen-Ost","83,000"]], "A59": [["AK","Duisburg-Süd","24,600"]], "A524": [["AK","Duisburg-Süd","8,200"], ["AS","Duisburg-Rahm","10,000"], ["AS","Lintorf","12,600"], ["AD","Breitscheid","14,900"]]}, richtungen: {"A3": ["RF Köln (+)","RF Arnheim (-)"], "A40": ["RF Dortmund (+)","RF Venlo (-)"], "A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A52": ["RF Essen (+)","RF Roermond (-)"], "A59": ["RF Köln (+)","RF Dinslaken (-)"], "A524": ["RF Breitscheid (+)","RF Krefeld (-)"]} },
@@ -247,95 +248,28 @@ const datenWachen = {
     "Gladbach": { grenzen: {"A44": [48.851, 77.999], "A46": [18.284, 65.294], "A52": [-0.468, 46.665], "A57": [74.000, 88.499], "A61": [-1.274, 36.465]}, listen: {"A44": [["AK","Holz","54,000"], ["AS","M'gladbach-Odenkirchen","62,200","Ausbauende"], ["AS","M'gladbach-Ost","66,900","Ausbauende"], ["AK","Neersen","69,200"], ["AS","Neersen","70,500"], ["AS","Münchheide","72,800"], ["AS","Krefeld-Forstwald","75,100"], ["AS","Krefeld-Fichtenhain","77,200"]], "A46": [["AS","Heinsberg (Ausbauende)","18,300"], ["AS","Dremmen","22,900"], ["AS","Hückelhoven-West","25,500"], ["AS","Hückelhoven-Ost","28,800"], ["AS","Erkelenz-Süd","33,600"], ["AS","Erkelenz-Ost","37,100"], ["PP","Herrather Linde-Nord","39,200","RF Heinsberg"], ["PP","Herrather Linde-Süd","39,200","RF Brilon"], ["AK","Wanlo","44,400"], ["AK","Holz","48,300"], ["AS","Jüchen","52,600"], ["AS","Grevenbroich","54,700"], ["RuT","Vierwinden-Süd","58,100","RF Brilon"], ["RuT","Vierwinden-Nord","58,600","RF Heinsberg"], ["AS","Grevenbroich-Kapellen","60,000"], ["AS","Neuss-Holzheim","63,600"]], "A52": [["AS","Elmpt","4,100"], ["AS","Niederkrüchten","10,000"], ["AS","Schwalmtal-Waldniel","13,400"], ["AS","Schwalmtal-Hostert","17,700"], ["AS","Mönchengladbach-Hardt","19,900"], ["AK","Mönchengladbach","22,200"], ["PP","Bockerter Heide","24,200","RF Roermond"], ["PP","Wolfskull","24,200","RF AK Marl-Nord"], ["AS","Mönchengladbach-Nord","26,600"], ["AS","Mönchengladbach-Neuwerk","28,200"], ["AK","Neersen","30,700"], ["RuT","Cloerbruch-Nord","32,600","RF Roermond"], ["RuT","Cloerbruch-Süd","32,600","RF AK Marl-Nord"], ["AS","Schiefbahn","34,500"], ["AS","Kaarst-Nord","40,300"], ["AK","Kaarst","41,700"], ["AS","Büderich","46,400"]], "A57": [["AK","Kaarst","76,900"], ["AS","Holzbüttgen","78,700"], ["PP","Morgensternsheide-Ost","79,800","RF Nijmegen"], ["PP","Morgensternsheide-West","80,000","RF Köln"], ["AS","Büttgen","81,200"], ["AK","Neuss-West","83,300"], ["AS","Neuss-Reuschenberg","84,300"], ["AS","Neuss-Hafen","86,000"], ["AS","Neuss-Norf","88,000"]], "A61": [["GÜ","Grenzübergang Grenzwald","-1,300"], ["AS","Nettetal-West","0,600"], ["AS","Kaldenkirchen","1,900"], ["AS","Kaldenkirchen-Süd","4,100"], ["AS","Breyell","7,300","nur Ausfahrt RF Hockenheim"], ["AS","Nettetal","9,000"], ["AS","Süchteln","14,400"], ["AS","Viersen","16,800"], ["AS","Mackenstein","18,800"], ["AK","Mönchengladbach","22,000"], ["AS","Mönchengladbach-Nordpark","23,900"], ["AS","Mönchengladbach-Holt","26,300"], ["AS","Mönchengladbach-Rheydt","29,100"], ["AS","Mönchengladbach-Wickrath","31,000"], ["AS","Güdderath","33,600"], ["AK","Wanlo","35,300"], ["AS","Wanlo","36,400"]]}, richtungen: {"A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A46": ["RF Wuppertal (+)","RF Heinsberg (-)"], "A52": ["RF Essen (+)","RF Roermond (-)"], "A57": ["RF Köln (+)","RF Goch (-)"], "A61": ["RF Koblenz (+)","RF Venlo (-)"]} }
 };
 
-const amAdressen = {
-    "AM Weilerswist": { addr: "Kastanienweg 4, 53919 Weilerswist", tel: "02254 601410" },
-    "AM Titz": { addr: "An den Teichen 1, 52445 Titz", tel: "-" },
-    "AM Sankt Augustin": { addr: "Frankfurter Str. 140, 53757 Sankt Augustin", tel: "02241 127250" },
-    "AM St. Augustin": { addr: "Frankfurter Str. 140, 53757 Sankt Augustin", tel: "02241 127250" },
-    "AM Rheinberg": { addr: "Moerser Str. 123, 47495 Rheinberg", tel: "02843 903640" },
-    "AM Remscheid": { addr: "Talsperre 23, 42859 Remscheid", tel: "02191 469740" },
-    "AM Recklinghausen": { addr: "Friedrich-Ebert-Straße 241, 45659 Recklinghausen", tel: "02361 9420" },
-    "AM Ratingen": { addr: "Brachter Str. 45A, 40882 Ratingen", tel: "02102 20437" },
-    "AM Overath": { addr: "Balkener-Straße 1, 51491 Overath", tel: "02206 863780" },
-    "AM Oelde": { addr: "Böckenfördeweg 24, 59302 Oelde", tel: "02522 9120" },
-    "AM Münster": { addr: "Feuerstiege 16, 48163 Münster", tel: "02501 9670" },
-    "AM Mönchengladbach": { addr: "Waldnieler Str. 600, 41068 Mönchengladbach", tel: "02161 901550" },
-    "AM Lüdenscheid": { addr: "Werdohler Landstraße 10, 58511 Lüdenscheid", tel: "02351 9240" },
-    "AM Leverkusen": { addr: "Bonner Str. 71, 51379 Leverkusen", tel: "-" },
-    "AM Lengerich": { addr: "Ibbenbürener Str. 10, 49525 Lengerich", tel: "05481 9220" },
-    "AM Köln": { addr: "Dürener Str. 462, 50858 Köln", tel: "02234 20370" },
-    "AM Kamen": { addr: "Zollpost 26, 59174 Kamen", tel: "-" },
-    "AM Kaarst": { addr: "Neersener Str. 9, 41564 Kaarst", tel: "02131 898670" },
-    "AM Isselburg": { addr: "Am Wolfssee 26, 46419 Isselburg", tel: "02874 902720" },
-    "AM Herford": { addr: "Vlothoer Str. 289, 32049 Herford", tel: "05221 92350" },
-    "AM Hagen": { addr: "In d. Krone 20, 58099 Hagen", tel: "02331 6210" },
-    "AM Gelsenkirchen": { addr: "Reckfeldstraße 1, 45889 Gelsenkirchen", tel: "0209 98010" },
-    "AM Freudenberg": { addr: "Wilhelmshöhe 15, 57258 Freudenberg", tel: "02734 2870" },
-    "AM Düren": { addr: "Nordstraße 149, 52353 Düren", tel: "02421 224980" },
-    "AM Duisburg": { addr: "Carl-Benz-Straße 11, 47058 Duisburg", tel: "0203 6086040" },
-    "AM Dorsten": { addr: "Königsberger Allee 200, 46282 Dorsten", tel: "02362 9230" },
-    "AM Bonn": { addr: "Euskirchener Str. 1, 53347 Alfter", tel: "0228 3918910" },
-    "AM Werl": { addr: "Waltringer Weg 25, 59457 Werl", tel: "02922 9840" },
-    "AM Wünnenberg-Haaren": { addr: "Fiegenburg 16, 33181 Bad Wünnenberg", tel: "02957 9700" }
+// --- DATENBANK ZUSTÄNDIGKEITEN & ADRESSEN ---
+// Backup für die manuelle Berechnung ohne GPS
+const meistereienFallback = {
+    A1: [{from:363.315,to:365.649,name:"AM Hagen"}, {from:365.649,to:381.646,name:"AM Remscheid"}],
+    A3: [{from:101.2,to:107.925,name:"AM Ratingen"}, {from:107.925,to:122.819,name:"AM Leverkusen"}],
+    A44: [{from:1.215,to:17.599,name:"AM Ratingen"}],
+    A46: [{from:70.815,to:80.770,name:"AM Kaarst"}, {from:80.770,to:88.340,name:"AM Leverkusen"}, {from:88.340,to:114.763,name:"AM Remscheid"}],
+    A57: [{from:88.5,to:93.343,name:"AM Kaarst"}, {from:93.343,to:100.912,name:"AM Köln"}],
+    A59: [{from:0.578,to:14.467,name:"AM Leverkusen"}],
+    A535: [{from:0.262,to:12.811,name:"AM Remscheid"}],
+    A542: [{from:4.055,to:8.754,name:"AM Leverkusen"}]
 };
 
-const smAdressen = {
-    "SM Aachen": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Arnsberg": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Beckum": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Bergheim": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Blankenheim": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Brakel": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Brilon": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Burscheid": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Dortmund": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Eitorf": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Erndtebrück": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Erwitte": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Espelkamp": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Geldern": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Grevenbroich": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Halle": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Heinsberg": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Herscheid": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Iserlohn": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Jülich": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Kleve": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Kreuztal": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Legden": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Lemgo": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Lennestadt": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Lohmar": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Löhne": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Lüdinghausen": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Marl": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Meerbusch": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Meschede": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Minden": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Moers": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Münster": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Nettetal": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Peckelsheim": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Rhede": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Rheinbach": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Salzkotten": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Schieder": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Schleiden": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Schwelm": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Simmerath": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Solingen": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Steinfurt": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Unna": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Velbert": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Voerde": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Waldbröl": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Weilerswist": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Westerkappeln": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Wiedenbrück": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Wiehl": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Wilnsdorf": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Winterberg": { addr: "Bitte Adresse eintragen", tel: "-" },
-    "SM Wipperfürth": { addr: "Bitte Adresse eintragen", tel: "-" }
+// Zentrales Adressbuch: Wird genutzt, sobald die JSON eine Zuständigkeit ausspuckt
+const meistereiAdressen = {
+    "AM Hagen": "In d. Krone 20, 58099 Hagen",
+    "AM Remscheid": "Talsperre 23, 42859 Remscheid",
+    "AM Ratingen": "Brachter Str. 45A, 40882 Ratingen",
+    "AM Leverkusen": "Bonner Str. 71, 51379 Leverkusen",
+    "AM Kaarst": "Neersener Str. 9, 41564 Kaarst",
+    "AM Köln": "Dürener Str. 462, 50858 Köln",
+    "SM Heinsberg": "-" // Fülle dies mit der echten Adresse, falls benötigt
 };
 
 const wachenAnker = {
@@ -348,13 +282,12 @@ const wachenAnker = {
 
 let aktuelleWache = "Hilden"; 
 let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
-let amDatenbank={}, smDatenbank={};
+let meistereiMap = { am: {}, sm: {} }; // Die neue Netzknoten-Meisterei Zuordnung
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let bkmHistorie = []; 
 let manuellerFokus = null;
 let map = null;
 let mapLineLayer = null; 
-
 let wzInterval = null;
 let wzStartTime = 0;
 let wzStartKm = 0;
@@ -387,43 +320,29 @@ function showPage(pageId) {
     }
 }
 
-// --- BOOT-SEQUENZ ---
-loadWacheSetting();
-
-function safeFetchJSON(url) {
-    return fetch(url).then(res => {
-        if(!res.ok) return { features: [] };
-        return res.json();
-    }).catch(() => ({ features: [] }));
-}
-function safeFetchDB(url) {
-    return fetch(url).then(res => {
-        if(!res.ok) return {};
-        return res.json();
-    }).catch(() => ({}));
-}
-
+// --- INITIALER DATEN-LOAD ---
 Promise.all([
-    safeFetchJSON('Abschnitt.json'),
-    safeFetchJSON('AbschnittBAB.json'),
-    safeFetchJSON('BABKM.json'),
-    safeFetchJSON('Gemeinden.json'),
-    safeFetchDB('amDatenbank.json'),
-    safeFetchDB('smDatenbank.json')
-]).then(([land, bab, punkte, gem, amDB, smDB]) => {
+    fetch('Abschnitt.json').then(res=>res.json()),
+    fetch('AbschnittBAB.json').then(res=>res.json()),
+    fetch('BABKM.json').then(res=>res.json()),
+    fetch('Gemeinden.json').then(res=>res.json()),
+    fetch('amDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+    fetch('smDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({}))
+]).then(([land, bab, punkte, gem, amData, smData])=>{
     datenLand = extrahiere(land, true);
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem); 
-    amDatenbank = amDB || {};
-    smDatenbank = smDB || {};
-    
+    meistereiMap.am = amData || {};
+    meistereiMap.sm = smData || {};
+
     document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
-    
-    let dropMain = document.getElementById("autobahn");
-    if(dropMain && dropMain.value !== "") berechnen(false);
+    loadWacheSetting();
+}).catch(e => { 
+    document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien.</span>';
 });
 
+// Extrahiert Linien
 function extrahiere(json, erwarteLinien){
     let list=[]; if(!json||!json.features) return list;
     json.features.forEach(f=>{
@@ -435,6 +354,7 @@ function extrahiere(json, erwarteLinien){
     return list;
 }
 
+// Extrahiert Gemeindeflächen
 function extrahiereGemeinden(json) {
     let list = []; if(!json||!json.features) return list;
     json.features.forEach(f => {
@@ -452,8 +372,7 @@ function saveWacheSetting() {
 function loadWacheSetting() {
     let std = localStorage.getItem('stdWache');
     if (std && datenWachen[std]) {
-        let chk = document.getElementById('saveWache');
-        if(chk) chk.checked = true;
+        document.getElementById('saveWache').checked = true;
         wechsleWache(std, false);
     } else {
         wechsleWache('Hilden', false);
@@ -469,8 +388,6 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
 
     let dropMain = document.getElementById("autobahn"); 
     let dropWz = document.getElementById("wz_autobahn"); 
-    if(!dropMain) return; 
-    
     dropMain.innerHTML = ""; 
     if(dropWz) dropWz.innerHTML = "";
 
@@ -489,8 +406,7 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
         dropMain.value = autobahnToSelect;
     }
     
-    let chk = document.getElementById('saveWache');
-    if (chk && chk.checked) {
+    if (document.getElementById('saveWache').checked) {
         localStorage.setItem('stdWache', wacheName);
     }
 
@@ -500,38 +416,43 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
 
     manuellerFokus = null;
     updateUI();
-    berechnen(false); 
+    berechnen(true); // Is true for manual mode update
+    
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
 
+// Sucht KM-Koordinate in BABKM.json (Nutzt Bez & Kilometer)
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
-    let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
+    let suchName = autobahn.toUpperCase().replace(/\s/g, ''); 
+    let numOnly = autobahn.replace('A', ''); 
+    
     let passende = referenzPunkte.filter(f => {
-        if(!f.properties) return false;
-        let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
-        let strKl = String(f.properties.STRKL || "").toUpperCase();
-        if(strKl === "B" || strKl === "L" || strKl === "K") return false; 
-        return refBez === suchName || refBez === "BAB" + numOnly || refBez === numOnly || refBez === "A" + numOnly;
+        let p = f.properties;
+        if(!p) return false;
+        let refBez = String(p.Bez || "").toUpperCase().replace(/\s/g, '');
+        return refBez === suchName || refBez === "BAB" + numOnly || refBez === numOnly;
     });
 
     if(passende.length > 0) {
-        let candidates = [];
-        passende.forEach(p => {
-            let kmProp = p.properties.Kilometer || p.properties.BKM || p.properties.KM_WERT || p.properties.STATION || p.properties.KM || 0;
-            let pKm = parseFloat(String(kmProp).replace(',', '.'));
-            if(!isNaN(pKm)) candidates.push({ pt: p, diff: Math.abs(pKm - km) });
-        });
+        let candidates = passende.map(p => ({
+            pt: p,
+            diff: Math.abs(parseFloat(String(p.properties.Kilometer).replace(',', '.')) - km)
+        })).sort((a, b) => a.diff - b.diff);
 
-        if (candidates.length > 0) {
-            candidates.sort((a, b) => a.diff - b.diff);
+        if (candidates.length > 0 && candidates[0].diff < 2.0) {
+            
+            // Distanz-Logik bei mehreren Knoten gleichen KM-Werts
             let bestDiff = candidates[0].diff;
             let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
 
             if (topCandidates.length > 1) {
                 let anchorCoords = wachenAnker["Hilden"]; 
-                if (letzteLat !== 0 && letzteLon !== 0) anchorCoords = [letzteLon, letzteLat];
-                else if (wachenAnker[aktuelleWache]) anchorCoords = wachenAnker[aktuelleWache];
+                if (letzteLat !== 0 && letzteLon !== 0) {
+                    anchorCoords = [letzteLon, letzteLat];
+                } else if (wachenAnker[aktuelleWache]) {
+                    anchorCoords = wachenAnker[aktuelleWache];
+                }
                 
                 let anchorPt = turf.point(anchorCoords);
                 topCandidates.forEach(c => {
@@ -540,18 +461,14 @@ function holeKoordinateFuerKM(autobahn, km) {
                 });
                 topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
             }
-            let finalWinner = topCandidates[0];
-            return turf.getCoord(turf.centroid(finalWinner.pt)); 
+            return turf.getCoord(turf.centroid(topCandidates[0].pt)); 
         }
     }
     return null;
 }
 
 function updateUI() {
-    let drop = document.getElementById("autobahn");
-    if(!drop) return;
-    let a = drop.value;
-    
+    let a = document.getElementById("autobahn").value;
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
     let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
     let wachenListen = datenWachen[aktuelleWache].listen || {};
@@ -559,14 +476,11 @@ function updateUI() {
     let leftArrow = document.getElementById("dir-plus");
     let rightArrow = document.getElementById("dir-minus");
     let tbody = document.getElementById("liste");
-    if(!tbody) return;
     tbody.innerHTML = "";
 
-    if(!a || !wachenGrenzen[a]) {
-        let b = document.getElementById("b");
-        if(b) b.innerText = "-";
-        if(leftArrow) leftArrow.style.display = "none"; 
-        if(rightArrow) rightArrow.style.display = "none";
+    if(!wachenGrenzen[a]) {
+        document.getElementById("b").innerText = "-";
+        leftArrow.style.display = "none"; rightArrow.style.display = "none";
         return;
     }
 
@@ -575,11 +489,9 @@ function updateUI() {
     if(wachenRichtungen[a]) {
         document.getElementById("dir-plus-text").innerText = wachenRichtungen[a][0] || "";
         document.getElementById("dir-minus-text").innerText = wachenRichtungen[a][1] || "";
-        if(leftArrow) leftArrow.style.display = "flex"; 
-        if(rightArrow) rightArrow.style.display = "flex";
+        leftArrow.style.display = "flex"; rightArrow.style.display = "flex";
     } else {
-        if(leftArrow) leftArrow.style.display = "none"; 
-        if(rightArrow) rightArrow.style.display = "none";
+        leftArrow.style.display = "none"; rightArrow.style.display = "none";
     }
 
     if(wachenListen[a]) {
@@ -600,7 +512,9 @@ function updateUI() {
                 }
             }
 
-            if (rf) nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
+            if (rf) {
+                nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
+            }
 
             let tr = document.createElement("tr");
             tr.innerHTML = `<td>${typ}</td><td>${nameHtml}</td><td>${kmRaw}</td>`;
@@ -614,7 +528,9 @@ function updateUI() {
 function findeGemeindeFuerPunkt(pt) {
     if (datenGemeinden.length === 0) return "-";
     for (let f of datenGemeinden) {
-        try { if (turf.booleanPointInPolygon(pt, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt"; } catch(e) {}
+        try { 
+            if (turf.booleanPointInPolygon(pt, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt"; 
+        } catch(e) {}
     }
     try {
         let buffered = turf.buffer(pt, 0.05, {units: 'kilometers'}); 
@@ -641,28 +557,21 @@ function toggleGPS(){
     }
 }
 
-// BULLETPROOF KANDIDATEN-SUCHE
+// BEREINIGT: Sucht exakt nur nach STRBEZ
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
     liste.forEach(f=>{
         try{ 
             const props = f.properties || {};
-            
-            // Flexibler Namens-Parser für NWSIB & BKG
-            let name = String(props.STRBEZ || props.StrBez || props.Str_Kennung || props.Bez || "").toUpperCase().replace(/\s/g, '');
-            let kl = String(props.STRKL || props.StrKl || "").toUpperCase();
-            let nr = String(props.STRNR || props.StrNr || "");
-            
-            if (!name || name === "0") {
-                name = kl + nr;
-            }
-            if (!name || name === "") return; // Fallback fehlgeschlagen
-            
-            if (!kl && name.length > 0) kl = name.charAt(0); // "A46" -> "A"
+            let name = String(props.STRBEZ || "").toUpperCase().replace(/\s/g,'');
+            if (!name) return;
 
+            let strKl = props.STRKL ? String(props.STRKL).toUpperCase() : name.charAt(0);
+            
             if (filter) {
-                if (filter === "BUND" && kl !== "B") return;
-                if (filter === "LAND" && kl !== "L" && kl !== "K") return;
+                if (Array.isArray(filter) && !filter.includes(name)) return;
+                if (filter === "BUND" && strKl !== "B") return;
+                if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
             }
 
             let d = turf.pointToLineDistance(pt, f); 
@@ -676,42 +585,6 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-function resolveMeisterei(feature, pointObj) {
-    if (!feature) return { name: "-", addr: "-" };
-    let abschnitt = feature.properties.ABSNr || feature.properties.ABSNR || feature.properties.Sk_Kennung || feature.properties.ABS || "";
-    let amName = "-";
-    let currentMeters = 0;
-
-    try {
-        let snapped = turf.nearestPointOnLine(feature, pointObj);
-        currentMeters = snapped.properties.location || 0;
-    } catch(e) {}
-
-    // 1. Suche in der Autobahn-Datenbank
-    if (amDatenbank && amDatenbank[abschnitt]) {
-        let abschnitte = amDatenbank[abschnitt];
-        abschnitte.forEach(e => { if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am; });
-        if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
-    }
-    
-    // 2. Suche in der Landstraßen-Datenbank (SM)
-    if (amName === "-" && smDatenbank && smDatenbank[abschnitt]) {
-        let abschnitte = smDatenbank[abschnitt];
-        abschnitte.forEach(e => { if (currentMeters >= e.von && currentMeters <= e.bis) amName = e.am; });
-        if (amName === "-" && abschnitte.length > 0) amName = abschnitte[0].am;
-    }
-
-    let addrHtml = "-";
-    if (amName !== "-") {
-        let d = amAdressen[amName] || smAdressen[amName];
-        if (d) {
-            let telHtml = d.tel !== "-" ? ` | 📞 <a href="tel:${d.tel.replace(/\s/g, '')}" style="color:var(--accent); text-decoration:none; font-weight:bold;">${d.tel}</a>` : "";
-            addrHtml = `${d.addr}${telHtml}`;
-        }
-    }
-    return { name: amName, addr: addrHtml };
-}
-
 async function verarbeiteGPS(lat, lon, acc){
     letzteLat = lat; letzteLon = lon; letzteAcc = acc;
     const pt = turf.point([lon, lat]);
@@ -720,8 +593,7 @@ async function verarbeiteGPS(lat, lon, acc){
     
     let alleDaten = datenBAB.concat(datenLand);
 
-    // Autobahnen bis 2.5km suchen, damit sie sicher auftauchen
-    let babHits = findeKandidaten(alleDaten, pt, null, 2.5).filter(k => k.name.startsWith("A"));
+    let babHits = findeKandidaten(alleDaten, pt, null, 2.0).filter(k => k.name.startsWith("A"));
     let bundHits = findeKandidaten(alleDaten, pt, "BUND", 2.0);
     let landHits = findeKandidaten(alleDaten, pt, "LAND", 2.0);
     
@@ -729,11 +601,15 @@ async function verarbeiteGPS(lat, lon, acc){
     let uniqueKandidaten = [];
     let seenNames = new Set();
     alleKandidaten.forEach(k => {
-        if (!seenNames.has(k.name)) { seenNames.add(k.name); uniqueKandidaten.push(k); }
+        if (!seenNames.has(k.name)) {
+            seenNames.add(k.name);
+            uniqueKandidaten.push(k);
+        }
     });
 
     if(uniqueKandidaten.length > 0) {
-        let sortKandidaten = [...uniqueKandidaten].sort((a, b) => {
+        let sortKandidaten = [...uniqueKandidaten];
+        sortKandidaten.sort((a, b) => {
             let aIsA = a.name.startsWith("A");
             let bIsA = b.name.startsWith("A");
             if (aIsA && !bIsA) return -1;
@@ -741,12 +617,12 @@ async function verarbeiteGPS(lat, lon, acc){
             return a.dist - b.dist;
         });
 
-        let sel = manuellerFokus ? (sortKandidaten.find(k => k.name === manuellerFokus) || sortKandidaten[0]) : sortKandidaten[0];
-
-        // Meisterei für den aktuellen Snap berechnen
-        let amInfo = resolveMeisterei(sel.feature, pt);
-        document.getElementById("m").innerText = amInfo.name;
-        document.getElementById("m_address").innerHTML = amInfo.addr;
+        let sel = null;
+        if (manuellerFokus) {
+            let focusMatch = sortKandidaten.find(k => k.name === manuellerFokus);
+            if (focusMatch) sel = focusMatch; 
+        }
+        if (!sel) sel = sortKandidaten[0];
 
         const props = sel.feature.properties || {};
         const strName = sel.name; 
@@ -756,12 +632,22 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
 
-        // Automatischer Wechsel, WENN Autobahn
+        // Gemeinsame Daten für Meisterei-Abfrage vorbereiten
+        let rawAbs = props.ABS || props.ABSNr || "";
+        let statAnf = parseFloat(String(props.STATANF || 0).replace(',', '.'));
+        let snapped = turf.nearestPointOnLine(sel.feature, pt);
+        let stationKm = (statAnf + (snapped.properties.location || 0)) / 1000;
+
         if (strName.startsWith("A")) {
+            let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             let bkm = berechneGoldgriffBKM(pt, strName);
             
-            if (bkm > 0 && (!currentGrenzen || bkm < Math.min(...currentGrenzen) || bkm > Math.max(...currentGrenzen))) {
+            if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) {
+                needsSwitch = false; 
+            }
+            
+            if (needsSwitch) {
                 for (let wache in datenWachen) {
                     let g = datenWachen[wache].grenzen[strName];
                     if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) {
@@ -774,15 +660,24 @@ async function verarbeiteGPS(lat, lon, acc){
 
         if(Array.from(document.getElementById("autobahn").options).some(o=>o.value===strName)){
             let bkm = berechneGoldgriffBKM(pt, strName);
-            let kmInput = document.getElementById("km");
-            if(kmInput) kmInput.value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
-            
+            document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
             if (document.getElementById("autobahn").value !== strName) {
                 document.getElementById("autobahn").value = strName;
                 updateUI();
             }
             manuellerFokus = strName; 
-            berechnen(false);
+            berechnen(false); // Aktualisiert Progress Bar etc.
+
+            // 1) Meisterei anhand JSON Datenbank auf der BAB überschreiben
+            let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
+            if (m_daten) {
+                let treffer = m_daten.find(e => stationKm >= e.von && stationKm <= e.bis);
+                if (treffer) {
+                    let m_name = treffer.am || treffer.sm || treffer.name || "-";
+                    document.getElementById("m").innerText = m_name;
+                    document.getElementById("m_address").innerText = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+                }
+            }
 
             let dirText = "";
             let rfListe = datenWachen[aktuelleWache].richtungen[strName]; 
@@ -802,28 +697,34 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | KM: ${bkmAnzeige} ${techInfo}`;
 
         } else {
-            let abschnitt = props.ABSNr || props.ABSNR || props.Sk_Kennung || props.ABS || "Unbekannt";
-            let ast = props.ABSAST && props.ABSAST !== "" ? ` (${props.ABSAST})` : "";
+            // Landstrassen / B-Strassen
+            let absNum = props.ABSNR || "";
+            let ast = props.ABSAST ? ` [${props.ABSAST}]` : "";
+            let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
+            let icon = (kl === "B") ? "🚙" : "🌲";
             
-            let aktuellerKM = parseFloat(props.STATANF || props.VSTAT || 0);
-            try {
-                let snapped = turf.nearestPointOnLine(sel.feature, pt);
-                aktuellerKM += (snapped.properties.location || 0);
-            } catch(e){}
+            // 2) Meisterei anhand JSON Datenbank auf Landstraßen bestimmen
+            let m_name = "Nicht in DB", m_addr = "-";
+            let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
+            if (m_daten) {
+                let treffer = m_daten.find(e => stationKm >= e.von && stationKm <= e.bis);
+                if (treffer) {
+                    m_name = treffer.am || treffer.sm || treffer.name || "-";
+                    m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+                }
+            }
 
-            let icon = strName.startsWith("B") ? "🚙" : "🌲";
+            htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${absNum}${ast}</b> (${rawAbs}) | Station: <b>${stationKm.toFixed(3)}</b></small> ${techInfo}`;
             
-            htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${ast}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
-            
-            let kmInput = document.getElementById("km");
-            if(kmInput) kmInput.value = "";
+            document.getElementById("km").value = "";
+            document.getElementById("b").innerText="-";
+            document.getElementById("m").innerText = m_name; 
+            document.getElementById("m_address").innerText = m_addr;
             document.getElementById("progress").style.width="0%"; 
-            let tbody = document.getElementById("liste");
-            if(tbody) tbody.innerHTML="";
+            document.getElementById("liste").innerHTML="";
         }
 
-        // Alternative Optionen anbieten (bis zu 2.5km)
-        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 2.5);
+        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
             htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
@@ -835,7 +736,7 @@ async function verarbeiteGPS(lat, lon, acc){
                     let k_bkm = berechneGoldgriffBKM(pt, k.name);
                     btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)}) [${distMeter}m]`;
                 } else {
-                    let k_icon = k.name.startsWith("B") ? "🚙" : "🌲";
+                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
                     btnText = `${k_icon} ${k.name} [${distMeter}m]`;
                 }
                 htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
@@ -866,9 +767,10 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     if(referenzPunkte.length === 0) return 0;
     let suchName=strName.toUpperCase().replace(/\s/g,'').replace('A','');
     let passende=referenzPunkte.filter(f=>{
-        if(!f.properties) return false;
-        let refBez = String(f.properties.Bez || f.properties.STRBEZ || f.properties.STRNR || "").toUpperCase().replace(/\s/g, '');
-        return refBez === suchName || refBez === "A"+suchName || refBez === "BAB"+suchName;
+        let p = f.properties;
+        if(!p) return false;
+        let refBez = String(p.Bez || "").toUpperCase().replace(/\s/g, '');
+        return refBez === suchName || refBez === "BAB" + suchName || refBez === "A" + suchName;
     });
     
     if(passende.length > 1){
@@ -878,15 +780,15 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         let closest = passende[0];
         let secondClosest = passende[1];
         
-        let refKM1 = parseFloat(String(closest.properties.Kilometer || closest.properties.BKM || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
-        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || secondClosest.properties.BKM || secondClosest.properties.KM_WERT || secondClosest.properties.STATION || secondClosest.properties.KM || 0).replace(',','.'));
+        let refKM1 = parseFloat(String(closest.properties.Kilometer || 0).replace(',','.'));
+        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || 0).replace(',','.'));
         
         if (refKM2 < refKM1) return refKM1 - closest.tempDist;
         else return refKM1 + closest.tempDist;
         
     } else if (passende.length === 1) {
         let closest = passende[0];
-        let refKM = parseFloat(String(closest.properties.Kilometer || closest.properties.BKM || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
+        let refKM = parseFloat(String(closest.properties.Kilometer || 0).replace(',','.'));
         let dist = turf.distance(meinPunkt, closest);
         return refKM + dist;
     }
@@ -894,15 +796,12 @@ function berechneGoldgriffBKM(meinPunkt, strName){
 }
 
 function berechnen(isManual = false){
-    let kmInput = document.getElementById("km");
-    if(!kmInput) return;
-    
-    let kmRaw = kmInput.value.replace(',','.');
+    let kmRaw = document.getElementById("km").value.replace(',','.');
     let km = parseFloat(kmRaw);
     let drop = document.getElementById("autobahn");
-    let a = drop ? drop.value : "";
+    let a = drop.value;
     
-    if(isNaN(km) || !a) {
+    if(isNaN(km)) {
         document.getElementById("g").innerText = "-";
         document.getElementById("progress").style.width = "0%";
         document.getElementById("m").innerText = "-";
@@ -915,7 +814,6 @@ function berechnen(isManual = false){
         if (currentGrenzen) {
             let minKm = Math.min(...currentGrenzen);
             let maxKm = Math.max(...currentGrenzen);
-            
             if (km < minKm || km > maxKm) {
                 for (let wache in datenWachen) {
                     let g = datenWachen[wache].grenzen[a];
@@ -926,34 +824,14 @@ function berechnen(isManual = false){
                 }
             }
         }
-    }
-
-    let coords = holeKoordinateFuerKM(a, km);
-    let meister = "-", addr = "-";
-
-    if(coords) {
-        let pt = turf.point([coords[0], coords[1]]);
-        document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
-
-        let closest = null, minDist = Infinity;
-        let strName = a.toUpperCase().replace(/\s/g, '');
-        datenBAB.forEach(f => {
-            let fName = String(f.properties.STRBEZ || f.properties.Str_Kennung || "").toUpperCase().replace(/\s/g, '');
-            if (!fName || fName === "") fName = String(f.properties.STRKL || "") + String(f.properties.STRNR || "");
-            
-            if(fName.toUpperCase() === strName) {
-                try {
-                    let d = turf.pointToLineDistance(pt, f);
-                    if(d < minDist) { minDist = d; closest = f; }
-                } catch(e) {}
-            }
-        });
         
-        let amInfo = resolveMeisterei(closest, pt);
-        meister = amInfo.name;
-        addr = amInfo.addr;
-    } else {
-        document.getElementById("g").innerText = "-";
+        let coords = holeKoordinateFuerKM(a, km);
+        if(coords) {
+            let pt = turf.point([coords[0], coords[1]]);
+            document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+        } else {
+            document.getElementById("g").innerText = "-";
+        }
     }
 
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
@@ -962,57 +840,59 @@ function berechnen(isManual = false){
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
 
-    document.getElementById("m").innerText = meister;
-    document.getElementById("m_address").innerHTML = addr;
+    // Wenn manuell eingegeben (kein GPS Snapping), nutzen wir das Fallback aus dem Code
+    if (isManual) {
+        let meister="-", addr="-";
+        if(meistereienFallback[a]){
+            meistereienFallback[a].forEach(mf=>{
+                if(km >= mf.from && km <= mf.to){
+                    meister = mf.name; 
+                    addr = meistereiAdressen[meister] || "-";
+                }
+            });
+        }
+        document.getElementById("m").innerText = meister;
+        document.getElementById("m_address").innerText = addr;
+    }
 }
 
+// BEREINIGT: Netzknoten HTML (Zeigt exakte ID und Datenbank-Zuständigkeit)
 function holeNKHtml(props, distMeter = 0, isMap = false) {
-    let vnk = props.VNK || props.Vnk || props.NETZKNOTEN_VON || "-";
-    let vb = props.VB || props.Vb || props.KNOTEN_VON_BUCHSTABE || "-";
-    let bnk = props.BNK || props.Bnk || props.NETZKNOTEN_NACH || "-";
-    let bb = props.BB || props.Bb || props.KNOTEN_NACH_BUCHSTABE || "-";
+    let rawAbs = props.ABS || props.ABSNr || "";
+    let vnk = "-", vb = "-", bnk = "-", bb = "-";
     
-    let rawAbs = props.ABSNr || props.ABSNR || props.ABS || props.Sk_Kennung || "";
-    if ((vnk === "-" || bnk === "-") && rawAbs.length >= 15) {
-        let absStr = String(rawAbs).padEnd(16, ' ');
-        vnk = absStr.substring(0, 7).trim() || "-";
-        vb = absStr.substring(7, 8).trim() || "-";
-        bnk = absStr.substring(8, 15).trim() || "-";
-        bb = absStr.substring(15, 16).trim() || "-";
+    if (rawAbs.length >= 15) {
+        let s = String(rawAbs).padEnd(16, ' ');
+        vnk = s.substring(0, 7).trim();
+        vb  = s.substring(7, 8).trim();
+        bnk = s.substring(8, 15).trim();
+        bb  = s.substring(15, 16).trim();
     }
 
-    let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
+    let absNum = props.ABSNR || "";
+    let ast = props.ABSAST ? ` [${props.ABSAST}]` : "";
+
+    let stationBase = parseFloat(String(props.STATANF || 0).replace(',', '.'));
     let stationKM = (stationBase + distMeter) / 1000;
 
-    let zustaendigeAM = "AM/SM Unbekannt";
-    let telLink = "";
-    
-    if (amDatenbank && amDatenbank[rawAbs]) {
-        let abschnitte = amDatenbank[rawAbs];
-        abschnitte.forEach(e => { if (distMeter >= e.von && distMeter <= e.bis) zustaendigeAM = e.am; });
-        if (zustaendigeAM === "AM/SM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
-    } else if (smDatenbank && smDatenbank[rawAbs]) {
-        let abschnitte = smDatenbank[rawAbs];
-        abschnitte.forEach(e => { if (distMeter >= e.von && distMeter <= e.bis) zustaendigeAM = e.am; });
-        if (zustaendigeAM === "AM/SM Unbekannt" && abschnitte.length > 0) zustaendigeAM = abschnitte[0].am;
-    }
-
-    let d = amAdressen[zustaendigeAM] || smAdressen[zustaendigeAM];
-    if(d && d.tel !== "-") {
-        telLink = ` | 📞 <a href="tel:${d.tel.replace(/\s/g,'')}" style="color:var(--accent); text-decoration:none;">${d.tel}</a>`;
+    // 3) Meisterei auf der Karte prüfen
+    let m_name = "Nicht in DB";
+    let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
+    if (m_daten) {
+        let treffer = m_daten.find(e => stationKM >= e.von && stationKM <= e.bis);
+        if (treffer) m_name = treffer.am || treffer.sm || treffer.name || "-";
     }
 
     let debugInfo = "";
-    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b><br><b>${zustaendigeAM}</b>${telLink}</div>`;
+    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${absNum}${ast}</b> (${rawAbs || "Unbekannt"})</div>`;
 
     return `
         ${debugInfo}
-        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
-            <tr><td style="border:none; padding:1px 0;">von Knoten A:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${bb}</b></td></tr>
-            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
+        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.1em; line-height:1.2;">
+            <tr><td style="border:none; padding:1px 0;">VNK:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk} ${vb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0;">BNK:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${bnk} ${bb}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
+            <tr><td style="border:none; padding:1px 0; border-top: 1px solid var(--input-border); color:var(--text-secondary);">Zuständig:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px solid var(--input-border); color:var(--text-secondary);"><b>${m_name}</b></td></tr>
         </table>
     `;
 }
@@ -1049,6 +929,7 @@ function closeMap() {
     if (mapLineLayer) map.removeLayer(mapLineLayer);
 }
 
+// Netzknoten Logik Rot/Grün und Snapping
 function calculateNKMap() {
     let pos = map.getCenter(); 
     let pt = turf.point([pos.lng, pos.lat]);
@@ -1068,21 +949,15 @@ function calculateNKMap() {
     });
 
     let resDiv = document.getElementById('nk-map-result');
-    
     if (mapLineLayer) map.removeLayer(mapLineLayer);
 
     if(best) {
         let props = best.properties || {};
-        let strKl = String(props.STRKL || props.StrKl || "").toUpperCase();
-        let strName = props.STRBEZ || props.StrBez || props.Str_Kennung || (strKl + (props.STRNR || props.StrNr || ""));
+        let strName = String(props.STRBEZ || "").toUpperCase();
         
-        let currentMeters = 0;
-        let snappedCoord = turf.getCoord(pt);
-        try {
-            let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
-            currentMeters = snapped.properties.location || 0;
-            snappedCoord = turf.getCoord(snapped);
-        } catch(e){}
+        let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
+        let distAufLinieMeter = snapped.properties.location || 0;
+        let snappedCoord = turf.getCoord(snapped);
         
         mapLineLayer = L.layerGroup().addTo(map);
 
@@ -1098,15 +973,16 @@ function calculateNKMap() {
             style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
         }).addTo(mapLineLayer);
         
-        let htmlZettel = holeNKHtml(props, currentMeters, true); 
-        
+        let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
+
         resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
-            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} | Fang-Abstand: ${(minDist*1000).toFixed(0)}m</strong>
+            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName}</strong>
             <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
             ${htmlZettel}
         </div>`;
         
         resDiv.style.display = 'block';
+
         setTimeout(() => { 
             map.invalidateSize(); 
             map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
@@ -1140,14 +1016,12 @@ function updateWzUI() {
     let wachenListen = datenWachen[aktuelleWache].listen || {};
     
     let sel = document.getElementById("wz_richtung");
-    if(!sel) return;
     sel.innerHTML = "";
     if(wachenRichtungen[a]) {
         wachenRichtungen[a].forEach(r => sel.add(new Option(r, r)));
     }
     
     let tbody = document.getElementById("wz_liste");
-    if(!tbody) return;
     tbody.innerHTML = "";
     if(wachenListen[a]) {
         wachenListen[a].forEach(e => {
@@ -1216,11 +1090,8 @@ function tickWegZeit() {
     
     let currentKm = wzStartKm + (wzDir * (wzSpeed * elapsedHours));
     
-    let elKm = document.getElementById("wz_aktuell_km");
-    if(elKm) elKm.innerText = currentKm.toFixed(3).replace('.',',');
-    
-    let elZeit = document.getElementById("wz_zeit");
-    if(elZeit) elZeit.innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
+    document.getElementById("wz_aktuell_km").innerText = currentKm.toFixed(3).replace('.',',');
+    document.getElementById("wz_zeit").innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
     
     highlightWzList(currentKm);
 }
@@ -1247,9 +1118,6 @@ function highlightWzList(currentKm) {
         closestRow.classList.add('wz-highlight');
     }
 }
-
-  
-
 </script>
 </body>
 </html>
