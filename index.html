@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.5</title>
+<title>Autobahn Tool v1.6</title>
  
 <!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -250,6 +250,7 @@ const datenWachen = {
 };
  
 // --- DATENBANK ADRESSEN ---
+// Vollständig freigeräumt von Hardcode-AM-Werten (nur zur Adresseingabe hier)
 const meistereiAdressen = {
     "AM Hagen": "In d. Krone 20, 58099 Hagen",
     "AM Remscheid": "Talsperre 23, 42859 Remscheid",
@@ -260,7 +261,6 @@ const meistereiAdressen = {
     "SM Heinsberg": "-" 
 };
 
-// Hier kannst du die korrekten Telefonnummern nachtragen
 const meistereiTelefon = {
     "AM Hagen": "02331 / 12345-0",
     "AM Remscheid": "02191 / 12345-0",
@@ -563,38 +563,54 @@ function toggleGPS(){
     }
 }
  
-// ROBUST: Fängt auch "StrBez" und fehlerhaft formatierte Json Felder auf, inklusive BAB
+// ROBUST: Fängt auch "StrBez" und fehlerhaft formatierte Json Felder auf (z.B. "BAB 59" -> A59)
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
    liste.forEach(f=>{
-        try{ 
+        try { 
             const props = f.properties || {};
             let strKl = String(props.STRKL || props.StrKl || "").toUpperCase().trim();
             let strNr = String(props.STRNR || props.StrNr || "").trim();
-            let name = (strKl + strNr).toUpperCase().replace(/\s/g,'');
+            let fallback = String(props.STRBEZ || props.StrBez || props.Str_Kennung || "").toUpperCase().trim();
             
-            // Wenn der Name leer ist, versuchen wir ihn aus dem "STRBEZ" Feld zu fischen
+            // Behebt das A59 / BAB 59 Problem
+            fallback = fallback.replace(/\s/g, '');
+            if (fallback.startsWith("BAB")) {
+                strKl = "A";
+                strNr = fallback.replace("BAB", "");
+            } else if (fallback.startsWith("A") && !strKl) {
+                strKl = "A";
+                strNr = fallback.replace("A", "");
+            } else if (fallback.startsWith("B") && !strKl) {
+                strKl = "B";
+                strNr = fallback.replace("B", "");
+            } else if (fallback.startsWith("L") && !strKl) {
+                strKl = "L";
+                strNr = fallback.replace("L", "");
+            } else if (fallback.startsWith("K") && !strKl) {
+                strKl = "K";
+                strNr = fallback.replace("K", "");
+            }
+
+            let name = strKl + strNr;
+
             if (!name || name === "") {
-                let fallback = String(props.STRBEZ || props.StrBez || props.Str_Kennung || "").toUpperCase().replace(/\s/g,'');
-                if (fallback.startsWith("BAB")) {
-                    strKl = "A";
-                    strNr = fallback.replace("BAB", "");
-                    name = "A" + strNr; // Macht "BAB59" sicher zu "A59"
-                } else if (fallback.length > 0) {
+                if (fallback) {
                     name = fallback;
                     strKl = name.charAt(0);
+                } else {
+                    return;
                 }
             }
- 
-            if (!name || name === "") return; // Leer, überspringen!
-            
+
             if (filter) {
                 if (Array.isArray(filter) && !filter.includes(name)) return;
                 if (filter === "BUND" && strKl !== "B") return;
                 if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
             }
- 
-            let d = turf.pointToLineDistance(pt, f); 
+
+            // Exakt auf Kilometer stellen, sonst rechnet Turf in Grad
+            let d = turf.pointToLineDistance(pt, f, {units: 'kilometers'}); 
             if (d <= maxDist) {
                 if (!hits[name] || d < hits[name].dist) {
                    hits[name] = { feature: f, dist: d, name: name, props: props };
@@ -652,18 +668,20 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
+        // Für AM/SM Kalkulation
         let rawAbs = props.ABS || props.ABSNr || props.ABSNR || props.Sk_Kennung || props.ABS_NUMMER || "";
         let statAnf = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || 0).replace(',', '.'));
         
-        // Turf gibt bei dieser Methode Standardmäßig Kilometer zurück, Division ist nicht nötig
-        let snapped = turf.nearestPointOnLine(sel.feature, pt);
+        // Gefixt: Es gibt direkt Kilometer zurück. Nicht mehr durch 1000 teilen!
+        let snapped = turf.nearestPointOnLine(sel.feature, pt, {units: 'kilometers'});
         let distAufLinie = snapped.properties.location || 0;
-        let aktuellerKM = statAnf + distAufLinie;
+        let aktuellerKM = statAnf + distAufLinie; 
  
+        let bkm = 0;
         if (strName.startsWith("A")) {
             let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
-            let bkm = berechneGoldgriffBKM(pt, strName);
+            bkm = berechneGoldgriffBKM(pt, strName);
             
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) {
                needsSwitch = false; 
@@ -687,30 +705,6 @@ async function verarbeiteGPS(lat, lon, acc){
                 }
                manuellerFokus = strName; 
                berechnen(false);
- 
-                // AM/SM dynamische Abfrage NUR aus der JSON für Autobahnen (Suche via Autobahnname oder Abschnitt)
-                let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
-                let pot_am = meistereiMap.am[strName] || meistereiMap.am[rawAbs];
-                if (pot_am) {
-                    let treffer = pot_am.find(e => bkm >= (e.von || e.from || 0) && bkm <= (e.bis || e.to || 9999));
-                    if (treffer) m_name = treffer.am || treffer.name || m_name;
-                }
-                if (m_name === "Nicht in DB") {
-                    let pot_sm = meistereiMap.sm[strName] || meistereiMap.sm[rawAbs];
-                    if (pot_sm) {
-                        let treffer = pot_sm.find(e => bkm >= (e.von || e.from || 0) && bkm <= (e.bis || e.to || 9999));
-                        if (treffer) m_name = treffer.sm || treffer.name || m_name;
-                    }
-                }
-                
-                if (m_name !== "Nicht in DB") {
-                    m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-                    m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
-                }
-                
-                document.getElementById("m").innerText = m_name;
-                document.getElementById("m_address").innerText = m_addr;
-                document.getElementById("m_phone").innerText = m_phone;
  
                 let dirText = "";
                 let rfListe = datenWachen[aktuelleWache].richtungen[strName]; 
@@ -740,33 +734,45 @@ async function verarbeiteGPS(lat, lon, acc){
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${astFormatted}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
             
-            // AM/SM dynamische Abfrage NUR aus der JSON Land/Bund
-            let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
-            let pot_am = meistereiMap.am[rawAbs] || meistereiMap.am[strName];
-            if (pot_am) {
-                let treffer = pot_am.find(e => aktuellerKM >= (e.von || e.from || 0) && aktuellerKM <= (e.bis || e.to || 9999));
-                if (treffer) m_name = treffer.am || treffer.name || m_name;
-            }
-            if (m_name === "Nicht in DB") {
-                let pot_sm = meistereiMap.sm[rawAbs] || meistereiMap.sm[strName];
-                if (pot_sm) {
-                    let treffer = pot_sm.find(e => aktuellerKM >= (e.von || e.from || 0) && aktuellerKM <= (e.bis || e.to || 9999));
-                    if (treffer) m_name = treffer.sm || treffer.name || m_name;
-                }
-            }
-            if (m_name !== "Nicht in DB") {
-                m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-                m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
-            }
-            
            document.getElementById("km").value = "";
            document.getElementById("b").innerText="-";
-           document.getElementById("m").innerText=m_name;
-           document.getElementById("m_address").innerText=m_addr;
-           document.getElementById("m_phone").innerText=m_phone;
            document.getElementById("progress").style.width="0%";
            document.getElementById("liste").innerHTML="";
         }
+
+        // GEMEINSAME AM/SM ABFRAGE (Prüft nach Abschnittsnummer ODER Name)
+        let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
+        
+        let pot_am = meistereiMap.am[rawAbs] || meistereiMap.am[strName];
+        if (pot_am) {
+            let treffer = pot_am.find(e => {
+                let v = e.von || e.from || 0;
+                let b = e.bis || e.to || 9999;
+                return (aktuellerKM >= v && aktuellerKM <= b) || (bkm > 0 && bkm >= v && bkm <= b);
+            });
+            if (treffer) m_name = treffer.am || treffer.name || m_name;
+        }
+
+        if (m_name === "Nicht in DB") {
+            let pot_sm = meistereiMap.sm[rawAbs] || meistereiMap.sm[strName];
+            if (pot_sm) {
+                let treffer = pot_sm.find(e => {
+                    let v = e.von || e.from || 0;
+                    let b = e.bis || e.to || 9999;
+                    return (aktuellerKM >= v && aktuellerKM <= b) || (bkm > 0 && bkm >= v && bkm <= b);
+                });
+                if (treffer) m_name = treffer.sm || treffer.name || m_name;
+            }
+        }
+
+        if (m_name !== "Nicht in DB") {
+            m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+            m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        }
+        
+        document.getElementById("m").innerText = m_name;
+        document.getElementById("m_address").innerText = m_addr;
+        document.getElementById("m_phone").innerText = m_phone;
  
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
@@ -886,6 +892,7 @@ function berechnen(isManual = false){
     }
  
     if (isManual) {
+        // AM/SM Check bei reiner manueller Eingabe
         let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
         
         let pot_am = meistereiMap.am[a];
@@ -927,7 +934,8 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     }
  
     let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
-    let stationKM = (stationBase + distMeter) / 1000;
+    // Gefixt: Distanz richtig auf Kilometer umlegen und addieren
+    let stationKM = stationBase + (distMeter / 1000); 
  
     let debugInfo = "";
     if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
@@ -1010,7 +1018,6 @@ function calculateNKMap() {
              strName = String(fallback).toUpperCase();
         }
         
-        // ACHTUNG: Hier explizit in Metern angefordert, damit es für die Stationierung passt
         let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         let distAufLinieMeter = snapped.properties.location || 0;
         let snappedCoord = turf.getCoord(snapped);
