@@ -714,24 +714,39 @@ async function verarbeiteGPS(lat, lon, acc){
            document.getElementById("liste").innerHTML="";
         }
 
-        // --- AM/SM ABFRAGE ---
+// --- AM/SM ABFRAGE (KORRIGIERT: Trennung von BKM und Stationierung) ---
         let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
-        
-        let pot_am = meistereiMap.am[rawAbs] || meistereiMap.am[strName];
-        if (pot_am) {
-            let treffer = pot_am.find(e => {
-                return (aktuellerKM >= e.von && aktuellerKM <= e.bis) || (bkm > 0 && bkm >= e.von && bkm <= e.bis);
-            });
-            if (treffer) m_name = treffer.am; // Wert aus der JSON
+        let rawAbsClean = String(rawAbs).toUpperCase().trim();
+
+        // 1. Suche über ABSCHNITT (Vergleicht NUR Stationierung / aktuellerKM)
+        if (rawAbsClean !== "") {
+            let pot_am_abs = meistereiMap.am[rawAbsClean];
+            if (pot_am_abs) {
+                let hit = pot_am_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
+                if (hit) m_name = hit.am;
+            }
+            if (m_name === "Nicht in DB") {
+                let pot_sm_abs = meistereiMap.sm[rawAbsClean];
+                if (pot_sm_abs) {
+                    let hit = pot_sm_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
+                    if (hit) m_name = hit.am;
+                }
+            }
         }
 
-        if (m_name === "Nicht in DB") {
-            let pot_sm = meistereiMap.sm[rawAbs] || meistereiMap.sm[strName];
-            if (pot_sm) {
-                let treffer = pot_sm.find(e => {
-                    return (aktuellerKM >= e.von && aktuellerKM <= e.bis) || (bkm > 0 && bkm >= e.von && bkm <= e.bis);
-                });
-                if (treffer) m_name = treffer.am; // Auch in der smDatenbank heißt der Key 'am' (laut Beispiel)
+        // 2. Suche über STRAßENNAME (Vergleicht NUR BKM), falls Abschnitt nichts ergab
+        if (m_name === "Nicht in DB" && bkm > 0) {
+            let pot_am_str = meistereiMap.am[strName];
+            if (pot_am_str) {
+                let hit = pot_am_str.find(e => bkm >= Number(e.von) && bkm <= Number(e.bis));
+                if (hit) m_name = hit.am;
+            }
+            if (m_name === "Nicht in DB") {
+                let pot_sm_str = meistereiMap.sm[strName];
+                if (pot_sm_str) {
+                    let hit = pot_sm_str.find(e => bkm >= Number(e.von) && bkm <= Number(e.bis));
+                    if (hit) m_name = hit.am;
+                }
             }
         }
 
@@ -743,7 +758,6 @@ async function verarbeiteGPS(lat, lon, acc){
         document.getElementById("m").innerText = m_name;
         document.getElementById("m_address").innerText = m_addr;
         document.getElementById("m_phone").innerText = m_phone;
- 
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
@@ -828,22 +842,66 @@ function berechnen(isManual = false){
         return;
     }
  
-    if(isManual) {
-        let currentGrenzen = datenWachen[aktuelleWache].grenzen[a];
-        if (currentGrenzen) {
-            let minKm = Math.min(...currentGrenzen);
-            let maxKm = Math.max(...currentGrenzen);
+if (isManual) {
+        let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
+        
+        // NEU: Auch bei manueller Eingabe wird jetzt über die Koordinate der Abschnitt gesucht!
+        if (coords) {
+            let pt = turf.point([coords[0], coords[1]]);
+            let alleDaten = datenBAB.concat(datenLand);
+            // 500m Umkreis für Autobahnen bei manueller KM-Eingabe
+            let hits = findeKandidaten(alleDaten, pt, null, 0.5); 
+            let matchedFeature = hits.find(h => h.name === a);
             
-            if (km < minKm || km > maxKm) {
-                for (let wache in datenWachen) {
-                   let g = datenWachen[wache].grenzen[a];
-                    if (g && km >= Math.min(...g) && km <= Math.max(...g)) {
-                       wechsleWache(wache, true, a);
-                       return;
+            if (matchedFeature) {
+                let props = matchedFeature.feature.properties || {};
+                let rawAbsClean = String(props.ABS || props.ABSNr || props.ABSNR || "").toUpperCase().trim();
+                let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
+                let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
+                let aktuellerKM = statAnf + (snapped.properties.location || 0);
+                
+                // 1. Suche über Abschnittsnummer
+                if (rawAbsClean !== "") {
+                    let pot_am_abs = meistereiMap.am[rawAbsClean];
+                    if (pot_am_abs) {
+                        let hit = pot_am_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
+                        if (hit) m_name = hit.am;
+                    }
+                    if (m_name === "Nicht in DB") {
+                        let pot_sm_abs = meistereiMap.sm[rawAbsClean];
+                        if (pot_sm_abs) {
+                            let hit = pot_sm_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
+                            if (hit) m_name = hit.am;
+                        }
                     }
                 }
             }
         }
+        
+        // 2. Suche über Straßenname (Fallback auf BKM)
+        if (m_name === "Nicht in DB") {
+            let pot_am_str = meistereiMap.am[a];
+            if (pot_am_str) {
+                let hit = pot_am_str.find(e => km >= Number(e.von) && km <= Number(e.bis));
+                if (hit) m_name = hit.am;
+            }
+            if (m_name === "Nicht in DB") {
+                let pot_sm_str = meistereiMap.sm[a];
+                if (pot_sm_str) {
+                    let hit = pot_sm_str.find(e => km >= Number(e.von) && km <= Number(e.bis));
+                    if (hit) m_name = hit.am;
+                }
+            }
+        }
+
+        if (m_name !== "Nicht in DB") {
+            m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+            m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        }
+        
+       document.getElementById("m").innerText = m_name;
+       document.getElementById("m_address").innerText = m_addr;
+       document.getElementById("m_phone").innerText = m_phone;
     }
  
     let coords = holeKoordinateFuerKM(a, km);
