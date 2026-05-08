@@ -588,11 +588,50 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
  
+// --- NEUE HELFERFUNKTION FÜR AM/SM ---
+// Löst das Problem der Gegenfahrbahn und testet BKM sowie Stationierung
+function ermittleAM(rawAbs, strName, statKm, bkm) {
+    let rawAbsClean = String(rawAbs).toUpperCase().trim();
+    
+    // Erzeuge die Gegenrichtung (Netzknoten tauschen), da NWSIB 16-stellig ist (8 + 8)
+    let revAbs = rawAbsClean.length === 16 ? rawAbsClean.substring(8, 16) + rawAbsClean.substring(0, 8) : "";
+    
+    function check(db, key) {
+        if (!db[key]) return null;
+        let hit = db[key].find(e => {
+            let v = Number(e.von), b = Number(e.bis);
+            // Prüft, ob der große BKM ODER die kleine Stationierung in den Datensatz passt
+            return (bkm > 0 && bkm >= v && bkm <= b) || (statKm >= v && statKm <= b);
+        });
+        return hit ? hit.am : null;
+    }
+
+    let result = "Nicht in DB";
+    
+    // 1. Suche über die Abschnittsnummer (und Gegenfahrbahn!)
+    if (rawAbsClean !== "") {
+        result = check(meistereiMap.am, rawAbsClean) 
+              || check(meistereiMap.am, revAbs) 
+              || check(meistereiMap.sm, rawAbsClean) 
+              || check(meistereiMap.sm, revAbs) 
+              || "Nicht in DB";
+    }
+    
+    // 2. Suche über den Straßen-Namen (Fallback)
+    if (result === "Nicht in DB" && strName !== "") {
+        result = check(meistereiMap.am, strName) 
+              || check(meistereiMap.sm, strName) 
+              || "Nicht in DB";
+    }
+    
+    return result;
+}
+
 async function verarbeiteGPS(lat, lon, acc){
     letzteLat = lat; letzteLon = lon; letzteAcc = acc;
     const pt = turf.point([lon, lat]);
     
-   document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+    document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
     
     let alleDaten = datenBAB.concat(datenLand);
  
@@ -603,16 +642,16 @@ async function verarbeiteGPS(lat, lon, acc){
     let alleKandidaten = [...babHits, ...bundHits, ...landHits];
     let uniqueKandidaten = [];
     let seenNames = new Set();
-   alleKandidaten.forEach(k => {
+    alleKandidaten.forEach(k => {
         if (!seenNames.has(k.name)) {
            seenNames.add(k.name);
            uniqueKandidaten.push(k);
         }
     });
  
-   if(uniqueKandidaten.length > 0) {
+    if(uniqueKandidaten.length > 0) {
         let sortKandidaten = [...uniqueKandidaten];
-       sortKandidaten.sort((a, b) => {
+        sortKandidaten.sort((a, b) => {
             let aIsA = a.name.startsWith("A");
             let bIsA = b.name.startsWith("A");
             if (aIsA && !bIsA) return -1;
@@ -635,10 +674,8 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
-        // Zieht sich direkt die sauberen Werte aus der JSON
-        let rawAbs = props.ABS || props.ABSNr || "";
-        let statAnf = Number(props.STATANF || 0);
-        
+        let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
+        let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
         let snapped = turf.nearestPointOnLine(sel.feature, pt, {units: 'kilometers'});
         let distAufLinie = snapped.properties.location || 0;
         let aktuellerKM = statAnf + distAufLinie; 
@@ -667,18 +704,18 @@ async function verarbeiteGPS(lat, lon, acc){
             let isOnCurrentWache = Array.from(document.getElementById("autobahn").options).some(o=>o.value===strName);
             
             if(isOnCurrentWache){
-               document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
+                document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
                 if (document.getElementById("autobahn").value !== strName) {
                    document.getElementById("autobahn").value = strName;
                    updateUI();
                 }
-               manuellerFokus = strName; 
-               berechnen(false);
+                manuellerFokus = strName; 
+                berechnen(false);
             } else {
-               document.getElementById("km").value = "";
-               document.getElementById("b").innerText = "-";
-               document.getElementById("progress").style.width = "0%";
-               document.getElementById("liste").innerHTML = "";
+                document.getElementById("km").value = "";
+                document.getElementById("b").innerText = "-";
+                document.getElementById("progress").style.width = "0%";
+                document.getElementById("liste").innerHTML = "";
             }
 
             let dirText = "";
@@ -708,62 +745,27 @@ async function verarbeiteGPS(lat, lon, acc){
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${astFormatted}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
             
-           document.getElementById("km").value = "";
-           document.getElementById("b").innerText="-";
-           document.getElementById("progress").style.width="0%";
-           document.getElementById("liste").innerHTML="";
+            document.getElementById("km").value = "";
+            document.getElementById("b").innerText="-";
+            document.getElementById("progress").style.width="0%";
+            document.getElementById("liste").innerHTML="";
         }
 
-// --- AM/SM ABFRAGE (KORRIGIERT: Trennung von BKM und Stationierung) ---
-        let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
-        let rawAbsClean = String(rawAbs).toUpperCase().trim();
-
-        // 1. Suche über ABSCHNITT (Vergleicht NUR Stationierung / aktuellerKM)
-        if (rawAbsClean !== "") {
-            let pot_am_abs = meistereiMap.am[rawAbsClean];
-            if (pot_am_abs) {
-                let hit = pot_am_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
-                if (hit) m_name = hit.am;
-            }
-            if (m_name === "Nicht in DB") {
-                let pot_sm_abs = meistereiMap.sm[rawAbsClean];
-                if (pot_sm_abs) {
-                    let hit = pot_sm_abs.find(e => aktuellerKM >= Number(e.von) && aktuellerKM <= Number(e.bis));
-                    if (hit) m_name = hit.am;
-                }
-            }
-        }
-
-        // 2. Suche über STRAßENNAME (Vergleicht NUR BKM), falls Abschnitt nichts ergab
-        if (m_name === "Nicht in DB" && bkm > 0) {
-            let pot_am_str = meistereiMap.am[strName];
-            if (pot_am_str) {
-                let hit = pot_am_str.find(e => bkm >= Number(e.von) && bkm <= Number(e.bis));
-                if (hit) m_name = hit.am;
-            }
-            if (m_name === "Nicht in DB") {
-                let pot_sm_str = meistereiMap.sm[strName];
-                if (pot_sm_str) {
-                    let hit = pot_sm_str.find(e => bkm >= Number(e.von) && bkm <= Number(e.bis));
-                    if (hit) m_name = hit.am;
-                }
-            }
-        }
-
-        if (m_name !== "Nicht in DB") {
-            m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-            m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
-        }
+        // --- Zuweisung über die neue Helferfunktion ---
+        let m_name = ermittleAM(rawAbs, strName, aktuellerKM, bkm);
+        let m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+        let m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
         
         document.getElementById("m").innerText = m_name;
         document.getElementById("m_address").innerText = m_addr;
         document.getElementById("m_phone").innerText = m_phone;
+ 
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
             htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
             
-           andereImKreuz.forEach(k => {
+            andereImKreuz.forEach(k => {
                 let btnText = "";
                 let distMeter = Math.round(k.dist * 1000);
                 if (Array.from(document.getElementById("autobahn").options).some(o=>o.value===k.name)) {
@@ -773,14 +775,135 @@ async function verarbeiteGPS(lat, lon, acc){
                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
                    btnText = `${k_icon} ${k.name} [${distMeter}m]`;
                 }
-               htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
+                htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
             });
             htmlOutput += `</div>`;
         }
-       document.getElementById("gps-info").innerHTML = htmlOutput;
+        document.getElementById("gps-info").innerHTML = htmlOutput;
  
     } else {
-       document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
+        document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
+    }
+}
+ 
+function wechsleFokus(zielName) {
+    manuellerFokus = zielName;
+    let drop = document.getElementById("autobahn");
+    if (Array.from(drop.options).some(o => o.value === zielName)) {
+        drop.value = zielName;
+        updateUI();      
+        berechnen(true);       
+    }
+    if (letzteLat !== 0) {
+        verarbeiteGPS(letzteLat, letzteLon, letzteAcc);
+    }
+}
+ 
+function berechneGoldgriffBKM(meinPunkt, strName){
+    if(referenzPunkte.length === 0) return 0;
+    let suchNummer = strName.toUpperCase().replace('A', '');
+    let passende = referenzPunkte.filter(f => {
+        if(!f.properties) return false;
+        return String(f.properties.Bez) === suchNummer;
+    });
+    
+    if(passende.length > 1){
+        passende.forEach(p => p.tempDist = turf.distance(meinPunkt, p));
+        passende.sort((a, b) => a.tempDist - b.tempDist);
+        
+        let closest = passende[0];
+        let secondClosest = passende[1];
+        
+        let refKM1 = Number(closest.properties.Kilometer || 0);
+        let refKM2 = Number(secondClosest.properties.Kilometer || 0);
+        
+        if (refKM2 < refKM1) return refKM1 - closest.tempDist;
+        else return refKM1 + closest.tempDist;
+        
+    } else if (passende.length === 1) {
+        let closest = passende[0];
+        let refKM = Number(closest.properties.Kilometer || 0);
+        let dist = turf.distance(meinPunkt, closest);
+        return refKM + dist;
+    }
+    return 0;
+}
+ 
+function berechnen(isManual = false){
+    let kmRaw = document.getElementById("km").value.replace(',','.');
+    let km = parseFloat(kmRaw);
+    let drop = document.getElementById("autobahn");
+    let a = drop.value;
+    
+    if(isNaN(km)) {
+        document.getElementById("g").innerText = "-";
+        document.getElementById("progress").style.width = "0%";
+        document.getElementById("m").innerText = "-";
+        document.getElementById("m_address").innerText = "-";
+        document.getElementById("m_phone").innerText = "-";
+        return;
+    }
+ 
+    if(isManual) {
+        let currentGrenzen = datenWachen[aktuelleWache].grenzen[a];
+        if (currentGrenzen) {
+            let minKm = Math.min(...currentGrenzen);
+            let maxKm = Math.max(...currentGrenzen);
+            
+            if (km < minKm || km > maxKm) {
+                for (let wache in datenWachen) {
+                   let g = datenWachen[wache].grenzen[a];
+                    if (g && km >= Math.min(...g) && km <= Math.max(...g)) {
+                       wechsleWache(wache, true, a);
+                       return;
+                    }
+                }
+            }
+        }
+    }
+ 
+    let coords = holeKoordinateFuerKM(a, km);
+    if(coords) {
+        let pt = turf.point([coords[0], coords[1]]);
+        document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+    } else {
+        document.getElementById("g").innerText = "-";
+    }
+ 
+    let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
+    if(wachenGrenzen[a]) {
+        let percent = ((km - wachenGrenzen[a][0]) / (wachenGrenzen[a][1] - wachenGrenzen[a][0])) * 100;
+        document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
+    }
+ 
+    // --- MANUELLE EINGABE GREIFT NUN AUCH AUF DIE ABSCHNITTSNUMMER ZU ---
+    if (isManual) {
+        let rawAbs = "";
+        let aktuellerKM = 0;
+        
+        // Scannt virtuell die Karte an dem manuell eingegebenen Kilometer, um sich den versteckten Abschnitt zu holen!
+        if (coords) {
+            let pt = turf.point([coords[0], coords[1]]);
+            let alleDaten = datenBAB.concat(datenLand);
+            let hits = findeKandidaten(alleDaten, pt, null, 0.5); 
+            let matchedFeature = hits.find(h => h.name === a);
+            
+            if (matchedFeature) {
+                let props = matchedFeature.feature.properties || {};
+                rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
+                let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
+                let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
+                aktuellerKM = statAnf + (snapped.properties.location || 0);
+            }
+        }
+        
+        let m_name = ermittleAM(rawAbs, a, aktuellerKM, km);
+        let m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+        let m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        
+        document.getElementById("m").innerText = m_name;
+        document.getElementById("m_address").innerText = m_addr;
+        document.getElementById("m_phone").innerText = m_phone;
     }
 }
  
