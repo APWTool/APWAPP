@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.4.2</title>
+<title>Autobahn Tool v1.5</title>
  
 <!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -240,7 +240,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 </div>
  
 <script>
-// --- DATENBANK ---
+// --- DATENBANK WACHEN ---
 const datenWachen = {
    "Hilden": { grenzen: {"A1": [363.315, 381.658], "A3": [101.200, 122.819], "A44": [1.215, 17.599], "A46": [70.815, 114.763], "A57": [88.500, 100.902], "A59": [0.578, 14.467], "A535": [0.262, 12.811], "A542": [4.055, 8.754], "L418": [0, 10]}, listen: {"A1": [["AS","Wuppertal-Langerfeld","365,700"], ["PP","Kucksiepen","367,900", "RF DO"], ["PP","Ehrenberg","368,200", "RF Köln"], ["AS","Wuppertal-Ronsdorf","373,000"], ["AS","Remscheid-Lennep","376,800"], ["AS","Remscheid","379,100"]], "A3": [["PP","Stindertal","103,400", "RF Köln"], ["PP","Stinderhof","103,400", "RF OB"], ["AK","Hilden","108,700"], ["TuR","Ohligser Heide","113,100"], ["AS","Solingen","117,400"], ["AK","Langenfeld","118,400"], ["PP","Reusrather Heide","121,600"]], "A44": [["AS","Hetterscheidt","1,200"], ["AS","Heiligenhaus","6,000"], ["AS","Velbert-Nord","8,400"], ["AD","Velbert-Nord","9,500"], ["AS","Langenberg","11,900"], ["AS","Essen-Kupferdreh","14,100", "Dilldorfer Höhe"], ["AS","Essen-Kupferdreh","14,700"], ["AS","Essen-Überruhr","16,800"], ["AS","Essen-Heisingen","17,600", "Übergang B 227"]], "A46": [["AK","Neuss-Süd","70,800"], ["AS","Neuss-Uedesheim","72,300"], ["AS","Düsseldorf-Bilk","76,300"], ["AS","Düsseldorf-Zentrum","78,000"], ["AS","Düsseldorf-Wersten","78,200"], ["AS","Düsseldorf-Holthausen","80,000"], ["AS","Düsseldorf-Eller","81,200"], ["AK","Düsseldorf-Süd","82,000"], ["AS","Erkrath","85,000"], ["AK","Hilden","87,000"], ["AS","Hilden","87,400"], ["AS","Haan-West","89,400"], ["PP","Höfgen","92,600", "RF Brilon"], ["PP","Stropmütze","92,600", "RF Heinsberg"], ["AS","Haan-Ost","94,200"], ["AS","Wuppertal-Cronenberg","98,400", "Abzweig L 418"], ["AK","Sonnborner Kreuz","99,500"], ["AS","Wuppertal-Varresbeck","101,600"], ["AS","Wuppertal-Katernberg","103,900"], ["AS","Wuppertal-Elberfeld","105,700"], ["AS","Wuppertal-Barmen","107,800"], ["AS","Wuppertal-Wichlinghausen","110,000"], ["TuR","Sternenberg","110,900"], ["PP","Holtkamp-Nord","112,700", "RF Heinsberg"], ["AS","Wuppertal-Oberbarmen","113,900"], ["AK","Wuppertal-Nord","114,600"]], "A57": [["AK","Neuss-Süd","90,300"], ["RuT","Nievenheim","94,900"], ["AS","Dormagen","98,300", "RF Nijmegen"], ["AS","Dormagen","99,400", "RF Köln"]], "A59": [["AK","Düsseldorf-Süd","0,000"], ["AS","Düsseldorf-Benrath","1,800"], ["AS","Düsseldorf-Garath","4,600"], ["PP","Wolfhagen","8,000", "RF Dinslaken"], ["AS","Richrath","9,000"], ["PP","Berghausen","9,900", "RF Köln"], ["AS","Monheim","11,400"], ["AK","Monheim-Süd","13,100"]], "A535": [["AD","Velbert-Nord","0,262"], ["AS","Velbert","1,800"], ["AS","Tönisheide","4,500"], ["AS","Wülfrath","6,600"], ["AS","Wuppertal-Dornap","11,700"]], "A542": [["AS","Leverkusen-Hitdorf","3,400"], ["AK","Monheim-Süd","3,500"], ["AS","Langenfeld-Reusrath","5,700"], ["AS","Langenfeld-Immigrath","8,000"], ["AK","Langenfeld","8,800"]], "L418": [["AS", "Cronenberg/Küllenhahn/MVA", "-"], ["AS", "Zentrum/W-Elberfeld", "-"], ["AS", "Universität", "-"]] }, richtungen: {"A1": ["RF Köln (+)","RF Dortmund (-)"], "A3": ["RF Köln (+)","RF Arnheim (-)"], "A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A46": ["RF Brilon (+)","RF Heinsberg (-)"], "A57": ["RF Köln (+)","RF Goch (-)"], "A59": ["RF Köln (+)","RF Dinslaken (-)"], "A535": ["RF Wuppertal (+)","RF Velbert (-)"], "A542": ["RF Langenfeld (+)","RF Monheim (-)"], "L418": ["RF Wuppertal (+)","RF Cronenberg (-)"]} },
    "Mülheim": { grenzen: {"A3": [76.000, 101.199], "A40": [42.000, 67.569], "A44": [84.114, 104.754], "A52": [54.000, 82.708], "A59": [22.500, 25.126], "A524": [7.662, 14.933]}, listen: {"A3": [["AK","Kaiserberg","77,000"], ["AS","Duisburg-Wedau","81,600"], ["PP","Stockweg","86,800","RF Oberhausen"], ["PP","Entenfang","86,800","RF Köln"], ["AK","Breitscheid","89,700"], ["RuT","Hösel","93,100","RF Oberhausen"], ["AK","Ratingen-Ost","96,500"], ["AS","Mettmann","101,000"]], "A40": [["AK","Kaiserberg","42,600"], ["AS","Duisburg-Kaiserberg","43,600"], ["AS","Mülheim","46,200","Ausf. RF DO, Zuf. RF Venlo"], ["AS","Mülheim-Styrum","47,500"], ["AS","Mülheim-Dümpten","49,700"], ["AS","Mülheim-Winkhausen","51,800"], ["AS","MH-Heißen","53,800","Ausf. RF DO, Zuf. RF Venlo"], ["AS","MH-Heißen","54,200","Zuf. RF DO, Ausf. RF Venlo"], ["AS","Mülheim-Heimaterde","55,100"], ["AS","Essen-Frohnhausen","56,600"], ["AS","Essen-Holsterhausen","57,800"], ["AS","Essen Zentrum","59,000"], ["AS","Essen-Zentrum-Ost","59,800","RF Dortmund"], ["AS","Essen-Huttrop","60,900"], ["AD","Essen-Ost","61,800"], ["AS","Essen-Frillendorf (alt)","62,700"], ["AS","Essen-Frillendorf (neu)","63,800"], ["AS","Essen-Kray","64,900"], ["AS","Gelsenkirchen-Süd","66,800"]], "A44": [["AS","Lank-Latum","84,600"], ["AS","Düsseldorf-Messe","90,200"], ["AS","Düsseldorf-Stockum","91,600"], ["AS","Düsseldorf-Flughafen","93,700"], ["AK","Düsseldorf-Nord","96,800"], ["AS","D'dorf-Reichswaldallee","99,900","Zufahrt RF Kassel"], ["AS","Ratingen-Schwarzbach","102,500"], ["AS","Ratingen-Ost","104,100"], ["AK","Ratingen-Ost","104,700","Ausbauende / A3"]], "A52": [["AS","Düsseldorf-Rath","55,400"], ["AK","Düsseldorf-Nord","56,800"], ["T","Hohenstein","57,200","RF Essen"], ["AS","Ratingen","58,500","58,3 RF Essen; 58,7 RF D'dorf"], ["PP","Tiefenbroich","59,400","RF Essen"], ["AS","Tiefenbroich","61,400"], ["AD","Breitscheid","64,400"], ["AK","Breitscheid","65,000"], ["AS","Breitscheid","65,700"], ["PP","Auberg","68,400","RF Essen"], ["PP","Ickten","70,800","RF Düsseldorf"], ["AS","Essen-Kettwig","73,900"], ["AS","Essen-Haarzopf","76,100"], ["AS","Essen-Rüttenscheid","77,200","Zuf. RF D'dorf, Ausf. RF Essen"], ["AS","Essen-Rüttenscheid","78,200"], ["AS","Essen-Süd","80,300"], ["AS","Essen-Bergerhausen","81,600"], ["AD","Essen-Ost","83,000"]], "A59": [["AK","Duisburg-Süd","24,600"]], "A524": [["AK","Duisburg-Süd","8,200"], ["AS","Duisburg-Rahm","10,000"], ["AS","Lintorf","12,600"], ["AD","Breitscheid","14,900"]]}, richtungen: {"A3": ["RF Köln (+)","RF Arnheim (-)"], "A40": ["RF Dortmund (+)","RF Venlo (-)"], "A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A52": ["RF Essen (+)","RF Roermond (-)"], "A59": ["RF Köln (+)","RF Dinslaken (-)"], "A524": ["RF Breitscheid (+)","RF Krefeld (-)"]} },
@@ -249,19 +249,7 @@ const datenWachen = {
    "Gladbach": { grenzen: {"A44": [48.851, 77.999], "A46": [18.284, 65.294], "A52": [-0.468, 46.665], "A57": [74.000, 88.499], "A61": [-1.274, 36.465]}, listen: {"A44": [["AK","Holz","54,000"], ["AS","M'gladbach-Odenkirchen","62,200","Ausbauende"], ["AS","M'gladbach-Ost","66,900","Ausbauende"], ["AK","Neersen","69,200"], ["AS","Neersen","70,500"], ["AS","Münchheide","72,800"], ["AS","Krefeld-Forstwald","75,100"], ["AS","Krefeld-Fichtenhain","77,200"]], "A46": [["AS","Heinsberg (Ausbauende)","18,300"], ["AS","Dremmen","22,900"], ["AS","Hückelhoven-West","25,500"], ["AS","Hückelhoven-Ost","28,800"], ["AS","Erkelenz-Süd","33,600"], ["AS","Erkelenz-Ost","37,100"], ["PP","Herrather Linde-Nord","39,200","RF Heinsberg"], ["PP","Herrather Linde-Süd","39,200","RF Brilon"], ["AK","Wanlo","44,400"], ["AK","Holz","48,300"], ["AS","Jüchen","52,600"], ["AS","Grevenbroich","54,700"], ["RuT","Vierwinden-Süd","58,100","RF Brilon"], ["RuT","Vierwinden-Nord","58,600","RF Heinsberg"], ["AS","Grevenbroich-Kapellen","60,000"], ["AS","Neuss-Holzheim","63,600"]], "A52": [["AS","Elmpt","4,100"], ["AS","Niederkrüchten","10,000"], ["AS","Schwalmtal-Waldniel","13,400"], ["AS","Schwalmtal-Hostert","17,700"], ["AS","Mönchengladbach-Hardt","19,900"], ["AK","Mönchengladbach","22,200"], ["PP","Bockerter Heide","24,200","RF Roermond"], ["PP","Wolfskull","24,200","RF AK Marl-Nord"], ["AS","Mönchengladbach-Nord","26,600"], ["AS","Mönchengladbach-Neuwerk","28,200"], ["AK","Neersen","30,700"], ["RuT","Cloerbruch-Nord","32,600","RF Roermond"], ["RuT","Cloerbruch-Süd","32,600","RF AK Marl-Nord"], ["AS","Schiefbahn","34,500"], ["AS","Kaarst-Nord","40,300"], ["AK","Kaarst","41,700"], ["AS","Büderich","46,400"]], "A57": [["AK","Kaarst","76,900"], ["AS","Holzbüttgen","78,700"], ["PP","Morgensternsheide-Ost","79,800","RF Nijmegen"], ["PP","Morgensternsheide-West","80,000","RF Köln"], ["AS","Büttgen","81,200"], ["AK","Neuss-West","83,300"], ["AS","Neuss-Reuschenberg","84,300"], ["AS","Neuss-Hafen","86,000"], ["AS","Neuss-Norf","88,000"]], "A61": [["GÜ","Grenzübergang Grenzwald","-1,300"], ["AS","Nettetal-West","0,600"], ["AS","Kaldenkirchen","1,900"], ["AS","Kaldenkirchen-Süd","4,100"], ["AS","Breyell","7,300","nur Ausfahrt RF Hockenheim"], ["AS","Nettetal","9,000"], ["AS","Süchteln","14,400"], ["AS","Viersen","16,800"], ["AS","Mackenstein","18,800"], ["AK","Mönchengladbach","22,000"], ["AS","Mönchengladbach-Nordpark","23,900"], ["AS","Mönchengladbach-Holt","26,300"], ["AS","Mönchengladbach-Rheydt","29,100"], ["AS","Mönchengladbach-Wickrath","31,000"], ["AS","Güdderath","33,600"], ["AK","Wanlo","35,300"], ["AS","Wanlo","36,400"]]}, richtungen: {"A44": ["RF Kassel (+)","RF Mönchengladbach (-)"], "A46": ["RF Wuppertal (+)","RF Heinsberg (-)"], "A52": ["RF Essen (+)","RF Roermond (-)"], "A57": ["RF Köln (+)","RF Goch (-)"], "A61": ["RF Koblenz (+)","RF Venlo (-)"]} }
 };
  
-// --- DATENBANK ZUSTÄNDIGKEITEN & ADRESSEN ---
-// Backup für die manuelle Berechnung ohne GPS
-const meistereienFallback = {
-    A1: [{from:363.315,to:365.649,name:"AM Hagen"},{from:365.649,to:381.646,name:"AM Remscheid"}],
-    A3: [{from:101.2,to:107.925,name:"AM Ratingen"},{from:107.925,to:122.819,name:"AM Leverkusen"}],
-    A44: [{from:1.215,to:17.599,name:"AM Ratingen"}],
-    A46: [{from:70.815,to:80.770,name:"AM Kaarst"},{from:80.770,to:88.340,name:"AM Leverkusen"},{from:88.340,to:114.763,name:"AM Remscheid"}],
-    A57: [{from:88.5,to:93.343,name:"AM Kaarst"},{from:93.343,to:100.912,name:"AM Köln"}],
-    A59: [{from:0.578,to:14.467,name:"AM Leverkusen"}],
-    A535: [{from:0.262,to:12.811,name:"AM Remscheid"}],
-    A542: [{from:4.055,to:8.754,name:"AM Leverkusen"}]
-};
- 
+// --- DATENBANK ADRESSEN ---
 const meistereiAdressen = {
     "AM Hagen": "In d. Krone 20, 58099 Hagen",
     "AM Remscheid": "Talsperre 23, 42859 Remscheid",
@@ -331,6 +319,7 @@ function showPage(pageId) {
     }
 }
  
+// --- INITIALER DATEN-LOAD ---
 Promise.all([
    fetch('Abschnitt.json').then(res=>res.json()),
    fetch('AbschnittBAB.json').then(res=>res.json()),
@@ -574,7 +563,7 @@ function toggleGPS(){
     }
 }
  
-// ROBUST: Fängt auch "StrBez" und fehlerhaft formatierte Json Felder auf
+// ROBUST: Fängt auch "StrBez" und fehlerhaft formatierte Json Felder auf, inklusive BAB
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
    liste.forEach(f=>{
@@ -584,11 +573,16 @@ function findeKandidaten(liste, pt, filter, maxDist){
             let strNr = String(props.STRNR || props.StrNr || "").trim();
             let name = (strKl + strNr).toUpperCase().replace(/\s/g,'');
             
+            // Wenn der Name leer ist, versuchen wir ihn aus dem "STRBEZ" Feld zu fischen
             if (!name || name === "") {
-                let fallback = props.STRBEZ || props.StrBez || props.Str_Kennung || "";
-                name = String(fallback).toUpperCase().replace(/\s/g,'');
-                if (name.length > 0) {
-                   strKl = name.charAt(0);
+                let fallback = String(props.STRBEZ || props.StrBez || props.Str_Kennung || "").toUpperCase().replace(/\s/g,'');
+                if (fallback.startsWith("BAB")) {
+                    strKl = "A";
+                    strNr = fallback.replace("BAB", "");
+                    name = "A" + strNr; // Macht "BAB59" sicher zu "A59"
+                } else if (fallback.length > 0) {
+                    name = fallback;
+                    strKl = name.charAt(0);
                 }
             }
  
@@ -658,13 +652,13 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
-        // Für AM/SM Kalkulation
         let rawAbs = props.ABS || props.ABSNr || props.ABSNR || props.Sk_Kennung || props.ABS_NUMMER || "";
         let statAnf = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || 0).replace(',', '.'));
+        
+        // Turf gibt bei dieser Methode Standardmäßig Kilometer zurück, Division ist nicht nötig
         let snapped = turf.nearestPointOnLine(sel.feature, pt);
         let distAufLinie = snapped.properties.location || 0;
-        let stationKm = (statAnf + distAufLinie) / 1000;
-        let aktuellerKM = statAnf + distAufLinie; // Altes Code A Format
+        let aktuellerKM = statAnf + distAufLinie;
  
         if (strName.startsWith("A")) {
             let needsSwitch = true;
@@ -694,17 +688,29 @@ async function verarbeiteGPS(lat, lon, acc){
                manuellerFokus = strName; 
                berechnen(false);
  
-                // AM/SM dynamische Abfrage
-                let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
-                if (m_daten) {
-                    let treffer = m_daten.find(e => stationKm >= e.von && stationKm <= e.bis);
-                    if (treffer) {
-                        let m_name = treffer.am || treffer.sm || treffer.name || "-";
-                        document.getElementById("m").innerText = m_name;
-                        document.getElementById("m_address").innerText = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-                        document.getElementById("m_phone").innerText = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+                // AM/SM dynamische Abfrage NUR aus der JSON für Autobahnen (Suche via Autobahnname oder Abschnitt)
+                let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
+                let pot_am = meistereiMap.am[strName] || meistereiMap.am[rawAbs];
+                if (pot_am) {
+                    let treffer = pot_am.find(e => bkm >= (e.von || e.from || 0) && bkm <= (e.bis || e.to || 9999));
+                    if (treffer) m_name = treffer.am || treffer.name || m_name;
+                }
+                if (m_name === "Nicht in DB") {
+                    let pot_sm = meistereiMap.sm[strName] || meistereiMap.sm[rawAbs];
+                    if (pot_sm) {
+                        let treffer = pot_sm.find(e => bkm >= (e.von || e.from || 0) && bkm <= (e.bis || e.to || 9999));
+                        if (treffer) m_name = treffer.sm || treffer.name || m_name;
                     }
                 }
+                
+                if (m_name !== "Nicht in DB") {
+                    m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+                    m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+                }
+                
+                document.getElementById("m").innerText = m_name;
+                document.getElementById("m_address").innerText = m_addr;
+                document.getElementById("m_phone").innerText = m_phone;
  
                 let dirText = "";
                 let rfListe = datenWachen[aktuelleWache].richtungen[strName]; 
@@ -725,7 +731,6 @@ async function verarbeiteGPS(lat, lon, acc){
             }
 
         } else {
-            // ROBUST: Fällt nicht ins Kauderwelsch zurück
             let abschnitt = props.ABSNR || props.AbsNr || props.Sk_Kennung || props.ABS_NUMMER || "Unbekannt";
             let ast = props.ABSAST || props.AbsAst || "";
             let astFormatted = ast !== "" ? ` (${ast})` : "";
@@ -735,16 +740,23 @@ async function verarbeiteGPS(lat, lon, acc){
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${astFormatted}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
             
-            // AM/SM dynamische Abfrage Land/Bund
+            // AM/SM dynamische Abfrage NUR aus der JSON Land/Bund
             let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
-            let m_daten = meistereiMap.am[rawAbs] || meistereiMap.sm[rawAbs];
-            if (m_daten) {
-                let treffer = m_daten.find(e => stationKm >= e.von && stationKm <= e.bis);
-                if (treffer) {
-                    m_name = treffer.am || treffer.sm || treffer.name || "-";
-                    m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-                    m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+            let pot_am = meistereiMap.am[rawAbs] || meistereiMap.am[strName];
+            if (pot_am) {
+                let treffer = pot_am.find(e => aktuellerKM >= (e.von || e.from || 0) && aktuellerKM <= (e.bis || e.to || 9999));
+                if (treffer) m_name = treffer.am || treffer.name || m_name;
+            }
+            if (m_name === "Nicht in DB") {
+                let pot_sm = meistereiMap.sm[rawAbs] || meistereiMap.sm[strName];
+                if (pot_sm) {
+                    let treffer = pot_sm.find(e => aktuellerKM >= (e.von || e.from || 0) && aktuellerKM <= (e.bis || e.to || 9999));
+                    if (treffer) m_name = treffer.sm || treffer.name || m_name;
                 }
+            }
+            if (m_name !== "Nicht in DB") {
+                m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+                m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
             }
             
            document.getElementById("km").value = "";
@@ -800,7 +812,8 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     let suchName=strName.toUpperCase().replace(/\s/g,'').replace('A','');
     let passende=referenzPunkte.filter(f=>{
        if(!f.properties||!f.properties.Bez) return false;
-        return String(f.properties.Bez).toUpperCase().replace(/\s/g,'').replace('A','')===suchName;
+        let refBez = String(f.properties.Bez).toUpperCase().replace(/\s/g,'');
+        return refBez === suchName || refBez === "BAB" + suchName || refBez === "A" + suchName;
     });
     
     if(passende.length > 1){
@@ -873,19 +886,28 @@ function berechnen(isManual = false){
     }
  
     if (isManual) {
-        let meister="-", addr="-", phone="-";
-        if(meistereienFallback[a]){
-           meistereienFallback[a].forEach(mf=>{
-                if(km >= mf.from && km <= mf.to){
-                    meister = mf.name;
-                    addr = meistereiAdressen[meister] || "-";
-                    phone = meistereiTelefon[meister] || "-";
-                }
-            });
+        let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
+        
+        let pot_am = meistereiMap.am[a];
+        if (pot_am) {
+            let treffer = pot_am.find(e => km >= (e.von || e.from || 0) && km <= (e.bis || e.to || 9999));
+            if (treffer) m_name = treffer.am || treffer.name || m_name;
         }
-       document.getElementById("m").innerText = meister;
-       document.getElementById("m_address").innerText = addr;
-       document.getElementById("m_phone").innerText = phone;
+        if (m_name === "Nicht in DB") {
+            let pot_sm = meistereiMap.sm[a];
+            if (pot_sm) {
+                let treffer = pot_sm.find(e => km >= (e.von || e.from || 0) && km <= (e.bis || e.to || 9999));
+                if (treffer) m_name = treffer.sm || treffer.name || m_name;
+            }
+        }
+        if (m_name !== "Nicht in DB") {
+            m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
+            m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        }
+        
+       document.getElementById("m").innerText = m_name;
+       document.getElementById("m_address").innerText = m_addr;
+       document.getElementById("m_phone").innerText = m_phone;
     }
 }
  
@@ -988,6 +1010,7 @@ function calculateNKMap() {
              strName = String(fallback).toUpperCase();
         }
         
+        // ACHTUNG: Hier explizit in Metern angefordert, damit es für die Stationierung passt
         let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         let distAufLinieMeter = snapped.properties.location || 0;
         let snappedCoord = turf.getCoord(snapped);
