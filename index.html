@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v1.7</title>
+<title>Autobahn Tool v1.8</title>
  
 <!-- GoatCounter -->
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -317,30 +317,7 @@ function showPage(pageId) {
     }
 }
  
-// DEEP-PARSER FÜR DIE DATENBANKEN: Behebt Komma-Fehler und normalisiert Keys (A059 -> A59)
-function parseDB(data) {
-    let res = {};
-    if(!data) return res;
-    for(let key in data) {
-        let k = String(key).toUpperCase().replace(/\s/g, '');
-        if (k.startsWith('BAB')) k = k.replace('BAB', 'A');
-        k = k.replace(/([A-Z])0+/g, '$1'); 
-
-        let entries = Array.isArray(data[key]) ? data[key] : [data[key]];
-        let parsedArr = entries.map(e => {
-            let v = parseFloat(String(e.von || e.from || "0").replace(',', '.'));
-            let b = parseFloat(String(e.bis || e.to || "99999").replace(',', '.'));
-            return { ...e, vParsed: v, bParsed: b };
-        });
-        
-        res[k] = parsedArr;
-        if (k !== String(key)) {
-           res[key] = parsedArr;
-        }
-    }
-    return res;
-}
-
+// --- INITIALER DATEN-LOAD ---
 Promise.all([
    fetch('Abschnitt.json').then(res=>res.json()),
    fetch('AbschnittBAB.json').then(res=>res.json()),
@@ -353,8 +330,11 @@ Promise.all([
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem); 
-    meistereiMap.am = parseDB(amData);
-    meistereiMap.sm = parseDB(smData);
+    
+    // Ohne Umwege direkt einspeisen
+    meistereiMap.am = amData || {};
+    meistereiMap.sm = smData || {};
+    
    document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
    loadWacheSetting();
 }).catch(e => { 
@@ -442,21 +422,18 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
  
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
-    let suchName = autobahn.toUpperCase().replace(/\s/g, ''); let numOnly = autobahn.replace('A', ''); 
+    let suchNummer = autobahn.toUpperCase().replace('A', ''); 
+    
     let passende = referenzPunkte.filter(f => {
        if(!f.properties) return false;
-        let refBez = String(f.properties.Bez || f.properties.STRBEZ || "").toUpperCase().replace(/\s/g, '');
-        let strKl = String(f.properties.STRKL || "").toUpperCase();
-        if(strKl === "B" || strKl === "L" || strKl === "K") return false; 
-        return refBez === suchName || refBez === "BAB" + numOnly || refBez === numOnly || refBez === "A" + numOnly;
+        return String(f.properties.Bez) === suchNummer;
     });
  
    if(passende.length > 0) {
         let candidates = [];
        passende.forEach(p => {
-            let kmProp = p.properties.Kilometer || p.properties.KM_WERT || p.properties.STATION || p.properties.KM || 0;
-            let pKm = parseFloat(String(kmProp).replace(',', '.'));
-           if(!isNaN(pKm)) candidates.push({ pt: p, diff: Math.abs(pKm - km) });
+            let pKm = Number(p.properties.Kilometer || 0);
+            candidates.push({ pt: p, diff: Math.abs(pKm - km) });
         });
  
         if (candidates.length > 0) {
@@ -467,20 +444,17 @@ function holeKoordinateFuerKM(autobahn, km) {
  
             if (topCandidates.length > 1) {
                 let anchorCoords = wachenAnker["Hilden"]; 
-                
                 if (letzteLat !== 0 && letzteLon !== 0) {
                    anchorCoords = [letzteLon, letzteLat];
                 } else if (wachenAnker[aktuelleWache]) {
                    anchorCoords = wachenAnker[aktuelleWache];
                 }
-                
                 let anchorPt = turf.point(anchorCoords);
  
                topCandidates.forEach(c => {
                    let cCoord = turf.getCoord(turf.centroid(c.pt));
                    c.anchorDist = turf.distance(anchorPt, turf.point(cCoord));
                 });
-                
                topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
             }
             
@@ -554,14 +528,15 @@ function findeGemeindeFuerPunkt(pt) {
     
     for (let f of datenGemeinden) {
         try { 
-            if (turf.booleanPointInPolygon(pt, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt"; 
+            // Direkt auf "GN" aus Gemeinden.json zugreifen
+            if (turf.booleanPointInPolygon(pt, f)) return f.properties.GN || "Unbekannt"; 
         } catch(e) {}
     }
     
     try {
         let buffered = turf.buffer(pt, 0.05, {units: 'kilometers'}); 
         for (let f of datenGemeinden) {
-            if (turf.booleanIntersects(buffered, f)) return f.properties.GEN || f.properties.GN || f.properties.NAME || "Unbekannt";
+            if (turf.booleanIntersects(buffered, f)) return f.properties.GN || "Unbekannt";
         }
     } catch(e) {}
  
@@ -586,44 +561,15 @@ function toggleGPS(){
  
 function findeKandidaten(liste, pt, filter, maxDist){
     let hits = {};
-   liste.forEach(f=>{
+    liste.forEach(f=>{
         try { 
             const props = f.properties || {};
-            let strKl = String(props.STRKL || props.StrKl || "").toUpperCase().trim();
-            let strNr = String(props.STRNR || props.StrNr || "").trim();
-            let fallback = String(props.STRBEZ || props.StrBez || props.Str_Kennung || "").toUpperCase().trim();
             
-            fallback = fallback.replace(/\s/g, '');
-            if (fallback.startsWith("BAB")) {
-                strKl = "A";
-                strNr = fallback.replace("BAB", "");
-            } else if (fallback.startsWith("A") && !strKl) {
-                strKl = "A";
-                strNr = fallback.replace("A", "");
-            } else if (fallback.startsWith("B") && !strKl) {
-                strKl = "B";
-                strNr = fallback.replace("B", "");
-            } else if (fallback.startsWith("L") && !strKl) {
-                strKl = "L";
-                strNr = fallback.replace("L", "");
-            } else if (fallback.startsWith("K") && !strKl) {
-                strKl = "K";
-                strNr = fallback.replace("K", "");
-            }
+            // Greift direkt auf STRBEZ zu (steht für Autobahn und Landstraße zur Verfügung)
+            let name = String(props.STRBEZ || "").toUpperCase().replace(/\s/g, '');
+            if (!name) return;
 
-            // BEHEBUNG BUG 1: Führende Nullen löschen, sonst wird aus A59 eine A059, was nirgendwo matcht!
-            strNr = strNr.replace(/^0+/, '');
-
-            let name = strKl + strNr;
-
-            if (!name || name === "") {
-                if (fallback) {
-                    name = fallback;
-                    strKl = name.charAt(0);
-                } else {
-                    return;
-                }
-            }
+            let strKl = name.charAt(0);
 
             if (filter) {
                 if (Array.isArray(filter) && !filter.includes(name)) return;
@@ -689,8 +635,9 @@ async function verarbeiteGPS(lat, lon, acc){
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
         let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
-        let rawAbs = props.ABS || props.ABSNr || props.ABSNR || props.Sk_Kennung || props.ABS_NUMMER || "";
-        let statAnf = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || 0).replace(',', '.'));
+        // Zieht sich direkt die sauberen Werte aus der JSON
+        let rawAbs = props.ABS || props.ABSNr || "";
+        let statAnf = Number(props.STATANF || 0);
         
         let snapped = turf.nearestPointOnLine(sel.feature, pt, {units: 'kilometers'});
         let distAufLinie = snapped.properties.location || 0;
@@ -728,8 +675,6 @@ async function verarbeiteGPS(lat, lon, acc){
                manuellerFokus = strName; 
                berechnen(false);
             } else {
-               // BEHEBUNG BUG 2: Falls Autobahn NICHT in der eigenen Liste steht (oder Out of Bounds ist), 
-               // darf das Script den Output nicht verschlucken!
                document.getElementById("km").value = "";
                document.getElementById("b").innerText = "-";
                document.getElementById("progress").style.width = "0%";
@@ -754,11 +699,11 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName} erkannt</span> | BKM: ${bkmAnzeige} ${techInfo}`;
 
         } else {
-            let abschnitt = props.ABSNR || props.AbsNr || props.Sk_Kennung || props.ABS_NUMMER || "Unbekannt";
-            let ast = props.ABSAST || props.AbsAst || "";
+            let abschnitt = props.ABSNR || props.ABSNr || "Unbekannt";
+            let ast = props.ABSAST || "";
             let astFormatted = ast !== "" ? ` (${ast})` : "";
             
-            let kl = String(props.STRKL || props.StrKl || strName.charAt(0)).toUpperCase();
+            let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
             let icon = (kl === "B") ? "🚙" : "🌲";
             
             htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${astFormatted}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
@@ -769,27 +714,24 @@ async function verarbeiteGPS(lat, lon, acc){
            document.getElementById("liste").innerHTML="";
         }
 
-        // BEHEBUNG BUG 3: GEMEINSAME AM/SM ABFRAGE MIT PARSER DATEN (Kommas repariert)
+        // --- AM/SM ABFRAGE ---
         let m_name = "Nicht in DB", m_addr = "-", m_phone = "-";
         
-        // Suche über Abschnitt oder den Straßen-Name
-        let normRawAbs = String(rawAbs).toUpperCase().replace(/\s/g, '').replace(/^0+/, '');
-        let pot_am = meistereiMap.am[normRawAbs] || meistereiMap.am[strName];
-        
+        let pot_am = meistereiMap.am[rawAbs] || meistereiMap.am[strName];
         if (pot_am) {
             let treffer = pot_am.find(e => {
-                return (aktuellerKM >= e.vParsed && aktuellerKM <= e.bParsed) || (bkm > 0 && bkm >= e.vParsed && bkm <= e.bParsed);
+                return (aktuellerKM >= e.von && aktuellerKM <= e.bis) || (bkm > 0 && bkm >= e.von && bkm <= e.bis);
             });
-            if (treffer) m_name = treffer.am || treffer.name || m_name;
+            if (treffer) m_name = treffer.am; // Wert aus der JSON
         }
 
         if (m_name === "Nicht in DB") {
-            let pot_sm = meistereiMap.sm[normRawAbs] || meistereiMap.sm[strName];
+            let pot_sm = meistereiMap.sm[rawAbs] || meistereiMap.sm[strName];
             if (pot_sm) {
                 let treffer = pot_sm.find(e => {
-                    return (aktuellerKM >= e.vParsed && aktuellerKM <= e.bParsed) || (bkm > 0 && bkm >= e.vParsed && bkm <= e.bParsed);
+                    return (aktuellerKM >= e.von && aktuellerKM <= e.bis) || (bkm > 0 && bkm >= e.von && bkm <= e.bis);
                 });
-                if (treffer) m_name = treffer.sm || treffer.name || m_name;
+                if (treffer) m_name = treffer.am; // Auch in der smDatenbank heißt der Key 'am' (laut Beispiel)
             }
         }
 
@@ -843,11 +785,10 @@ function wechsleFokus(zielName) {
  
 function berechneGoldgriffBKM(meinPunkt, strName){
    if(referenzPunkte.length === 0) return 0;
-    let suchName=strName.toUpperCase().replace(/\s/g,'').replace('A','');
-    let passende=referenzPunkte.filter(f=>{
-       if(!f.properties||!f.properties.Bez) return false;
-        let refBez = String(f.properties.Bez).toUpperCase().replace(/\s/g,'');
-        return refBez === suchName || refBez === "BAB" + suchName || refBez === "A" + suchName;
+    let suchNummer = strName.toUpperCase().replace('A', '');
+    let passende = referenzPunkte.filter(f => {
+       if(!f.properties) return false;
+        return String(f.properties.Bez) === suchNummer;
     });
     
     if(passende.length > 1){
@@ -857,15 +798,15 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         let closest = passende[0];
         let secondClosest = passende[1];
         
-        let refKM1 = parseFloat(String(closest.properties.Kilometer || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
-        let refKM2 = parseFloat(String(secondClosest.properties.Kilometer || secondClosest.properties.KM_WERT || secondClosest.properties.STATION || secondClosest.properties.KM || 0).replace(',','.'));
+        let refKM1 = Number(closest.properties.Kilometer || 0);
+        let refKM2 = Number(secondClosest.properties.Kilometer || 0);
         
         if (refKM2 < refKM1) return refKM1 - closest.tempDist;
         else return refKM1 + closest.tempDist;
         
     } else if (passende.length === 1) {
         let closest = passende[0];
-        let refKM = parseFloat(String(closest.properties.Kilometer || closest.properties.KM_WERT || closest.properties.STATION || closest.properties.KM || 0).replace(',','.'));
+        let refKM = Number(closest.properties.Kilometer || 0);
         let dist = turf.distance(meinPunkt, closest);
         return refKM + dist;
     }
@@ -924,15 +865,14 @@ function berechnen(isManual = false){
         
         let pot_am = meistereiMap.am[a];
         if (pot_am) {
-            // Nutzt jetzt die bereinigten Zahlen aus dem Parser
-            let treffer = pot_am.find(e => km >= e.vParsed && km <= e.bParsed);
-            if (treffer) m_name = treffer.am || treffer.name || m_name;
+            let treffer = pot_am.find(e => km >= e.von && km <= e.bis);
+            if (treffer) m_name = treffer.am;
         }
         if (m_name === "Nicht in DB") {
             let pot_sm = meistereiMap.sm[a];
             if (pot_sm) {
-                let treffer = pot_sm.find(e => km >= e.vParsed && km <= e.bParsed);
-                if (treffer) m_name = treffer.sm || treffer.name || m_name;
+                let treffer = pot_sm.find(e => km >= e.von && km <= e.bis);
+                if (treffer) m_name = treffer.am;
             }
         }
         if (m_name !== "Nicht in DB") {
@@ -947,21 +887,8 @@ function berechnen(isManual = false){
 }
  
 function holeNKHtml(props, distMeter = 0, isMap = false) {
-    let vnk = props.VNK || props.Vnk || props.NETZKNOTEN_VON || "-";
-    let vb = props.VB || props.Vb || props.KNOTEN_VON_BUCHSTABE || "-";
-    let bnk = props.BNK || props.Bnk || props.NETZKNOTEN_NACH || "-";
-    let bb = props.BB || props.Bb || props.KNOTEN_NACH_BUCHSTABE || "-";
-    
-    let rawAbs = props.ABSNr || props.ABSNR || props.ABS || props.Sk_Kennung || "";
-    if ((vnk === "-" || bnk === "-") && rawAbs.length >= 15) {
-        let absStr = String(rawAbs).padEnd(16, ' ');
-        vnk = absStr.substring(0, 7).trim() || "-";
-        vb = absStr.substring(7, 8).trim() || "-";
-        bnk = absStr.substring(8, 15).trim() || "-";
-        bb = absStr.substring(15, 16).trim() || "-";
-    }
- 
-    let stationBase = parseFloat(String(props.STATANF || props.StatAnf || props.STATION || "0").replace(',', '.'));
+    let rawAbs = props.ABS || props.ABSNr || "";
+    let stationBase = Number(props.STATANF || 0);
     let stationKM = stationBase + (distMeter / 1000); 
  
     let debugInfo = "";
@@ -970,10 +897,6 @@ function holeNKHtml(props, distMeter = 0, isMap = false) {
     return `
         ${debugInfo}
         <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
-           <tr><td style="border:none; padding:1px 0;">von Knoten A:</td><td style="border:none; padding:1px 0; text-align:right;"><b>${vnk}</b></td></tr>
-           <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${vb}</b></td></tr>
-           <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">nach B:</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${bnk}</b></td></tr>
-           <tr><td style="border:none; padding:1px 0; color:var(--text-secondary);">Buchstabe:</td><td style="border:none; padding:1px 0; text-align:right; color:var(--text-secondary);"><b>${bb}</b></td></tr>
            <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
         </table>
     `;
@@ -1035,14 +958,7 @@ function calculateNKMap() {
  
     if(best) {
         let props = best.properties || {};
-        let strKl = String(props.STRKL || props.StrKl || "").toUpperCase().trim();
-        let strNr = String(props.STRNR || props.StrNr || "").trim();
-        let strName = (strKl + strNr).toUpperCase().replace(/\s/g,'');
-        
-        if (!strName || strName === "") {
-             let fallback = props.STRBEZ || props.StrBez || props.Str_Kennung || "Unbekannte Straße";
-             strName = String(fallback).toUpperCase();
-        }
+        let strName = String(props.STRBEZ || "Unbekannte Straße").toUpperCase().replace(/\s/g,'');
         
         let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         let distAufLinieMeter = snapped.properties.location || 0;
