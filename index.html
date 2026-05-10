@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v2.1 (Full AM DB)</title>
+<title>Autobahn Tool v2.2 (AM Logic Fix)</title>
  
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
  
@@ -252,6 +252,7 @@ const datenWachen = {
 const meistereiAdressen = {
     "AM Weilerswist": "Kastanienweg 4, 53919 Weilerswist",
     "AM Titz": "An den Teichen 1, 52445 Titz",
+    "AM Sankt Augustin": "Frankfurter Str. 140, 53757 Sankt Augustin",
     "AM St. Augustin": "Frankfurter Str. 140, 53757 Sankt Augustin",
     "AM Rheinberg": "Moerser Str. 123, 47495 Rheinberg",
     "AM Remscheid": "Talsperre 23, 42859 Remscheid",
@@ -284,6 +285,7 @@ const meistereiAdressen = {
 const meistereiTelefon = {
     "AM Weilerswist": "02254 601410",
     "AM Titz": "-",
+    "AM Sankt Augustin": "02241 127250",
     "AM St. Augustin": "02241 127250",
     "AM Rheinberg": "02843 903640",
     "AM Remscheid": "02191 469740",
@@ -628,45 +630,78 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// --- HELFERFUNKTION: KORREKTE AM/SM ERMITTLUNG ---
+// --- HELFERFUNKTION: KORREKTE AM/SM ERMITTLUNG (BUGFIX: Trennung BKM vs Stationierung) ---
 function ermittleAM(rawAbs, strName, statKm, bkm) {
     let rawAbsClean = String(rawAbs).toUpperCase().trim();
-    
-    // Generiert die Gegenrichtung für 16-stellige Netzknoten (8 + 8)
     let revAbs = rawAbsClean.length === 16 ? rawAbsClean.substring(8, 16) + rawAbsClean.substring(0, 8) : "";
-    
-    function check(db, key) {
+    let strClean = String(strName).toUpperCase().replace(/\s/g, ''); 
+
+    // isBkmMode verhindert, dass kleine Stationierungen (z.B. KM 2,5) versehentlich in große BKM-Bereiche (0-100) rutschen!
+    function check(db, key, isBkmMode) {
         if (!db[key]) return null;
         let hit = db[key].find(e => {
-            // Falls Kommas in der JSON enthalten sind, umwandeln
             let v = typeof e.von === 'string' ? Number(e.von.replace(',', '.')) : Number(e.von);
             let b = typeof e.bis === 'string' ? Number(e.bis.replace(',', '.')) : Number(e.bis);
             
-            // Prüft, ob der BKM ODER die kleine Stationierung in das hinterlegte Intervall passen
-            return (bkm > 0 && bkm >= v && bkm <= b) || (statKm >= v && statKm <= b);
+            if (isBkmMode) {
+                return bkm > 0 && bkm >= v && bkm <= b;
+            } else {
+                return statKm >= v && statKm <= b;
+            }
         });
         return hit ? hit.am : null;
     }
 
     let result = "Nicht in DB";
     
-    // 1. Suche über Abschnittsnummer (inklusive Gegenrichtung)
+    // 1. Suche über exakte Abschnittsnummer (Erlaubt NUR kleine Stationierungswerte!)
     if (rawAbsClean !== "") {
-        result = check(meistereiMap.am, rawAbsClean) 
-              || check(meistereiMap.am, revAbs) 
-              || check(meistereiMap.sm, rawAbsClean) 
-              || check(meistereiMap.sm, revAbs) 
+        result = check(meistereiMap.am, rawAbsClean, false) 
+              || check(meistereiMap.am, revAbs, false) 
+              || check(meistereiMap.sm, rawAbsClean, false) 
+              || check(meistereiMap.sm, revAbs, false) 
               || "Nicht in DB";
     }
     
-    // 2. Fallback: Suche über Autobahn-Namen
-    if (result === "Nicht in DB" && strName !== "") {
-        result = check(meistereiMap.am, strName) 
-              || check(meistereiMap.sm, strName) 
+    // 2. Fallback: Aggressive Suche über Autobahn-Namen (Erlaubt NUR große BKM-Werte!)
+    if (result === "Nicht in DB" && strClean !== "") {
+        let altName = strClean.replace("A", "A "); 
+        result = check(meistereiMap.am, strClean, true) 
+              || check(meistereiMap.sm, strClean, true) 
+              || check(meistereiMap.am, altName, true)
+              || check(meistereiMap.sm, altName, true)
               || "Nicht in DB";
     }
     
     return result;
+}
+
+// --- HELFERFUNKTION: ROBUSTE ADRESSABFRAGE (Fuzzy Search) ---
+function holeAdresseUndTelefon(m_name) {
+    if (m_name === "Nicht in DB") return { addr: "-", phone: "-" };
+    
+    // Normalisiere den Namen: Macht aus "Autobahnmeisterei Weilerswist " -> "AM Weilerswist"
+    let normName = String(m_name).replace(/Autobahnmeisterei/gi, "AM").replace(/\s+/g, " ").trim();
+    
+    // Zuerst exakter Check
+    let addr = meistereiAdressen[normName] || meistereiAdressen[m_name];
+    let phone = meistereiTelefon[normName] || meistereiTelefon[m_name];
+    
+    // Wenn immer noch nicht gefunden, suche grob im "Adressbuch" (z.B. falls Name nur "Weilerswist" ist)
+    if (!addr) {
+        for (let key in meistereiAdressen) {
+            if (normName.includes(key) || key.includes(normName)) {
+                addr = meistereiAdressen[key];
+                phone = meistereiTelefon[key];
+                break;
+            }
+        }
+    }
+    
+    return {
+        addr: addr || "Adresse nicht hinterlegt",
+        phone: phone || "Telefon nicht hinterlegt"
+    };
 }
  
 async function verarbeiteGPS(lat, lon, acc){
@@ -793,14 +828,13 @@ async function verarbeiteGPS(lat, lon, acc){
             document.getElementById("liste").innerHTML="";
         }
 
-        // --- AM/SM ERGEBNIS ANZEIGEN ---
+        // --- ZUWEISUNG MIT DEM NEUEN DOLMETSCHER ---
         let m_name = ermittleAM(rawAbs, strName, aktuellerKM, bkm);
-        let m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-        let m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        let kontakte = holeAdresseUndTelefon(m_name);
         
         document.getElementById("m").innerText = m_name;
-        document.getElementById("m_address").innerText = m_addr;
-        document.getElementById("m_phone").innerText = m_phone;
+        document.getElementById("m_address").innerText = kontakte.addr;
+        document.getElementById("m_phone").innerText = kontakte.phone;
  
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
@@ -918,7 +952,6 @@ function berechnen(isManual = false){
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
  
-    // --- MANUELLE EINGABE FINDET NUN AUCH DEN ABSCHNITT (OHNE GPS!) ---
     if (isManual) {
         let rawAbs = "";
         let aktuellerKM = 0;
@@ -926,7 +959,6 @@ function berechnen(isManual = false){
         if (coords) {
             let pt = turf.point([coords[0], coords[1]]);
             let alleDaten = datenBAB.concat(datenLand);
-            // Sucht im Umkreis der errechneten Koordinate nach der Achse
             let hits = findeKandidaten(alleDaten, pt, null, 0.5); 
             let matchedFeature = hits.find(h => h.name === a);
             
@@ -939,13 +971,13 @@ function berechnen(isManual = false){
             }
         }
         
+        // --- ZUWEISUNG MIT DEM NEUEN DOLMETSCHER ---
         let m_name = ermittleAM(rawAbs, a, aktuellerKM, km);
-        let m_addr = meistereiAdressen[m_name] || "Adresse nicht hinterlegt";
-        let m_phone = meistereiTelefon[m_name] || "Telefon nicht hinterlegt";
+        let kontakte = holeAdresseUndTelefon(m_name);
         
         document.getElementById("m").innerText = m_name;
-        document.getElementById("m_address").innerText = m_addr;
-        document.getElementById("m_phone").innerText = m_phone;
+        document.getElementById("m_address").innerText = kontakte.addr;
+        document.getElementById("m_phone").innerText = kontakte.phone;
     }
 }
  
