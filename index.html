@@ -1023,4 +1023,168 @@ function calculateNKMap() {
         let props = best.properties || {};
         let strName = String(props.STRBEZ || "Unbekannte Straße").toUpperCase().replace(/\s/g,'');
         
-        let snapped = turf.nearestPointOnLine(best, pt, {
+        let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
+        let distAufLinieMeter = snapped.properties.location || 0;
+        let snappedCoord = turf.getCoord(snapped);
+        
+        mapLineLayer = L.layerGroup().addTo(map);
+ 
+       alleImUmkreis.forEach(feat => {
+            if(feat !== best) {
+               L.geoJSON(feat, {
+                   style: { color: '#dc3545', weight: 2.5, opacity: 0.6 }
+               }).addTo(mapLineLayer);
+            }
+        });
+ 
+       L.geoJSON(best, {
+            style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
+       }).addTo(mapLineLayer);
+        
+        let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
+        
+       resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
+            <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName}</strong>
+            <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
+           ${htmlZettel}
+        </div>`;
+        
+       resDiv.style.display = 'block';
+        
+        setTimeout(() => { 
+           map.invalidateSize(); 
+           map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
+        }, 20);
+ 
+    } else {
+       resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 150m Umkreis gefunden. Bitte näher zoomen!</p>`;
+       resDiv.style.display = 'block';
+        setTimeout(() => { map.invalidateSize(); }, 20);
+    }
+}
+ 
+// --- WEG ZEIT RECHNER FUNKTIONEN ---
+function toggleSpeedMode() {
+    let mode = document.querySelector('input[name="speed_mode"]:checked').value;
+    if(mode === 'live') {
+       alert("Hinweis: Echte Google Maps Live-Verkehrsdaten erfordern eine kostenpflichtige API-Anbindung (Google Directions API). Dies kann clientseitig nicht verarbeitet werden. Die Funktion dient hier als Platzhalter und nutzt vorerst einen Schätzwert von 120 km/h.");
+       document.getElementById('speed').value = "120";
+       document.getElementById('speed').disabled = true;
+    } else {
+       document.getElementById('speed').value = "";
+       document.getElementById('speed').disabled = false;
+    }
+}
+ 
+function updateWzUI() {
+    let a = document.getElementById("wz_autobahn").value;
+    if(!a) return;
+    let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
+    let wachenListen = datenWachen[aktuelleWache].listen || {};
+    
+    let sel = document.getElementById("wz_richtung");
+    sel.innerHTML = "";
+   if(wachenRichtungen[a]) {
+       wachenRichtungen[a].forEach(r => sel.add(new Option(r, r)));
+    }
+    
+    let tbody = document.getElementById("wz_liste");
+    tbody.innerHTML = "";
+   if(wachenListen[a]) {
+       wachenListen[a].forEach(e => {
+            let tr = document.createElement("tr");
+           tr.innerHTML = `<td>${e[0]}</td><td>${e[1]}</td><td>${e[2]}</td>`;
+           tbody.appendChild(tr);
+        });
+    }
+}
+ 
+function startWegZeit() {
+    wzStartKm = parseFloat(document.getElementById("start_km").value.replace(',','.'));
+    wzSpeed = parseFloat(document.getElementById("speed").value);
+    let dirStr = document.getElementById("wz_richtung").value;
+    
+    let delayStr = document.getElementById("wz_delay").value.replace(',','.');
+    let delayMin = parseFloat(delayStr) || 0;
+    
+   if(isNaN(wzStartKm) || isNaN(wzSpeed)) {
+       alert("Bitte Start-KM und Geschwindigkeit korrekt eingeben.");
+        return;
+    }
+    
+    wzDir = dirStr.includes("(+)") ? 1 : -1;
+    
+    let delayMs = delayMin * 60 * 1000;
+    wzStartTime = Date.now() - delayMs;
+    
+   document.getElementById("btn_wz_start").style.display = "none";
+   document.getElementById("btn_wz_stop").style.display = "block";
+   document.getElementById("wz_result_box").style.display = "block";
+    
+   document.getElementById("wz_autobahn").disabled = true;
+   document.getElementById("wz_richtung").disabled = true;
+   document.getElementById("start_km").disabled = true;
+   document.getElementById("wz_delay").disabled = true;
+   document.getElementById("speed").disabled = true;
+   document.querySelectorAll('input[name="speed_mode"]').forEach(r => r.disabled = true);
+    
+    if(wzInterval) clearInterval(wzInterval);
+    wzInterval = setInterval(tickWegZeit, 1000);
+    tickWegZeit(); 
+}
+ 
+function stopWegZeit() {
+    if(wzInterval) clearInterval(wzInterval);
+    
+   document.getElementById("btn_wz_start").style.display = "block";
+   document.getElementById("btn_wz_stop").style.display = "none";
+    
+   document.getElementById("wz_autobahn").disabled = false;
+   document.getElementById("wz_richtung").disabled = false;
+   document.getElementById("start_km").disabled = false;
+   document.getElementById("wz_delay").disabled = false;
+    
+    let mode = document.querySelector('input[name="speed_mode"]:checked').value;
+    if(mode === 'manual') document.getElementById("speed").disabled = false;
+   document.querySelectorAll('input[name="speed_mode"]').forEach(r => r.disabled = false);
+}
+ 
+function tickWegZeit() {
+    let elapsedMs = Date.now() - wzStartTime;
+    let elapsedHours = elapsedMs / (1000 * 60 * 60);
+    let elapsedMin = Math.floor(elapsedMs / (1000 * 60));
+    let elapsedSec = Math.floor((elapsedMs / 1000) % 60);
+    
+    let currentKm = wzStartKm + (wzDir * (wzSpeed * elapsedHours));
+    
+   document.getElementById("wz_aktuell_km").innerText = currentKm.toFixed(3).replace('.',',');
+   document.getElementById("wz_zeit").innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
+    
+   highlightWzList(currentKm);
+}
+ 
+function highlightWzList(currentKm) {
+    let rows = document.querySelectorAll("#wz_liste tr");
+    let closestRow = null;
+    let minDiff = Infinity;
+    
+    rows.forEach(row => {
+       row.classList.remove('wz-highlight');
+        let kmCell = row.cells[2].innerText;
+        let rowKm = parseFloat(kmCell.replace(',', '.'));
+       if(!isNaN(rowKm)) {
+            let diff = Math.abs(currentKm - rowKm);
+            if(diff < minDiff) {
+               minDiff = diff;
+               closestRow = row;
+            }
+        }
+    });
+    
+    if(closestRow) {
+       closestRow.classList.add('wz-highlight');
+    }
+}
+</script>
+</body>
+</html>
