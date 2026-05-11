@@ -47,7 +47,7 @@ button.active { background: #dc3545; }
 .btn-action { background: #6c757d; margin-top: 8px; }
 .btn-action:hover { filter: brightness(1.1); }
  
-.table-container { display: flex; align-items: stretch; gap: 6px; margin-top: 15px; }
+.table-container { display: flex; align-items: stretch; gap: 6px; margin-top: 10px; }
 .table-wrapper { flex: 1; min-width: 0; overflow-x: auto; }
 table { width: 100%; margin-top: 0; border-collapse: collapse; font-size: 0.85em; }
 th, td { border: 1px solid var(--input-border); padding: 8px 5px; text-align: left; vertical-align: middle; }
@@ -135,14 +135,18 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
  
     <div class="result">
-       <p><strong>Bereich:</strong> <span id="b">-</span></p>
+       <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
        <p><strong>Gemeinde:</strong> <span id="g">-</span></p>
        <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
        <p><strong>Adresse:</strong> <span id="m_address">-</span></p>
        <p><strong>Telefon:</strong> <span id="m_phone">-</span></p>
-        <div class="bar"><div id="progress" class="fill"></div></div>
+        <div class="bar" id="progress-container"><div id="progress" class="fill"></div></div>
     </div>
  
+    <div id="bereich-info" style="text-align:center; font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; font-weight: bold; display: none;">
+        Bereich: <span id="b">-</span>
+    </div>
+
     <div class="table-container">
         <div id="dir-plus" class="direction-arrow"><span class="dir-text" id="dir-plus-text"></span><span class="arrow-icon">⬇</span></div>
         <div class="table-wrapper">
@@ -333,7 +337,7 @@ let bkmHistorie = [];
 let manuellerFokus = null;
 let map = null;
 let mapLineLayer = null; 
-let mapMode = 'NK'; // NEU: Status-Variable für Karte (NK oder KM)
+let mapMode = 'NK';
 let wzInterval = null;
 let wzStartTime = 0;
 let wzStartKm = 0;
@@ -521,16 +525,19 @@ function updateUI() {
     
     let leftArrow = document.getElementById("dir-plus");
     let rightArrow = document.getElementById("dir-minus");
+    let bereichDiv = document.getElementById("bereich-info");
     let tbody = document.getElementById("liste");
     tbody.innerHTML = "";
  
    if(!wachenGrenzen[a]) {
        document.getElementById("b").innerText = "-";
+       bereichDiv.style.display = "none";
        leftArrow.style.display = "none"; rightArrow.style.display = "none";
         return;
     }
  
    document.getElementById("b").innerText = wachenGrenzen[a][0].toFixed(3).replace('.',',') + " - " + wachenGrenzen[a][1].toFixed(3).replace('.',',');
+   bereichDiv.style.display = "block";
  
    if(wachenRichtungen[a]) {
        document.getElementById("dir-plus-text").innerText = wachenRichtungen[a][0] || "";
@@ -726,11 +733,10 @@ async function verarbeiteGPS(lat, lon, acc){
  
         const props = sel.feature.properties || {};
         const strName = sel.name; 
-        let htmlOutput = "";
         
         let accStr = `±${Math.round(acc)}m`;
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
-        let techInfo = `<div style="margin-top:6px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
+        let techInfo = `<div style="margin-top:0px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
         let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
         let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
@@ -774,7 +780,6 @@ async function verarbeiteGPS(lat, lon, acc){
                 berechnen(false);
             } else {
                 document.getElementById("km").value = "";
-                document.getElementById("b").innerText = "-";
                 document.getElementById("progress").style.width = "0%";
                 document.getElementById("liste").innerHTML = "";
             }
@@ -791,10 +796,11 @@ async function verarbeiteGPS(lat, lon, acc){
                 }
             }
 
-            let bkmAnzeige = bkm > 0 ? bkm.toFixed(3) : "-";
+            let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
             if(dirText) bkmAnzeige += ` | <strong>${dirText}</strong>`;
             
-            htmlOutput = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName} erkannt</span> | BKM: ${bkmAnzeige} ${techInfo}`;
+            // In die neue Result Box schreiben!
+            document.getElementById("erfasste-strasse").innerHTML = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName}</span> | BKM: ${bkmAnzeige}`;
 
         } else {
             let abschnitt = props.ABSNR || props.ABSNr || "Unbekannt";
@@ -804,10 +810,10 @@ async function verarbeiteGPS(lat, lon, acc){
             let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
             let icon = (kl === "B") ? "🚙" : "🌲";
             
-            htmlOutput = `<span style="color:orange;font-weight:bold;">${icon} ${strName} erkannt</span><br><small>Abschnitt: <b>${abschnitt}${astFormatted}</b> | KM: <b>${aktuellerKM.toFixed(3)}</b></small> ${techInfo}`;
+            // In die neue Result Box schreiben!
+            document.getElementById("erfasste-strasse").innerHTML = `<span style="color:orange;font-weight:bold;">${icon} ${strName}</span> | Abs: ${abschnitt}${astFormatted} | KM: ${aktuellerKM.toFixed(3).replace('.',',')}`;
             
             document.getElementById("km").value = "";
-            document.getElementById("b").innerText="-";
             document.getElementById("progress").style.width="0%";
             document.getElementById("liste").innerHTML="";
         }
@@ -820,6 +826,8 @@ async function verarbeiteGPS(lat, lon, acc){
         document.getElementById("m_address").innerText = kontakte.addr;
         document.getElementById("m_phone").innerText = kontakte.phone;
  
+        // Den unteren grauen Kasten nur noch für Alternativen & Technik nutzen
+        let htmlOutput = techInfo;
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
@@ -943,6 +951,9 @@ function berechnen(isManual = false){
         let rawAbs = "";
         let distMeter = 0;
         
+        // Manuelle Eingabe im UI aktualisieren
+        document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>`;
+
         if (coords) {
             let pt = turf.point([coords[0], coords[1]]);
             let alleDaten = datenBAB.concat(datenLand);
@@ -1086,6 +1097,15 @@ function calculateMapResult() {
         } 
         else if (mapMode === 'KM') {
             let bkm = 0;
+            let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
+            let abschnitt = props.ABSNR || props.ABSNr || "Unbekannt";
+            let ast = props.ABSAST || "";
+            let astFormatted = ast !== "" ? ` (${ast})` : "";
+            
+            let snappedKm = turf.nearestPointOnLine(best, pt, {units: 'kilometers'});
+            let distMeter = (snappedKm.properties.location || 0) * 1000;
+            let aktuellerKM = statAnf + (distMeter/1000);
+
             if (strName.startsWith("A")) {
                 bkm = berechneGoldgriffBKM(pt, strName);
             }
@@ -1111,8 +1131,6 @@ function calculateMapResult() {
             document.getElementById("g").innerText = aktuelleGemeinde;
             
             // Exakte Meisterei/Abschnitt basierend auf Karten-Nadel
-            let snappedKm = turf.nearestPointOnLine(best, pt, {units: 'kilometers'});
-            let distMeter = (snappedKm.properties.location || 0) * 1000;
             let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
             let m_name = ermittleAM(rawAbs, distMeter);
             let kontakte = holeAdresseUndTelefon(m_name);
@@ -1122,7 +1140,7 @@ function calculateMapResult() {
             document.getElementById("m_phone").innerText = kontakte.phone;
             
             let drop = document.getElementById("autobahn");
-            if (Array.from(drop.options).some(o=>o.value===strName)) {
+            if (strName.startsWith("A") && Array.from(drop.options).some(o=>o.value===strName)) {
                 drop.value = strName;
                 document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
                 manuellerFokus = strName;
@@ -1135,11 +1153,18 @@ function calculateMapResult() {
                     document.getElementById("progress").style.width = "0%";
                 }
                 
-                updateUI(); // Tabellen und Listen neu aufbauen
+                let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
+                document.getElementById("erfasste-strasse").innerHTML = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | BKM: ${bkmAnzeige}`;
+                
+                updateUI();
             } else {
                 // Landstraße oder nicht in Datenbank-Grenzen
+                let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
+                let icon = (kl === "B") ? "🚙" : "🌲";
+                
+                document.getElementById("erfasste-strasse").innerHTML = `<span style="color:orange;font-weight:bold;">${icon} ${strName}</span> | Abs: ${abschnitt}${astFormatted} | KM: ${aktuellerKM.toFixed(3).replace('.',',')}`;
+                
                 document.getElementById("km").value = "";
-                document.getElementById("b").innerText = "-";
                 document.getElementById("progress").style.width = "0%";
                 document.getElementById("liste").innerHTML = "";
             }
