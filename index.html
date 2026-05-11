@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v2.2 (AM Logic Fix)</title>
+<title>Autobahn Tool v2.4 (Mikro-Stationierung Fix)</title>
  
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
  
@@ -630,85 +630,63 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// --- HELFERFUNKTION: KORREKTE AM/SM ERMITTLUNG (BUGFIX: Trennung BKM vs Stationierung) ---
-function ermittleAM(rawAbs, strName, statKm, bkm) {
+// --- HELFERFUNKTION: KORREKTE AM/SM ERMITTLUNG ÜBER MIKRO-STATIONIERUNG (METER) ---
+function ermittleAM(rawAbs, distMeter) {
     let rawAbsClean = String(rawAbs).toUpperCase().trim();
+    
+    // Prüft auch die Gegenrichtung, falls die JSON nur für eine Richtung exportiert wurde
     let revAbs = rawAbsClean.length === 16 ? rawAbsClean.substring(8, 16) + rawAbsClean.substring(0, 8) : "";
-    let strClean = String(strName).toUpperCase().replace(/\s/g, ''); 
 
-    // isBkmMode verhindert, dass kleine Stationierungen (z.B. KM 2,5) versehentlich in große BKM-Bereiche (0-100) rutschen!
-    function check(db, key, isBkmMode) {
+    function check(db, key) {
         if (!db[key]) return null;
         let hit = db[key].find(e => {
-            let v = typeof e.von === 'string' ? Number(e.von.replace(',', '.')) : Number(e.von);
-            let b = typeof e.bis === 'string' ? Number(e.bis.replace(',', '.')) : Number(e.bis);
+            // Holt die Meter aus der Original-JSON (z.B. von: 0, bis: 184)
+            let v = Number(String(e.von).replace(',', '.'));
+            let b = Number(String(e.bis).replace(',', '.'));
             
-            if (isBkmMode) {
-                return bkm > 0 && bkm >= v && bkm <= b;
-            } else {
-                return statKm >= v && statKm <= b;
-            }
+            // Puffer von 5 Metern für minimale GPS/Turf-Rundungsfehler am Rand der Knoten
+            return distMeter >= (v - 5) && distMeter <= (b + 5);
         });
         return hit ? hit.am : null;
     }
 
-    let result = "Nicht in DB";
-    
-    // 1. Suche über exakte Abschnittsnummer (Erlaubt NUR kleine Stationierungswerte!)
-    if (rawAbsClean !== "") {
-        result = check(meistereiMap.am, rawAbsClean, false) 
-              || check(meistereiMap.am, revAbs, false) 
-              || check(meistereiMap.sm, rawAbsClean, false) 
-              || check(meistereiMap.sm, revAbs, false) 
+    // Sucht AUSSCHLIESSLICH über die 16-stellige Abschnittsnummer und vergleicht die Meter!
+    let result = check(meistereiMap.am, rawAbsClean) 
+              || check(meistereiMap.am, revAbs) 
+              || check(meistereiMap.sm, rawAbsClean) 
+              || check(meistereiMap.sm, revAbs) 
               || "Nicht in DB";
-    }
-    
-    // 2. Fallback: Aggressive Suche über Autobahn-Namen (Erlaubt NUR große BKM-Werte!)
-    if (result === "Nicht in DB" && strClean !== "") {
-        let altName = strClean.replace("A", "A "); 
-        result = check(meistereiMap.am, strClean, true) 
-              || check(meistereiMap.sm, strClean, true) 
-              || check(meistereiMap.am, altName, true)
-              || check(meistereiMap.sm, altName, true)
-              || "Nicht in DB";
-    }
     
     return result;
 }
 
-// --- HELFERFUNKTION: ROBUSTE ADRESSABFRAGE (Fuzzy Search) ---
+// --- HELFERFUNKTION: ROBUSTE ADRESSABFRAGE (Fuzzy Search Fix) ---
 function holeAdresseUndTelefon(m_name) {
-    if (m_name === "Nicht in DB") return { addr: "-", phone: "-" };
+    if (!m_name || m_name === "Nicht in DB") return { addr: "-", phone: "-" };
     
-    // Normalisiere den Namen: Macht aus "Autobahnmeisterei Weilerswist " -> "AM Weilerswist"
-    let normName = String(m_name).replace(/Autobahnmeisterei/gi, "AM").replace(/\s+/g, " ").trim();
+    // Entfernt alle Behörden-Wörter und vergleicht nur noch die nackte Stadt (z.B. "weilerswist" == "weilerswist")
+    let searchName = String(m_name).toLowerCase().replace(/autobahnmeisterei|straßenmeisterei|meisterei|am|sm/g, "").trim();
     
-    // Zuerst exakter Check
-    let addr = meistereiAdressen[normName] || meistereiAdressen[m_name];
-    let phone = meistereiTelefon[normName] || meistereiTelefon[m_name];
+    let matchKey = Object.keys(meistereiAdressen).find(key => {
+        let cleanKey = key.toLowerCase().replace(/am|sm/g, "").trim();
+        return cleanKey === searchName || cleanKey.includes(searchName) || searchName.includes(cleanKey);
+    });
     
-    // Wenn immer noch nicht gefunden, suche grob im "Adressbuch" (z.B. falls Name nur "Weilerswist" ist)
-    if (!addr) {
-        for (let key in meistereiAdressen) {
-            if (normName.includes(key) || key.includes(normName)) {
-                addr = meistereiAdressen[key];
-                phone = meistereiTelefon[key];
-                break;
-            }
-        }
+    if (matchKey) {
+        return {
+            addr: meistereiAdressen[matchKey] || "Adresse nicht hinterlegt",
+            phone: meistereiTelefon[matchKey] || "Telefon nicht hinterlegt"
+        };
     }
-    
-    return {
-        addr: addr || "Adresse nicht hinterlegt",
-        phone: phone || "Telefon nicht hinterlegt"
-    };
+    return { addr: "Adresse nicht hinterlegt", phone: "Telefon nicht hinterlegt" };
 }
  
 async function verarbeiteGPS(lat, lon, acc){
     letzteLat = lat; letzteLon = lon; letzteAcc = acc;
     const pt = turf.point([lon, lat]);
     
-    document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+    let aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
+    document.getElementById("g").innerText = aktuelleGemeinde;
     
     let alleDaten = datenBAB.concat(datenLand);
  
@@ -754,9 +732,12 @@ async function verarbeiteGPS(lat, lon, acc){
         let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
         let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
         let snapped = turf.nearestPointOnLine(sel.feature, pt, {units: 'kilometers'});
-        let distAufLinie = snapped.properties.location || 0;
-        let aktuellerKM = statAnf + distAufLinie; 
- 
+        
+        // --- DER WICHTIGE TEIL FÜR DEINE ORIGINALDATEN ---
+        let distAufLinieKm = snapped.properties.location || 0;
+        let distMeter = distAufLinieKm * 1000; // Wandelt Turf-Kilometer in die Meter deiner JSON um!
+        
+        let aktuellerKM = statAnf + distAufLinieKm; 
         let bkm = 0;
         
         if (strName.startsWith("A")) {
@@ -828,8 +809,8 @@ async function verarbeiteGPS(lat, lon, acc){
             document.getElementById("liste").innerHTML="";
         }
 
-        // --- ZUWEISUNG MIT DEM NEUEN DOLMETSCHER ---
-        let m_name = ermittleAM(rawAbs, strName, aktuellerKM, bkm);
+        // AM ZUWEISUNG ERFOLGT JETZT NUR NOCH ÜBER DEN ABSCHNITT UND DIE METER!
+        let m_name = ermittleAM(rawAbs, distMeter);
         let kontakte = holeAdresseUndTelefon(m_name);
         
         document.getElementById("m").innerText = m_name;
@@ -843,13 +824,13 @@ async function verarbeiteGPS(lat, lon, acc){
             
             andereImKreuz.forEach(k => {
                 let btnText = "";
-                let distMeter = Math.round(k.dist * 1000);
+                let distMeterCross = Math.round(k.dist * 1000);
                 if (Array.from(document.getElementById("autobahn").options).some(o=>o.value===k.name)) {
                    let k_bkm = berechneGoldgriffBKM(pt, k.name);
-                   btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)}) [${distMeter}m]`;
+                   btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)}) [${distMeterCross}m]`;
                 } else {
                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
-                   btnText = `${k_icon} ${k.name} [${distMeter}m]`;
+                   btnText = `${k_icon} ${k.name} [${distMeterCross}m]`;
                 }
                 htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
             });
@@ -939,9 +920,12 @@ function berechnen(isManual = false){
     }
  
     let coords = holeKoordinateFuerKM(a, km);
+    let aktuelleGemeinde = "-";
+    
     if(coords) {
         let pt = turf.point([coords[0], coords[1]]);
-        document.getElementById("g").innerText = findeGemeindeFuerPunkt(pt);
+        aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
+        document.getElementById("g").innerText = aktuelleGemeinde;
     } else {
         document.getElementById("g").innerText = "-";
     }
@@ -954,7 +938,7 @@ function berechnen(isManual = false){
  
     if (isManual) {
         let rawAbs = "";
-        let aktuellerKM = 0;
+        let distMeter = 0;
         
         if (coords) {
             let pt = turf.point([coords[0], coords[1]]);
@@ -965,14 +949,13 @@ function berechnen(isManual = false){
             if (matchedFeature) {
                 let props = matchedFeature.feature.properties || {};
                 rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
-                let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
                 let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
-                aktuellerKM = statAnf + (snapped.properties.location || 0);
+                let distAufLinieKm = snapped.properties.location || 0;
+                distMeter = distAufLinieKm * 1000;
             }
         }
         
-        // --- ZUWEISUNG MIT DEM NEUEN DOLMETSCHER ---
-        let m_name = ermittleAM(rawAbs, a, aktuellerKM, km);
+        let m_name = ermittleAM(rawAbs, distMeter);
         let kontakte = holeAdresseUndTelefon(m_name);
         
         document.getElementById("m").innerText = m_name;
