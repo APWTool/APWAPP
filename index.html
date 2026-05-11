@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Autobahn Tool v2.4</title>
  
-
  
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007BFF">
@@ -909,4 +908,374 @@ function berechnen(isManual = false){
         let currentGrenzen = datenWachen[aktuelleWache].grenzen[a];
         if (currentGrenzen) {
             let minKm = Math.min(...currentGrenzen);
-            let maxKm =
+            let maxKm = Math.max(...currentGrenzen);
+            
+            if (km < minKm || km > maxKm) {
+                for (let wache in datenWachen) {
+                   let g = datenWachen[wache].grenzen[a];
+                    if (g && km >= Math.min(...g) && km <= Math.max(...g)) {
+                       wechsleWache(wache, true, a);
+                       return;
+                    }
+                }
+            }
+        }
+    }
+ 
+    let coords = holeKoordinateFuerKM(a, km);
+    let aktuelleGemeinde = "-";
+    
+    if(coords) {
+        let pt = turf.point([coords[0], coords[1]]);
+        aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
+        document.getElementById("g").innerText = aktuelleGemeinde;
+    } else {
+        document.getElementById("g").innerText = "-";
+    }
+ 
+    let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
+    if(wachenGrenzen[a]) {
+        let percent = ((km - wachenGrenzen[a][0]) / (wachenGrenzen[a][1] - wachenGrenzen[a][0])) * 100;
+        document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
+    }
+ 
+    if (isManual) {
+        let rawAbs = "";
+        let distMeter = 0;
+        
+        if (coords) {
+            let pt = turf.point([coords[0], coords[1]]);
+            let alleDaten = datenBAB.concat(datenLand);
+            let hits = findeKandidaten(alleDaten, pt, null, 0.5); 
+            let matchedFeature = hits.find(h => h.name === a);
+            
+            if (matchedFeature) {
+                let props = matchedFeature.feature.properties || {};
+                rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
+                let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
+                let distAufLinieKm = snapped.properties.location || 0;
+                distMeter = distAufLinieKm * 1000;
+            }
+        }
+        
+        let m_name = ermittleAM(rawAbs, distMeter);
+        let kontakte = holeAdresseUndTelefon(m_name);
+        
+        document.getElementById("m").innerText = m_name;
+        document.getElementById("m_address").innerText = kontakte.addr;
+        document.getElementById("m_phone").innerText = kontakte.phone;
+    }
+}
+ 
+function holeNKHtml(props, distMeter = 0, isMap = false) {
+    let rawAbs = props.ABS || props.ABSNr || "";
+    let stationBase = Number(props.STATANF || 0);
+    let stationKM = stationBase + (distMeter / 1000); 
+ 
+    let debugInfo = "";
+    if (isMap) debugInfo = `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>`;
+ 
+    return `
+        ${debugInfo}
+        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
+           <tr><td style="border:none; padding:1px 0; border-top: 1px dashed var(--input-border);">Station (km):</td><td style="border:none; padding:1px 0; text-align:right; border-top: 1px dashed var(--input-border);"><b>${stationKM.toFixed(3).replace('.',',')}</b></td></tr>
+        </table>
+    `;
+}
+ 
+function openMap(mode = 'NK') {
+    mapMode = mode;
+   document.getElementById('map-overlay').style.display = 'flex';
+   document.getElementById('nk-map-result').style.display = 'none';
+   
+   if (mode === 'NK') {
+       document.getElementById('map-title').innerText = '📝 Netzknoten erfassen';
+       document.getElementById('map-action-btn').innerText = 'Hier erfassen';
+   } else {
+       document.getElementById('map-title').innerText = '📍 KM auf Karte erfassen';
+       document.getElementById('map-action-btn').innerText = 'KM übernehmen';
+   }
+    
+    let initLat = letzteLat !== 0 ? letzteLat : 51.3;
+    let initLon = letzteLon !== 0 ? letzteLon : 6.85;
+ 
+    if (!map) {
+        map = L.map('karte', { zoomControl: false }).setView([initLat, initLon], 18);
+        
+        let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22 });
+        let satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 });
+        
+       osmLayer.addTo(map);
+       L.control.layers({ "Standard Karte": osmLayer, "Satellit": satLayer }).addTo(map);
+    } else {
+       map.setView([initLat, initLon], 18);
+    }
+    setTimeout(() => map.invalidateSize(), 200); 
+ 
+    if(letzteLat === 0 && navigator.geolocation) {
+       navigator.geolocation.getCurrentPosition(pos => {
+           map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+        }, ()=>{}, {timeout: 5000});
+    }
+}
+ 
+function closeMap() { 
+   document.getElementById('map-overlay').style.display = 'none'; 
+    if (mapLineLayer) map.removeLayer(mapLineLayer);
+}
+ 
+function calculateMapResult() {
+    let pos = map.getCenter(); 
+    let pt = turf.point([pos.lng, pos.lat]);
+    
+    let alleDaten = datenBAB.concat(datenLand);
+    let best = null, minDist = Infinity;
+    let alleImUmkreis = []; 
+ 
+   alleDaten.forEach(f => {
+        try {
+            let d = turf.pointToLineDistance(pt, f);
+            if (d < 0.15) { 
+               alleImUmkreis.push(f);
+                if (d < minDist) { minDist = d; best = f; } 
+            }
+        } catch(e) {}
+    });
+ 
+    let resDiv = document.getElementById('nk-map-result');
+    
+    if (mapLineLayer) map.removeLayer(mapLineLayer);
+ 
+    if(best) {
+        let props = best.properties || {};
+        let strName = String(props.STRBEZ || "Unbekannte Straße").toUpperCase().replace(/\s/g,'');
+        let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
+        
+        if (mapMode === 'NK') {
+            let distAufLinieMeter = snapped.properties.location || 0;
+            let snappedCoord = turf.getCoord(snapped);
+            
+            mapLineLayer = L.layerGroup().addTo(map);
+     
+           alleImUmkreis.forEach(feat => {
+                if(feat !== best) {
+                   L.geoJSON(feat, {
+                       style: { color: '#dc3545', weight: 2.5, opacity: 0.6 }
+                   }).addTo(mapLineLayer);
+                }
+            });
+     
+           L.geoJSON(best, {
+                style: { color: '#28a745', weight: 3.5, opacity: 0.9 }
+           }).addTo(mapLineLayer);
+            
+            let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
+            
+           resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
+                <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName}</strong>
+                <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
+               ${htmlZettel}
+            </div>`;
+            
+           resDiv.style.display = 'block';
+            
+            setTimeout(() => { 
+               map.invalidateSize(); 
+               map.setView([snappedCoord[1], snappedCoord[0]], map.getZoom(), {animate: false});
+            }, 20);
+        } 
+        else if (mapMode === 'KM') {
+            let bkm = 0;
+            if (strName.startsWith("A")) {
+                bkm = berechneGoldgriffBKM(pt, strName);
+            }
+            
+            let needsSwitch = true;
+            let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
+            if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) {
+                needsSwitch = false; 
+            }
+            
+            if (needsSwitch && bkm > 0) {
+                for (let wache in datenWachen) {
+                    let g = datenWachen[wache].grenzen[strName];
+                    if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) {
+                        wechsleWache(wache, true, strName);
+                        break;
+                    }
+                }
+            }
+            
+            // Exakte Gemeindebestimmung basierend auf Karten-Nadel
+            let aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
+            document.getElementById("g").innerText = aktuelleGemeinde;
+            
+            // Exakte Meisterei/Abschnitt basierend auf Karten-Nadel
+            let snappedKm = turf.nearestPointOnLine(best, pt, {units: 'kilometers'});
+            let distMeter = (snappedKm.properties.location || 0) * 1000;
+            let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
+            let m_name = ermittleAM(rawAbs, distMeter);
+            let kontakte = holeAdresseUndTelefon(m_name);
+            
+            document.getElementById("m").innerText = m_name;
+            document.getElementById("m_address").innerText = kontakte.addr;
+            document.getElementById("m_phone").innerText = kontakte.phone;
+            
+            let drop = document.getElementById("autobahn");
+            if (Array.from(drop.options).some(o=>o.value===strName)) {
+                drop.value = strName;
+                document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
+                manuellerFokus = strName;
+                
+                let wachenGrenzenNeu = datenWachen[aktuelleWache].grenzen;
+                if(wachenGrenzenNeu[strName] && bkm > 0) {
+                    let percent = ((bkm - wachenGrenzenNeu[strName][0]) / (wachenGrenzenNeu[strName][1] - wachenGrenzenNeu[strName][0])) * 100;
+                    document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
+                } else {
+                    document.getElementById("progress").style.width = "0%";
+                }
+                
+                updateUI(); // Tabellen und Listen neu aufbauen
+            } else {
+                // Landstraße oder nicht in Datenbank-Grenzen
+                document.getElementById("km").value = "";
+                document.getElementById("b").innerText = "-";
+                document.getElementById("progress").style.width = "0%";
+                document.getElementById("liste").innerHTML = "";
+            }
+            
+            closeMap();
+        }
+ 
+    } else {
+       resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 150m Umkreis gefunden. Bitte näher zoomen!</p>`;
+       resDiv.style.display = 'block';
+       setTimeout(() => { map.invalidateSize(); }, 20);
+    }
+}
+ 
+// --- WEG ZEIT RECHNER FUNKTIONEN ---
+function toggleSpeedMode() {
+    let mode = document.querySelector('input[name="speed_mode"]:checked').value;
+    if(mode === 'live') {
+       alert("Hinweis: Echte Google Maps Live-Verkehrsdaten erfordern eine kostenpflichtige API-Anbindung (Google Directions API). Dies kann clientseitig nicht verarbeitet werden. Die Funktion dient hier als Platzhalter und nutzt vorerst einen Schätzwert von 120 km/h.");
+       document.getElementById('speed').value = "120";
+       document.getElementById('speed').disabled = true;
+    } else {
+       document.getElementById('speed').value = "";
+       document.getElementById('speed').disabled = false;
+    }
+}
+ 
+function updateWzUI() {
+    let a = document.getElementById("wz_autobahn").value;
+    if(!a) return;
+    let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
+    let wachenListen = datenWachen[aktuelleWache].listen || {};
+    
+    let sel = document.getElementById("wz_richtung");
+    sel.innerHTML = "";
+   if(wachenRichtungen[a]) {
+       wachenRichtungen[a].forEach(r => sel.add(new Option(r, r)));
+    }
+    
+    let tbody = document.getElementById("wz_liste");
+    tbody.innerHTML = "";
+   if(wachenListen[a]) {
+       wachenListen[a].forEach(e => {
+            let tr = document.createElement("tr");
+           tr.innerHTML = `<td>${e[0]}</td><td>${e[1]}</td><td>${e[2]}</td>`;
+           tbody.appendChild(tr);
+        });
+    }
+}
+ 
+function startWegZeit() {
+    wzStartKm = parseFloat(document.getElementById("start_km").value.replace(',','.'));
+    wzSpeed = parseFloat(document.getElementById("speed").value);
+    let dirStr = document.getElementById("wz_richtung").value;
+    
+    let delayStr = document.getElementById("wz_delay").value.replace(',','.');
+    let delayMin = parseFloat(delayStr) || 0;
+    
+   if(isNaN(wzStartKm) || isNaN(wzSpeed)) {
+       alert("Bitte Start-KM und Geschwindigkeit korrekt eingeben.");
+        return;
+    }
+    
+    wzDir = dirStr.includes("(+)") ? 1 : -1;
+    
+    let delayMs = delayMin * 60 * 1000;
+    wzStartTime = Date.now() - delayMs;
+    
+   document.getElementById("btn_wz_start").style.display = "none";
+   document.getElementById("btn_wz_stop").style.display = "block";
+   document.getElementById("wz_result_box").style.display = "block";
+    
+   document.getElementById("wz_autobahn").disabled = true;
+   document.getElementById("wz_richtung").disabled = true;
+   document.getElementById("start_km").disabled = true;
+   document.getElementById("wz_delay").disabled = true;
+   document.getElementById("speed").disabled = true;
+   document.querySelectorAll('input[name="speed_mode"]').forEach(r => r.disabled = true);
+    
+    if(wzInterval) clearInterval(wzInterval);
+    wzInterval = setInterval(tickWegZeit, 1000);
+    tickWegZeit(); 
+}
+ 
+function stopWegZeit() {
+    if(wzInterval) clearInterval(wzInterval);
+    
+   document.getElementById("btn_wz_start").style.display = "block";
+   document.getElementById("btn_wz_stop").style.display = "none";
+    
+   document.getElementById("wz_autobahn").disabled = false;
+   document.getElementById("wz_richtung").disabled = false;
+   document.getElementById("start_km").disabled = false;
+   document.getElementById("wz_delay").disabled = false;
+    
+    let mode = document.querySelector('input[name="speed_mode"]:checked').value;
+    if(mode === 'manual') document.getElementById("speed").disabled = false;
+   document.querySelectorAll('input[name="speed_mode"]').forEach(r => r.disabled = false);
+}
+ 
+function tickWegZeit() {
+    let elapsedMs = Date.now() - wzStartTime;
+    let elapsedHours = elapsedMs / (1000 * 60 * 60);
+    let elapsedMin = Math.floor(elapsedMs / (1000 * 60));
+    let elapsedSec = Math.floor((elapsedMs / 1000) % 60);
+    
+    let currentKm = wzStartKm + (wzDir * (wzSpeed * elapsedHours));
+    
+   document.getElementById("wz_aktuell_km").innerText = currentKm.toFixed(3).replace('.',',');
+   document.getElementById("wz_zeit").innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
+    
+   highlightWzList(currentKm);
+}
+ 
+function highlightWzList(currentKm) {
+    let rows = document.querySelectorAll("#wz_liste tr");
+    let closestRow = null;
+    let minDiff = Infinity;
+    
+    rows.forEach(row => {
+       row.classList.remove('wz-highlight');
+        let kmCell = row.cells[2].innerText;
+        let rowKm = parseFloat(kmCell.replace(',', '.'));
+       if(!isNaN(rowKm)) {
+            let diff = Math.abs(currentKm - rowKm);
+            if(diff < minDiff) {
+               minDiff = diff;
+               closestRow = row;
+            }
+        }
+    });
+    
+    if(closestRow) {
+       closestRow.classList.add('wz-highlight');
+    }
+}
+</script>
+</body>
+</html>
