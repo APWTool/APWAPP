@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v2.5 (inkl. Recherche)</title>
+<title>Autobahn Tool v2.6 (Recherche Fix)</title>
  
-<script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+
  
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007BFF">
@@ -182,9 +182,9 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     
     <div class="warning-box">
-        <strong>⚠️ WICHTIGER HINWEIS:</strong><br>
+        <strong>⚠️ WICHTIGER HINWEIS (Ermittlungsgrundlage):</strong><br>
         Sperrflächen, Ein-/Ausfädelungsstreifen sowie Kurven und Gefälle sind über das obige Satellitenbild visuell zu bewerten.<br><br>
-        Die unten aufgeführten OSM-Daten stellen <b>ausschließlich statische Werte</b> dar. Sie berücksichtigen <u>keine</u> temporären Baustellen oder Überkopfbeschilderungen!
+        Die unten aufgeführten OSM-Daten stellen <b>ausschließlich statische Werte</b> dar. Sie berücksichtigen <u>keine</u> temporären Baustellen oder Schaltzustände von Streckenbeeinflussungsanlagen (SBA)!
     </div>
     
     <div class="recherche-data" id="recherche-osm-daten">
@@ -364,6 +364,7 @@ let aktuelleWache = "Hilden";
 let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
 let meistereiMap = { am: {}, sm: {} }; 
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
+let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
 let bkmHistorie = []; 
 let manuellerFokus = null;
 let map = null;
@@ -674,27 +675,27 @@ function findeKandidaten(liste, pt, filter, maxDist){
     return Object.values(hits).sort((a, b) => a.dist - b.dist);
 }
 
-// --- HELFERFUNKTION: KORREKTE AM/SM ERMITTLUNG ÜBER MIKRO-STATIONIERUNG (METER) ---
+
 function ermittleAM(rawAbs, distMeter) {
     let rawAbsClean = String(rawAbs).toUpperCase().trim();
-    
-    // Prüft auch die Gegenrichtung, falls die JSON nur für eine Richtung exportiert wurde
+
+ 
     let revAbs = rawAbsClean.length === 16 ? rawAbsClean.substring(8, 16) + rawAbsClean.substring(0, 8) : "";
 
     function check(db, key) {
         if (!db[key]) return null;
         let hit = db[key].find(e => {
-            // Holt die Meter aus der Original-JSON (z.B. von: 0, bis: 184)
+
             let v = Number(String(e.von).replace(',', '.'));
             let b = Number(String(e.bis).replace(',', '.'));
             
-            // Puffer von 5 Metern für minimale GPS/Turf-Rundungsfehler am Rand der Knoten
+
             return distMeter >= (v - 5) && distMeter <= (b + 5);
         });
         return hit ? hit.am : null;
     }
 
-    // Sucht AUSSCHLIESSLICH über die 16-stellige Abschnittsnummer und vergleicht die Meter!
+
     let result = check(meistereiMap.am, rawAbsClean) 
               || check(meistereiMap.am, revAbs) 
               || check(meistereiMap.sm, rawAbsClean) 
@@ -704,11 +705,11 @@ function ermittleAM(rawAbs, distMeter) {
     return result;
 }
 
-// --- HELFERFUNKTION: ROBUSTE ADRESSABFRAGE (Fuzzy Search Fix) ---
+
 function holeAdresseUndTelefon(m_name) {
     if (!m_name || m_name === "Nicht in DB") return { addr: "-", phone: "-" };
     
-    // Entfernt alle Behörden-Wörter und vergleicht nur noch die nackte Stadt (z.B. "weilerswist" == "weilerswist")
+
     let searchName = String(m_name).toLowerCase().replace(/autobahnmeisterei|straßenmeisterei|meisterei|am|sm/g, "").trim();
     
     let matchKey = Object.keys(meistereiAdressen).find(key => {
@@ -776,9 +777,13 @@ async function verarbeiteGPS(lat, lon, acc){
         let statAnf = Number(props.STATANF || props.StatAnf || props.STATION || 0);
         let snapped = turf.nearestPointOnLine(sel.feature, pt, {units: 'kilometers'});
         
-        // --- DER WICHTIGE TEIL FÜR DEINE ORIGINALDATEN ---
+
+        let snappedCoord = turf.getCoord(snapped);
+        aktiveLat = snappedCoord[1];
+        aktiveLon = snappedCoord[0];
+
         let distAufLinieKm = snapped.properties.location || 0;
-        let distMeter = distAufLinieKm * 1000; // Wandelt Turf-Kilometer in die Meter deiner JSON um!
+        let distMeter = distAufLinieKm * 1000; 
         
         let aktuellerKM = statAnf + distAufLinieKm; 
         let bkm = 0;
@@ -787,6 +792,7 @@ async function verarbeiteGPS(lat, lon, acc){
             let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName);
+            aktiveKM = bkm > 0 ? bkm : aktuellerKM;
             
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) {
                needsSwitch = false; 
@@ -833,10 +839,11 @@ async function verarbeiteGPS(lat, lon, acc){
             let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
             if(dirText) bkmAnzeige += ` | <strong>${dirText}</strong>`;
             
-            // In die neue Result Box schreiben!
+
             document.getElementById("erfasste-strasse").innerHTML = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName}</span> | BKM: ${bkmAnzeige}`;
 
         } else {
+            aktiveKM = aktuellerKM;
             let abschnitt = props.ABSNR || props.ABSNr || "Unbekannt";
             let ast = props.ABSAST || "";
             let astFormatted = ast !== "" ? ` (${ast})` : "";
@@ -852,7 +859,7 @@ async function verarbeiteGPS(lat, lon, acc){
             document.getElementById("liste").innerHTML="";
         }
 
-        // AM ZUWEISUNG ERFOLGT JETZT NUR NOCH ÜBER DEN ABSCHNITT UND DIE METER!
+
         let m_name = ermittleAM(rawAbs, distMeter);
         let kontakte = holeAdresseUndTelefon(m_name);
         
@@ -860,7 +867,7 @@ async function verarbeiteGPS(lat, lon, acc){
         document.getElementById("m_address").innerText = kontakte.addr;
         document.getElementById("m_phone").innerText = kontakte.phone;
  
-        // Den unteren grauen Kasten nur noch für Alternativen & Technik nutzen
+
         let htmlOutput = techInfo;
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
         if (andereImKreuz.length > 0) {
@@ -985,7 +992,6 @@ function berechnen(isManual = false){
         let rawAbs = "";
         let distMeter = 0;
         
-        // Manuelle Eingabe im UI aktualisieren
         document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>`;
 
         if (coords) {
@@ -1000,7 +1006,17 @@ function berechnen(isManual = false){
                 let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
                 let distAufLinieKm = snapped.properties.location || 0;
                 distMeter = distAufLinieKm * 1000;
+                
+
+                let snappedCoord = turf.getCoord(snapped);
+                aktiveLat = snappedCoord[1];
+                aktiveLon = snappedCoord[0];
+            } else {
+
+                aktiveLat = coords[1];
+                aktiveLon = coords[0];
             }
+            aktiveKM = km; 
         }
         
         let m_name = ermittleAM(rawAbs, distMeter);
@@ -1094,11 +1110,17 @@ function calculateMapResult() {
     if(best) {
         let props = best.properties || {};
         let strName = String(props.STRBEZ || "Unbekannte Straße").toUpperCase().replace(/\s/g,'');
-        let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
         
         if (mapMode === 'NK') {
+            let snapped = turf.nearestPointOnLine(best, pt, {units: 'meters'});
             let distAufLinieMeter = snapped.properties.location || 0;
             let snappedCoord = turf.getCoord(snapped);
+
+         
+            aktiveLat = snappedCoord[1];
+            aktiveLon = snappedCoord[0];
+            let stationBase = Number(props.STATANF || 0);
+            aktiveKM = stationBase + (distAufLinieMeter / 1000);
             
             mapLineLayer = L.layerGroup().addTo(map);
      
@@ -1140,8 +1162,15 @@ function calculateMapResult() {
             let distMeter = (snappedKm.properties.location || 0) * 1000;
             let aktuellerKM = statAnf + (distMeter/1000);
 
+            let snappedCoord = turf.getCoord(snappedKm);
+            aktiveLat = snappedCoord[1];
+            aktiveLon = snappedCoord[0];
+
             if (strName.startsWith("A")) {
                 bkm = berechneGoldgriffBKM(pt, strName);
+                aktiveKM = bkm > 0 ? bkm : aktuellerKM;
+            } else {
+                aktiveKM = aktuellerKM;
             }
             
             let needsSwitch = true;
@@ -1160,11 +1189,11 @@ function calculateMapResult() {
                 }
             }
             
-            // Exakte Gemeindebestimmung basierend auf Karten-Nadel
+
             let aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
             document.getElementById("g").innerText = aktuelleGemeinde;
             
-            // Exakte Meisterei/Abschnitt basierend auf Karten-Nadel
+
             let rawAbs = props.ABS || props.ABSNr || props.ABSNR || "";
             let m_name = ermittleAM(rawAbs, distMeter);
             let kontakte = holeAdresseUndTelefon(m_name);
@@ -1192,7 +1221,7 @@ function calculateMapResult() {
                 
                 updateUI();
             } else {
-                // Landstraße oder nicht in Datenbank-Grenzen
+
                 let kl = String(props.STRKL || strName.charAt(0)).toUpperCase();
                 let icon = (kl === "B") ? "🚙" : "🌲";
                 
@@ -1213,18 +1242,18 @@ function calculateMapResult() {
     }
 }
 
-// --- NEU: RECHERCHE BEREICH ---
+
 async function oeffneRecherche() {
     let a = document.getElementById("autobahn").value;
     let kmRaw = document.getElementById("km").value.replace(',', '.');
     let km = parseFloat(kmRaw);
 
-    // Wenn manueller GPS-Fokus aktiv ist, nehme den
+
     let strassenName = manuellerFokus || a;
 
     if (!strassenName || isNaN(km)) {
-        if(letzteLat !== 0 && letzteLon !== 0) {
-            // Fallback auf aktuelle GPS-Position wenn kein KM eingetragen
+        if(aktiveLat !== 0 && aktiveLon !== 0) {
+
         } else {
             alert("Bitte wähle zuerst eine Straße aus und trage einen Kilometer ein (oder nutze die GPS/Karten-Erfassung).");
             return;
@@ -1233,18 +1262,31 @@ async function oeffneRecherche() {
 
     showPage('page-recherche');
     
-    let lat = letzteLat;
-    let lon = letzteLon;
+    let lat = aktiveLat;
+    let lon = aktiveLon;
     
-    if (strassenName && !isNaN(km)) {
-        document.getElementById("recherche-titel").innerText = `${strassenName} | KM ${km.toFixed(3).replace('.',',')}`;
+
+    if (!isNaN(km) && Math.abs(km - aktiveKM) > 0.005) {
         let coords = holeKoordinateFuerKM(strassenName, km);
         if (coords) {
             lon = coords[0];
             lat = coords[1];
         }
+    }
+
+    // Wenn es immer noch 0/0 ist (Seite neu geladen und nur KM eingetippt)
+    if (lat === 0 || lon === 0) {
+        let coords = holeKoordinateFuerKM(strassenName, km);
+        if (coords) {
+            lon = coords[0];
+            lat = coords[1];
+        }
+    }
+
+    if (strassenName && !isNaN(km)) {
+        document.getElementById("recherche-titel").innerText = `${strassenName} | KM ${km.toFixed(3).replace('.',',')}`;
     } else {
-        document.getElementById("recherche-titel").innerText = "Aktueller GPS-Standort";
+        document.getElementById("recherche-titel").innerText = "Aktueller Standort";
     }
 
     if (lat === 0 || lon === 0) {
@@ -1252,7 +1294,7 @@ async function oeffneRecherche() {
         return;
     }
 
-    // Karte initialisieren oder updaten
+
     if (!rechercheMap) {
         rechercheMap = L.map('recherche-karte', { zoomControl: false, attributionControl: false }).setView([lat, lon], 19);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19 }).addTo(rechercheMap);
@@ -1263,16 +1305,16 @@ async function oeffneRecherche() {
         rechercheMarker = L.marker([lat, lon]).addTo(rechercheMap);
     }
     
-    // UI Fix für Leaflet in hidden divs
+
     setTimeout(() => {
         rechercheMap.invalidateSize();
         rechercheMap.setView([lat, lon], 19);
     }, 200);
 
-    // OSM Daten abfragen
+
     document.getElementById("recherche-osm-daten").innerHTML = "<i>Lade Strukturdaten über OpenStreetMap...</i>";
     
-    // Overpass QL Query: Sucht nach Autobahnen/Bundesstraßen im Umkreis von 30m um den ermittelten Punkt
+
     let query = `[out:json];way(around:30, ${lat}, ${lon})["highway"~"motorway|trunk|motorway_link|trunk_link"];out tags;`;
     let url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
 
