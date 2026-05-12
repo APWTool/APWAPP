@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v2.7 (Recherche Skizzen-Fix)</title>
+<title>Autobahn Tool v2.7</title>
  
-<script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+
  
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007BFF">
@@ -313,4 +313,263 @@ const meistereiAdressen = {
     "AM Kamen": "Zollpost 26, 59174 Kamen",
     "AM Kaarst": "Neersener Str. 9, 41564 Kaarst",
     "AM Isselburg": "Am Wolfssee 26, 46419 Isselburg",
-    "AM Herford": "Vlothoer Str. 289, 32049 Her
+    "AM Herford": "Vlothoer Str. 289, 32049 Herford",
+    "AM Hagen": "In d. Krone 20, 58099 Hagen",
+    "AM Gelsenkirchen": "Reckfeldstraße 1, 45889 Gelsenkirchen",
+    "AM Freudenberg": "Wilhelmshöhe 15, 57258 Freudenberg",
+    "AM Düren": "Nordstraße 149, 52353 Düren",
+    "AM Duisburg": "Carl-Benz-Straße 11, 47058 Duisburg",
+    "AM Dorsten": "Königsberger Allee 200, 46282 Dorsten",
+    "AM Bonn": "Euskirchener Str. 1, 53347 Alfter",
+    "AM Werl": "Waltringer Weg 25, 59457 Werl",
+    "AM Wünnenberg-Haaren": "Fiegenburg 16, 33181 Bad Wünnenberg",
+    "SM Heinsberg": "-"
+};
+
+const meistereiTelefon = {
+    "AM Weilerswist": "02254 601410",
+    "AM Titz": "-",
+    "AM Sankt Augustin": "02241 127250",
+    "AM St. Augustin": "02241 127250",
+    "AM Rheinberg": "02843 903640",
+    "AM Remscheid": "02191 469740",
+    "AM Recklinghausen": "02361 9420",
+    "AM Ratingen": "02102 20437",
+    "AM Overath": "02206 863780",
+    "AM Oelde": "02522 9120",
+    "AM Münster": "02501 9670",
+    "AM Mönchengladbach": "02161 901550",
+    "AM Lüdenscheid": "02351 9240",
+    "AM Leverkusen": "-",
+    "AM Lengerich": "05481 9220",
+    "AM Köln": "02234 20370",
+    "AM Kamen": "-",
+    "AM Kaarst": "02131 898670",
+    "AM Isselburg": "02874 902720",
+    "AM Herford": "05221 92350",
+    "AM Hagen": "02331 6210",
+    "AM Gelsenkirchen": "0209 98010",
+    "AM Freudenberg": "02734 2870",
+    "AM Düren": "02421 224980",
+    "AM Duisburg": "0203 6086040",
+    "AM Dorsten": "02362 9230",
+    "AM Bonn": "0228 3918910",
+    "AM Werl": "02922 9840",
+    "AM Wünnenberg-Haaren": "02957 9700",
+    "SM Heinsberg": "-"
+};
+ 
+const wachenAnker = {
+   "Hilden": [6.935, 51.168],
+   "Mülheim": [6.881, 51.424],
+    "Hünxe": [6.765, 51.642],
+    "Moers": [6.628, 51.458],
+   "Gladbach": [6.439, 51.196]
+};
+ 
+let aktuelleWache = "Hilden"; 
+let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let meistereiMap = { am: {}, sm: {} }; 
+let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
+let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
+let bkmHistorie = []; 
+let manuellerFokus = null;
+let map = null;
+let mapLineLayer = null; 
+let mapMode = 'NK';
+let rechercheMap = null;
+let rechercheMarker = null;
+let wzInterval = null;
+let wzStartTime = 0;
+let wzStartKm = 0;
+let wzSpeed = 0;
+let wzDir = 1;
+ 
+if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+   document.documentElement.setAttribute("data-theme", "dark");
+}
+ 
+function toggleTheme() {
+    const doc = document.documentElement;
+    if (doc.getAttribute("data-theme") === "dark") doc.setAttribute("data-theme", "light"); 
+    else doc.setAttribute("data-theme", "dark");
+}
+ 
+function showPage(pageId) {
+   document.getElementById('page-main').style.display = 'none';
+   document.getElementById('page-wegzeit').style.display = 'none';
+   document.getElementById('page-recherche').style.display = 'none';
+   document.getElementById('page-impressum').style.display = 'none';
+   document.getElementById('page-hinweise').style.display = 'none';
+   document.getElementById('map-overlay').style.display = 'none';
+    
+   document.getElementById(pageId).style.display = 'block';
+    
+    if(pageId === 'page-main') {
+       document.getElementById('footer-nav').style.display = 'flex';
+    } else {
+       document.getElementById('footer-nav').style.display = 'none';
+    }
+}
+ 
+// --- INITIALER DATEN-LOAD ---
+Promise.all([
+   fetch('Abschnitt.json').then(res=>res.json()),
+   fetch('AbschnittBAB.json').then(res=>res.json()),
+   fetch('BABKM.json').then(res=>res.json()),
+   fetch('Gemeinden.json').then(res=>res.json()),
+   fetch('amDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+   fetch('smDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({})) 
+]).then(([land, bab, punkte, gem, amData, smData])=>{
+    datenLand = extrahiere(land, true);
+    datenBAB = extrahiere(bab, true);
+    referenzPunkte = extrahiere(punkte, false);
+    datenGemeinden = extrahiereGemeinden(gem); 
+    
+    meistereiMap.am = amData || {};
+    meistereiMap.sm = smData || {};
+    
+   document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
+   loadWacheSetting();
+}).catch(e => { 
+   document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien.</span>';
+});
+ 
+function extrahiere(json, erwarteLinien){
+    let list=[];
+if(!json||!json.features) return list;
+   json.features.forEach(f=>{
+        try { turf.flatten(f).features.forEach(sub=>{
+           if(erwarteLinien&&(!sub.geometry||!sub.geometry.type.includes('LineString'))) return;
+           list.push(sub);
+        }); } catch(e){}
+    });
+    return list;
+}
+ 
+function extrahiereGemeinden(json) {
+    let list = [];
+if(!json||!json.features) return list;
+   json.features.forEach(f => {
+        try { turf.flatten(f).features.forEach(sub => list.push(sub)); } catch(e){}
+    });
+    return list;
+}
+ 
+function saveWacheSetting() {
+    let isChecked = document.getElementById('saveWache').checked;
+    if (isChecked) localStorage.setItem('stdWache', aktuelleWache);
+    else localStorage.removeItem('stdWache');
+}
+ 
+function loadWacheSetting() {
+    let std = localStorage.getItem('stdWache');
+    if (std && datenWachen[std]) {
+       document.getElementById('saveWache').checked = true;
+       wechsleWache(std, false);
+    } else {
+       wechsleWache('Hilden', false);
+    }
+}
+ 
+function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) {
+    aktuelleWache = wacheName;
+   document.querySelectorAll('.wache-btn').forEach(btn => {
+       if(btn.dataset.wache === wacheName) btn.classList.add('active-wache');
+        else btn.classList.remove('active-wache');
+    });
+ 
+    let dropMain = document.getElementById("autobahn"); 
+    let dropWz = document.getElementById("wz_autobahn"); 
+    dropMain.innerHTML = ""; 
+    if(dropWz) dropWz.innerHTML = "";
+ 
+    let autobahnen = Object.keys(datenWachen[aktuelleWache].grenzen || {});
+   if(autobahnen.length === 0) {
+       dropMain.add(new Option("Keine Daten", ""));
+        if(dropWz) dropWz.add(new Option("Keine Daten", ""));
+    } else {
+       autobahnen.forEach(a => { 
+           dropMain.add(new Option(a, a)); 
+            if(dropWz) dropWz.add(new Option(a, a)); 
+        });
+    }
+ 
+    if (autobahnToSelect && autobahnen.includes(autobahnToSelect)) {
+        dropMain.value = autobahnToSelect;
+    }
+    
+    if (document.getElementById('saveWache').checked) {
+       localStorage.setItem('stdWache', wacheName);
+    }
+ 
+    if (triggerEvent && window.goatcounter) {
+       window.goatcounter.count({path: 'wache-' + wacheName, title: 'Wache: ' + wacheName, event: true});
+    }
+ 
+    manuellerFokus = null;
+    updateUI();
+    berechnen(false); 
+    
+    if(typeof updateWzUI === 'function') updateWzUI(); 
+}
+ 
+function holeKoordinateFuerKM(autobahn, km) {
+    if (referenzPunkte.length === 0 || isNaN(km)) return null;
+    let suchNummer = autobahn.toUpperCase().replace('A', ''); 
+    
+    let passende = referenzPunkte.filter(f => {
+       if(!f.properties) return false;
+        return String(f.properties.Bez) === suchNummer;
+    });
+ 
+   if(passende.length > 0) {
+        let candidates = [];
+       passende.forEach(p => {
+            let pKm = Number(p.properties.Kilometer || 0);
+            candidates.push({ pt: p, diff: Math.abs(pKm - km) });
+        });
+ 
+        if (candidates.length > 0) {
+           candidates.sort((a, b) => a.diff - b.diff);
+ 
+            let bestDiff = candidates[0].diff;
+            let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
+ 
+            if (topCandidates.length > 1) {
+                let anchorCoords = wachenAnker["Hilden"]; 
+                if (letzteLat !== 0 && letzteLon !== 0) {
+                   anchorCoords = [letzteLon, letzteLat];
+                } else if (wachenAnker[aktuelleWache]) {
+                   anchorCoords = wachenAnker[aktuelleWache];
+                }
+                let anchorPt = turf.point(anchorCoords);
+ 
+               topCandidates.forEach(c => {
+                   let cCoord = turf.getCoord(turf.centroid(c.pt));
+                   c.anchorDist = turf.distance(anchorPt, turf.point(cCoord));
+                });
+               topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
+            }
+            
+            let finalWinner = topCandidates[0];
+            return turf.getCoord(turf.centroid(finalWinner.pt)); 
+        }
+    }
+    return null;
+}
+ 
+function updateUI() {
+    let a = document.getElementById("autobahn").value;
+    let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
+    let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
+    let wachenListen = datenWachen[aktuelleWache].listen || {};
+    
+    let leftArrow = document.getElementById("dir-plus");
+    let rightArrow = document.getElementById("dir-minus");
+    let bereichDiv = document.getElementById("bereich-info");
+    let tbody = document.getElementById("liste");
+    tbody.innerHTML = "";
+ 
+   if(!wachenGrenzen[a]) {
+       document.getElementById("b").innerText = "-";
