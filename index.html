@@ -357,6 +357,69 @@ if(!json||!json.features) return list;
     });
     return list;
 }
+
+function normalisiereStrassenName(name) {
+    return String(name || "").toUpperCase().replace(/\s/g, '');
+}
+
+function normalisiereAchse(achse) {
+    let raw = String(achse || "").trim().toLowerCase();
+    if (!raw) return "";
+    if (raw.includes("haupt") || raw === "+" || raw.includes("plus")) return "Hauptachse";
+    if (raw.includes("neben") || raw === "-" || raw.includes("minus")) return "Nebenachse";
+    if (raw.includes("bestand") || raw.includes("ungetrennt")) return "Bestandsachse";
+    return String(achse || "").trim();
+}
+
+function holeStrassenFeatures(strName, achse = "") {
+    let zielName = normalisiereStrassenName(strName);
+    let zielAchse = normalisiereAchse(achse);
+    let features = datenBAB.filter(f => {
+        let p = f.properties || {};
+        return normalisiereStrassenName(p.STRBEZ) === zielName;
+    });
+
+    if (zielAchse) {
+        let gefiltert = features.filter(f => normalisiereAchse((f.properties || {}).Sk_Achse) === zielAchse);
+        if (gefiltert.length > 0) return gefiltert;
+    }
+    return features;
+}
+
+function findeNaechsteStrassenFeature(pt, strName, achse = "") {
+    let features = holeStrassenFeatures(strName, achse);
+    let best = null;
+    let minDist = Infinity;
+    features.forEach(f => {
+        try {
+            let d = turf.pointToLineDistance(pt, f, {units: 'kilometers'});
+            if (d < minDist) {
+                minDist = d;
+                best = f;
+            }
+        } catch(e) {}
+    });
+    return best ? { feature: best, dist: minDist, props: best.properties || {} } : null;
+}
+
+function ermittleFahrbahnPosition(strName, km, achse = "") {
+    let coords = holeKoordinateFuerKM(strName, km);
+    if (!coords) return null;
+
+    let basisPt = turf.point([coords[0], coords[1]]);
+    let match = findeNaechsteStrassenFeature(basisPt, strName, achse);
+    if (!match) return { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0 };
+
+    let snapped = turf.nearestPointOnLine(match.feature, basisPt, {units: 'kilometers'});
+    let snappedCoords = turf.getCoord(snapped);
+    return {
+        point: snapped,
+        coords: snappedCoords,
+        feature: match.feature,
+        props: match.props,
+        distMeter: (snapped.properties.location || 0) * 1000
+    };
+}
  
 function saveWacheSetting() {
     let isChecked = document.getElementById('saveWache').checked;
@@ -505,6 +568,18 @@ function findeGemeindeFuerPunkt(pt) {
         try { if (turf.booleanPointInPolygon(pt, f)) return f.properties.GN || "Unbekannt"; } catch(e) {}
     }
     try {
+        if (typeof turf.polygonToLine === "function") {
+            let nearest = null;
+            datenGemeinden.forEach(f => {
+                try {
+                    let outline = turf.polygonToLine(f);
+                    let d = turf.pointToLineDistance(pt, outline, {units: 'kilometers'});
+                    if (d <= 0.05 && (!nearest || d < nearest.dist)) nearest = { feature: f, dist: d };
+                } catch(e) {}
+            });
+            if (nearest) return nearest.feature.properties.GN || "Unbekannt";
+        }
+
         let buffered = turf.buffer(pt, 0.05, {units: 'kilometers'}); 
         for (let f of datenGemeinden) {
             if (turf.booleanIntersects(buffered, f)) return f.properties.GN || "Unbekannt";
@@ -612,7 +687,7 @@ async function verarbeiteGPS(lat, lon, acc){
  
         const props = sel.feature.properties || {};
         const strName = sel.name; 
-        const achse = props.Sk_Achse || "";
+        const achse = normalisiereAchse(props.Sk_Achse);
         
         let accStr = `±${Math.round(acc)}m`;
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
@@ -624,6 +699,8 @@ async function verarbeiteGPS(lat, lon, acc){
         let snappedCoord = turf.getCoord(snapped);
         aktiveLat = snappedCoord[1];
         aktiveLon = snappedCoord[0];
+        aktuelleGemeinde = findeGemeindeFuerPunkt(snapped);
+        document.getElementById("g").innerText = aktuelleGemeinde;
 
         let distAufLinieKm = snapped.properties.location || 0;
         let distMeter = distAufLinieKm * 1000; 
@@ -789,11 +866,13 @@ function berechnen(isManual = false){
         }
     }
  
-    let coords = holeKoordinateFuerKM(a, km);
+    let selectedRichtung = document.getElementById("richtung").value;
+    let fahrbahnPosition = ermittleFahrbahnPosition(a, km, selectedRichtung);
+    let coords = fahrbahnPosition ? fahrbahnPosition.coords : null;
     let aktuelleGemeinde = "-";
     
-    if(coords) {
-        let pt = turf.point([coords[0], coords[1]]);
+    if(fahrbahnPosition) {
+        let pt = fahrbahnPosition.point;
         let selRichtung = document.getElementById("richtung").value;
 
         // NEU: Exaktes Snapping für die Gemeinde bei Handeingabe anhand der Richtungsfahrbahn
@@ -801,11 +880,11 @@ function berechnen(isManual = false){
             let relevanteLinien = datenBAB.filter(f => {
                 let p = f.properties || {};
                 let name = String(p.STRBEZ || "").toUpperCase().replace(/\s/g, '');
-                return name === a.toUpperCase();
+                return name === normalisiereStrassenName(a);
             });
             
             if (selRichtung) {
-                let gefiltert = relevanteLinien.filter(f => (f.properties.Sk_Achse || "") === selRichtung);
+                let gefiltert = relevanteLinien.filter(f => normalisiereAchse((f.properties || {}).Sk_Achse) === normalisiereAchse(selRichtung));
                 if (gefiltert.length > 0) relevanteLinien = gefiltert; 
             }
             
@@ -955,7 +1034,7 @@ function calculateMapResult() {
     if(best) {
         let props = best.properties || {};
         let strName = String(props.STRBEZ || "Unbekannte Straße").toUpperCase().replace(/\s/g,'');
-        let achse = props.Sk_Achse || "";
+        let achse = normalisiereAchse(props.Sk_Achse);
         
         let rDrop = document.getElementById("richtung");
         if (rDrop && Array.from(rDrop.options).some(o => o.value === achse)) {
@@ -998,7 +1077,7 @@ function calculateMapResult() {
             aktiveLon = snappedCoord[0];
 
             if (strName.startsWith("A")) {
-                bkm = berechneGoldgriffBKM(ptPin, strName);
+                bkm = berechneGoldgriffBKM(snappedKm, strName);
                 aktiveKM = bkm;
             } else {
                 aktiveKM = 0;
@@ -1015,7 +1094,7 @@ function calculateMapResult() {
                 }
             }
             
-            let aktuelleGemeinde = findeGemeindeFuerPunkt(ptPin);
+            let aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
             document.getElementById("g").innerText = aktuelleGemeinde;
             
             let rawAbs = props.ABSNr || "";
