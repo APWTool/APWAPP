@@ -316,15 +316,19 @@ async function ladeStrassenNetz() {
     let fehler = [];
     let babJson = {};
     let bundJson = {};
+    let landJson = {};
 
     try { babJson = await ladeGeoJson("AbschnittBAB.json"); } catch (e) { fehler.push(e.message); }
     try { bundJson = await ladeGeoJson("AbschnittBund.json"); } catch (e) { fehler.push(e.message); }
+    try { landJson = await ladeGeoJson("AbschnittLand.json"); } catch (e) { /* optional */ }
 
     let listeA = extrahiere(babJson, true);
     let listeB = extrahiere(bundJson, true);
-    datenBAB = listeA.concat(listeB);
+    let listeL = extrahiere(landJson, true);
+    datenLand = listeL;
+    datenBAB = listeA.concat(listeB).concat(listeL);
 
-    return { anzahlA: listeA.length, anzahlB: listeB.length, fehler: fehler };
+    return { anzahlA: listeA.length, anzahlB: listeB.length, anzahlL: listeL.length, fehler: fehler };
 }
 
 async function ladeAlleGeoDaten() {
@@ -699,9 +703,15 @@ function interpoliereKmKoordinate(before, after, km) {
     ];
 }
 
+function autobahnSuchNummer(strName) {
+    let n = String(strName || "").toUpperCase().replace(/\s/g, "");
+    if (n.startsWith("L") || n.startsWith("B")) return n.substring(1);
+    return n.replace(/^A/, "");
+}
+
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
-    let suchNummer = autobahn.toUpperCase().replace('A', '');
+    let suchNummer = autobahnSuchNummer(autobahn);
     let passende = referenzPunkte.filter(f => {
         if (!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
@@ -1033,8 +1043,9 @@ async function verarbeiteGPS(lat, lon, acc){
     let alleDaten = datenBAB;
     let babHits = findeKandidaten(alleDaten, pt, null, 2.0).filter(k => k.name.startsWith("A"));
     let bundHits = findeKandidaten(alleDaten, pt, "BUND", 2.0);
+    let landHits = findeKandidaten(alleDaten, pt, "LAND", 2.0);
     
-    let alleKandidaten = [...babHits, ...bundHits];
+    let alleKandidaten = [...babHits, ...bundHits, ...landHits];
     let uniqueKandidaten = [];
     let seenNames = new Set();
     alleKandidaten.forEach(k => {
@@ -1051,14 +1062,17 @@ async function verarbeiteGPS(lat, lon, acc){
  
         let sel = null;
         if (manuellerFokus) {
-            let focusMatch = sortKandidaten.find(k => k.name === manuellerFokus);
-            if (focusMatch) sel = focusMatch; 
+            sel = waehleStrassenKandidat(pt, manuellerFokus);
         }
         if (!sel) sel = sortKandidaten[0];
- 
+
         const props = sel.feature.properties || {};
         const strName = sel.name; 
         const achse = normalisiereAchse(props.Sk_Achse);
+
+        if (manuellerFokus === strName && Array.from(document.getElementById("autobahn").options).some(o => o.value === strName)) {
+            document.getElementById("autobahn").value = strName;
+        }
         
         let accStr = `±${Math.round(acc)}m`;
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
@@ -1110,13 +1124,14 @@ async function verarbeiteGPS(lat, lon, acc){
                    document.getElementById("autobahn").value = strName;
                    updateUI();
                 }
-                manuellerFokus = strName; 
                 berechnen(false);
             } else {
                 document.getElementById("km").value = "";
                 document.getElementById("progress").style.width = "0%";
                 document.getElementById("liste").innerHTML = "";
             }
+
+            manuellerFokus = strName;
 
             let dirText = "";
             let rfListe = datenWachen[aktuelleWache].richtungen[strName]; 
@@ -1132,13 +1147,12 @@ async function verarbeiteGPS(lat, lon, acc){
 
         } else {
             let abschnitt = props.ABSNr || "Unbekannt";
-            let kl = String(strName.charAt(0)).toUpperCase();
-            let icon = (kl === "B") ? "🚙" : "🌲";
-            
+            let stationKm = distAufLinieKm;
+
             aktuelleGemeinde = findeGemeindeFuerPunkt(snapped);
             document.getElementById("g").innerText = aktuelleGemeinde;
 
-            document.getElementById("erfasste-strasse").innerHTML = `<span style="color:orange;font-weight:bold;">${icon} ${strName}</span> | Abs: ${abschnitt}`;
+            document.getElementById("erfasste-strasse").innerHTML = formatiereLbErfassungHtml(strName, abschnitt, stationKm);
             document.getElementById("km").value = "";
             document.getElementById("progress").style.width="0%";
             document.getElementById("liste").innerHTML="";
@@ -1155,16 +1169,17 @@ async function verarbeiteGPS(lat, lon, acc){
         }
  
         let htmlOutput = techInfo;
-        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
+        let alleHits = findeKandidaten(alleDaten, pt, null, 1.2);
+        let andereImKreuz = alleHits.filter(k => k.name !== sel.name);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
             htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
             andereImKreuz.forEach(k => {
                 let btnText = "";
                 let distMeterCross = Math.round(k.dist * 1000);
-                if (Array.from(document.getElementById("autobahn").options).some(o=>o.value===k.name)) {
+                if (k.name.startsWith("A")) {
                    let k_bkm = berechneGoldgriffBKM(pt, k.name);
-                   btnText = `🛣️ ${k.name} (KM ${k_bkm.toFixed(1)}) [${distMeterCross}m]`;
+                   btnText = `🛣️ ${k.name} (KM ${k_bkm > 0 ? k_bkm.toFixed(1) : "-"}) [${distMeterCross}m]`;
                 } else {
                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
                    btnText = `${k_icon} ${k.name} [${distMeterCross}m]`;
@@ -1185,15 +1200,18 @@ function wechsleFokus(zielName) {
     let drop = document.getElementById("autobahn");
     if (Array.from(drop.options).some(o => o.value === zielName)) {
         drop.value = zielName;
-        updateUI();      
-        berechnen(true);        
+        updateUI();
     }
-    if (letzteLat !== 0) verarbeiteGPS(letzteLat, letzteLon, letzteAcc);
+    if (letzteLat !== 0) {
+        verarbeiteGPS(letzteLat, letzteLon, letzteAcc);
+    } else if (document.getElementById("km").value) {
+        berechnen(true);
+    }
 }
  
 function berechneGoldgriffBKM(meinPunkt, strName){
     if(referenzPunkte.length === 0) return 0;
-    let suchNummer = strName.toUpperCase().replace('A', '');
+    let suchNummer = autobahnSuchNummer(strName);
     let passende = referenzPunkte.filter(f => {
         if(!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
@@ -1269,27 +1287,116 @@ function berechnen(isManual = false){
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
 
-    setzeMeistereiAnzeige(a, km);
+    if (!istLandesOderBundesstrasse(a)) {
+        setzeMeistereiAnzeige(a, km);
+    }
  
     if (isManual) {
-        let displayDir = "";
-        let rfListe = datenWachen[aktuelleWache].richtungen[a];
-        if (selectedRichtung === 'Hauptachse') displayDir = rfListe ? ` | <strong>${rfListe[0]}</strong>` : "";
-        else if (selectedRichtung === 'Nebenachse') displayDir = rfListe ? ` | <strong>${rfListe[1]}</strong>` : "";
-        else if (selectedRichtung === 'Bestandsachse') displayDir = ` | <strong>Bestandsachse</strong>`;
+        if (istLandesOderBundesstrasse(a)) {
+            let pos = ermittlePositionAufStrasse(a, km);
+            let abschnitt = pos ? (pos.props.ABSNr || "Unbekannt") : "Unbekannt";
+            let stationKm = pos ? pos.stationKm : km;
+            document.getElementById("erfasste-strasse").innerHTML = formatiereLbErfassungHtml(a, abschnitt, stationKm);
+            if (pos && pos.snapped) {
+                aktiveLat = turf.getCoord(pos.snapped)[1];
+                aktiveLon = turf.getCoord(pos.snapped)[0];
+                aktiveKM = km;
+                document.getElementById("g").innerText = findeGemeindeFuerPunkt(pos.snapped);
+                let rawAbs = pos.props.ABSNr || "";
+                let distMeter = (pos.stationKm || 0) * 1000;
+                let m_name = ermittleAM(rawAbs, distMeter);
+                let kontakte = holeAdresseUndTelefon(m_name);
+                document.getElementById("m").innerText = m_name;
+                document.getElementById("m_address").innerText = kontakte.addr;
+                document.getElementById("m_phone").innerText = kontakte.phone;
+            }
+        } else {
+            let displayDir = "";
+            let rfListe = datenWachen[aktuelleWache].richtungen[a];
+            if (selectedRichtung === 'Hauptachse') displayDir = rfListe ? ` | <strong>${rfListe[0]}</strong>` : "";
+            else if (selectedRichtung === 'Nebenachse') displayDir = rfListe ? ` | <strong>${rfListe[1]}</strong>` : "";
+            else if (selectedRichtung === 'Bestandsachse') displayDir = ` | <strong>Bestandsachse</strong>`;
 
-        document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>${displayDir}`;
+            document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>${displayDir}`;
+        }
     }
 }
  
-function holeNKHtml(props, distMeter = 0, isMap = false) {
+function istLandesOderBundesstrasse(strName) {
+    let k = String(strName || "").charAt(0).toUpperCase();
+    return k === "L" || k === "B";
+}
+
+function formatiereLbErfassungHtml(strName, abschnitt, stationKm) {
+    let kl = String(strName || "").charAt(0).toUpperCase();
+    let icon = kl === "B" ? "🚙" : "🌲";
+    let absFmt = abschnitt && abschnitt !== "Unbekannt" ? abschnitt + " (Abschnitt)" : "Unbekannt (Abschnitt)";
+    let kmFmt = Number(stationKm || 0).toFixed(3);
+    return '<span style="color:green;font-weight:bold;">' + icon + ' ' + strName + ' erkannt</span><br><span style="font-size:0.9em;">Abschnitt: ' + absFmt + ' | KM: ' + kmFmt + '</span>';
+}
+
+function ermittlePositionAufStrasse(strName, km) {
+    let coords = holeKoordinateFuerKM(strName, km);
+    let pt = coords ? turf.point(coords) : null;
+    let features = holeStrassenFeatures(strName, "", false);
+    if (features.length === 0) return null;
+
+    let best = null;
+    let minD = Infinity;
+    features.forEach(f => {
+        try {
+            let basis = pt || turf.centroid(f);
+            let d = turf.pointToLineDistance(basis, f, {units: "kilometers"});
+            if (d < minD) { minD = d; best = f; }
+        } catch (e) {}
+    });
+    if (!best) return null;
+
+    let basis = pt || turf.centroid(best);
+    let snapped = turf.nearestPointOnLine(best, basis, {units: "kilometers"});
+    return {
+        feature: best,
+        snapped: snapped,
+        stationKm: snapped.properties.location || km,
+        props: best.properties || {}
+    };
+}
+
+function parseAbschnittNk(rawAbs) {
+    let raw = String(rawAbs || "").trim().toUpperCase();
+    if (!raw) return null;
+    let m = raw.match(/^(\d{7})([A-Z])(\d{7})([A-Z])$/);
+    if (m) return { raw: raw, knotenA: m[1], buchstabeA: m[2], knotenB: m[3], buchstabeB: m[4] };
+    m = raw.match(/^(\d{8})([A-Z])(\d{8})([A-Z])$/);
+    if (m) return { raw: raw, knotenA: m[1], buchstabeA: m[2], knotenB: m[3], buchstabeB: m[4] };
+    return { raw: raw, knotenA: "-", buchstabeA: "-", knotenB: "-", buchstabeB: "-" };
+}
+
+function formatiereStationKm(distMeter) {
+    return (Number(distMeter || 0) / 1000).toFixed(3).replace(".", ",");
+}
+
+function holeNKHtml(props, distMeter, strName) {
     let rawAbs = props.ABSNr || "";
-    let debugInfo = isMap ? `<div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:4px;">Abschnitt: <b>${rawAbs || "Unbekannt"}</b></div>` : "";
-    return `
-        ${debugInfo}
-        <table style="width:100%; border:none; margin:0; font-family:monospace; font-size:1.15em; line-height:1.2;">
-        </table>
-    `;
+    let nk = parseAbschnittNk(rawAbs) || { raw: "Unbekannt", knotenA: "-", buchstabeA: "-", knotenB: "-", buchstabeB: "-" };
+    return '<div style="text-align:left; line-height:1.45;">' +
+        '<strong style="color:var(--text-secondary); font-size:1.1em;">📍 ' + (strName || "") + '</strong>' +
+        '<div style="font-size:0.9em; margin-top:6px;">Abschnitt: <b>' + nk.raw + '</b></div>' +
+        '<table style="width:100%; border:none; margin:6px 0 0 0; font-family:monospace; font-size:0.95em; line-height:1.5;">' +
+        '<tr><td style="width:46%;">von Knoten A:</td><td>' + nk.knotenA + '</td></tr>' +
+        '<tr><td>Buchstabe:</td><td>' + nk.buchstabeA + '</td></tr>' +
+        '<tr><td>nach B:</td><td>' + nk.knotenB + '</td></tr>' +
+        '<tr><td>Buchstabe:</td><td>' + nk.buchstabeB + '</td></tr>' +
+        '<tr><td>Station (km):</td><td>' + formatiereStationKm(distMeter) + '</td></tr>' +
+        '</table></div>';
+}
+
+function waehleStrassenKandidat(pt, zielName) {
+    if (!zielName) return null;
+    let hits = findeKandidaten(datenBAB, pt, null, 2.0).filter(h => h.name === zielName);
+    if (hits.length === 0) return null;
+    hits.sort((a, b) => a.dist - b.dist);
+    return hits[0];
 }
  
 function openMap(mode = 'NK') {
@@ -1371,12 +1478,8 @@ function calculateMapResult() {
            alleImUmkreis.forEach(feat => { if(feat !== best) L.geoJSON(feat, { style: { color: '#dc3545', weight: 2.5, opacity: 0.6 } }).addTo(mapLineLayer); });
            L.geoJSON(best, { style: { color: '#28a745', weight: 3.5, opacity: 0.9 } }).addTo(mapLineLayer);
             
-            let htmlZettel = holeNKHtml(props, distAufLinieMeter, true); 
-           resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">
-                <strong style="color:var(--text-secondary); font-size:1.1em;">📍 ${strName} (${achse})</strong>
-                <hr style="border:0; border-top:1px dashed var(--input-border); margin:6px 0;">
-               ${htmlZettel}
-            </div>`;
+            let htmlZettel = holeNKHtml(props, distAufLinieMeter, strName); 
+           resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">${htmlZettel}</div>`;
            resDiv.style.display = 'block';
             setTimeout(() => { 
                map.invalidateSize(); 
@@ -1459,10 +1562,8 @@ function calculateMapResult() {
                 
                 updateUI();
             } else {
-                let kl = String(strName.charAt(0)).toUpperCase();
-                let icon = (kl === "B") ? "🚙" : "🌲";
-                
-                document.getElementById("erfasste-strasse").innerHTML = `<span style="color:orange;font-weight:bold;">${icon} ${strName}</span> | Abs: ${abschnitt}`;
+                let stationKm = snappedKm.properties.location || 0;
+                document.getElementById("erfasste-strasse").innerHTML = formatiereLbErfassungHtml(strName, abschnitt, stationKm);
                 document.getElementById("km").value = "";
                 document.getElementById("progress").style.width = "0%";
                 document.getElementById("liste").innerHTML = "";
