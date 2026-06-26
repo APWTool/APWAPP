@@ -1,23 +1,36 @@
-const CACHE_NAME = 'autobahn-tool-v1';
+const CACHE_NAME = 'autobahn-tool-v2';
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Erzwingt sofortiges Update beim Client
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((keys) =>
+            Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+        )
+    );
 });
 
 self.addEventListener('fetch', (event) => {
+    if (event.request.method !== 'GET') return;
+
     event.respondWith(
         fetch(event.request)
             .then((response) => {
-                // Wenn online: Speichere eine Kopie im Cache und gib sie zurück
-                const responseClone = response.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, responseClone);
-                });
+                const url = event.request.url || '';
+                const isJson = url.includes('.json');
+                if (!response.ok || !isJson) return response;
+
+                const clone = response.clone();
+                clone.text().then((text) => {
+                    const t = text.trim();
+                    if (t.startsWith('version https://git-lfs') || t.startsWith('<!')) return;
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
+                }).catch(() => {});
+
                 return response;
             })
-            .catch(() => {
-                // Wenn offline: Lade aus dem Cache
-                return caches.match(event.request);
-            })
+            .catch(() => caches.match(event.request))
     );
 });
