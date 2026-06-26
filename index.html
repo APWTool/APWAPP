@@ -299,7 +299,7 @@ async function ladeGeoJson(url, optional = false) {
         throw new Error(url + ": HTTP " + res.status);
     }
     if (istLfsPointer(text)) {
-        throw new Error(url + ": Git-LFS-Pointer statt JSON. Auf GitHub Pages muss die Datei als normales JSON committed sein (nicht per Git LFS).");
+        throw new Error(url + ": Git-LFS-Pointer – auf GitHub die Datei öffnen: steht nur „version https://git-lfs…“, ist sie noch LFS. Fix: git lfs untrack \"" + url + "\" → Datei neu committen → push.");
     }
     if (istHtmlAntwort(text)) {
         throw new Error(url + ": HTML statt JSON (Pfad falsch oder 404).");
@@ -312,17 +312,33 @@ async function ladeGeoJson(url, optional = false) {
     }
 }
 
+async function ladeStrassenNetz() {
+    let fehler = [];
+    let babJson = {};
+    let bundJson = {};
+
+    try { babJson = await ladeGeoJson("AbschnittBAB.json"); } catch (e) { fehler.push(e.message); }
+    try { bundJson = await ladeGeoJson("AbschnittBund.json"); } catch (e) { fehler.push(e.message); }
+
+    let listeA = extrahiere(babJson, true);
+    let listeB = extrahiere(bundJson, true);
+    datenBAB = listeA.concat(listeB);
+
+    return { anzahlA: listeA.length, anzahlB: listeB.length, fehler: fehler };
+}
+
 async function ladeAlleGeoDaten() {
     let fehler = [];
-    let bab = {}, punkte = {}, gem = {}, amData = {}, smData = {};
+    let punkte = {}, gem = {}, amData = {}, smData = {};
 
-    try { bab = await ladeGeoJson("AbschnittBAB.json"); } catch (e) { fehler.push(e.message); }
+    let strassen = await ladeStrassenNetz();
+    fehler = fehler.concat(strassen.fehler);
+
     try { punkte = await ladeGeoJson("BABKM.json"); } catch (e) { fehler.push(e.message); }
     try { gem = await ladeGeoJson("Gemeinden.json"); } catch (e) { fehler.push(e.message); }
     try { amData = await ladeGeoJson("amDatenbank.json", true); } catch (e) { amData = {}; }
     try { smData = await ladeGeoJson("smDatenbank.json", true); } catch (e) { smData = {}; }
 
-    datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem);
 
@@ -332,12 +348,13 @@ async function ladeAlleGeoDaten() {
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
 
     let info = document.getElementById("gps-info");
+    let strassenInfo = 'A: ' + strassen.anzahlA + ' | B: ' + strassen.anzahlB + ' (gesamt ' + datenBAB.length + ')';
     if (geoDatenBereit) {
-        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
     } else if (fehler.length > 0) {
-        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
     } else {
-        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
     }
 
     loadWacheSetting();
@@ -414,62 +431,121 @@ function findeNaechsteStrassenFeature(pt, strName, achse = "") {
     return best ? { feature: best, dist: minDist, props: best.properties || {} } : null;
 }
 
+function berechneFahrtBearing(strName, km) {
+    let coords = holeKoordinateFuerKM(strName, km);
+    if (!coords) return 0;
+    let prev = holeKoordinateFuerKM(strName, km - 0.35);
+    let next = holeKoordinateFuerKM(strName, km + 0.35);
+    if (!prev && !next) return 0;
+    if (!prev) return turf.bearing(turf.point(coords), turf.point(next));
+    if (!next) return turf.bearing(turf.point(prev), turf.point(coords));
+    return turf.bearing(turf.point(prev), turf.point(next));
+}
+
+function offsetKmPunktQuerachse(strName, km, achse) {
+    let coords = holeKoordinateFuerKM(strName, km);
+    if (!coords) return null;
+    let basis = turf.point(coords);
+    let zielAchse = normalisiereAchse(achse);
+    if (!zielAchse || zielAchse === "Bestandsachse") return basis;
+
+    let bearing = berechneFahrtBearing(strName, km);
+    // Abstand Bestandsachse -> Richtungsfahrbahn (Mitte Fahrbahn), typisch ca. 9 m
+    let seitlichKm = 0.009;
+    let winkel = zielAchse === "Nebenachse" ? bearing - 90 : bearing + 90;
+    return turf.destination(basis, seitlichKm, winkel, {units: "kilometers"});
+}
+
+function punktAufAchseBeiLage(feature, locationKm) {
+    try {
+        let len = turf.length(feature, {units: "kilometers"});
+        let dist = Math.max(0, Math.min(locationKm, len));
+        return turf.along(feature, dist, {units: "kilometers"});
+    } catch (e) {
+        return null;
+    }
+}
+
+function waehleParallelesSegment(kandidaten, referenzPt) {
+    if (!kandidaten || kandidaten.length === 0) return null;
+    if (kandidaten.length === 1) return kandidaten[0];
+    let best = kandidaten[0];
+    let minDist = Infinity;
+    kandidaten.forEach(f => {
+        try {
+            let d = turf.pointToLineDistance(referenzPt, f, {units: "kilometers"});
+            if (d < minDist) { minDist = d; best = f; }
+        } catch (e) {}
+    });
+    return best;
+}
+
 function ermittleFahrbahnPosition(strName, km, achse = "") {
     let coords = holeKoordinateFuerKM(strName, km);
     if (!coords) return null;
 
     let basisPt = turf.point([coords[0], coords[1]]);
     let zielAchse = normalisiereAchse(achse);
-    let basisErgebnis = { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0 };
+
+    if (datenBAB.length === 0) {
+        let pt = offsetKmPunktQuerachse(strName, km, zielAchse || "Bestandsachse") || basisPt;
+        return { point: pt, coords: turf.getCoord(pt), feature: null, props: {}, distMeter: 0, approximiert: !!zielAchse && zielAchse !== "Bestandsachse" };
+    }
 
     let bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "Bestandsachse");
     if (!bestandMatch) bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "");
 
-    let referenzPunkt = basisPt;
-    let referenzFeature = null;
-    let referenzProps = {};
-
-    if (bestandMatch) {
-        referenzPunkt = turf.nearestPointOnLine(bestandMatch.feature, basisPt, {units: 'kilometers'});
-        referenzFeature = bestandMatch.feature;
-        referenzProps = bestandMatch.props;
+    if (!bestandMatch) {
+        let pt = offsetKmPunktQuerachse(strName, km, zielAchse || "Bestandsachse") || basisPt;
+        return { point: pt, coords: turf.getCoord(pt), feature: null, props: {}, distMeter: 0, approximiert: true };
     }
+
+    let bestandSnap = turf.nearestPointOnLine(bestandMatch.feature, basisPt, {units: "kilometers"});
+    let locationKm = bestandSnap.properties.location || 0;
+    let absNr = bestandMatch.props.ABSNr || "";
 
     if (!zielAchse || zielAchse === "Bestandsachse") {
-        if (bestandMatch) {
-            return {
-                point: referenzPunkt,
-                coords: turf.getCoord(referenzPunkt),
-                feature: referenzFeature,
-                props: referenzProps,
-                distMeter: (referenzPunkt.properties.location || 0) * 1000
-            };
-        }
-        return basisErgebnis;
+        return {
+            point: bestandSnap,
+            coords: turf.getCoord(bestandSnap),
+            feature: bestandMatch.feature,
+            props: bestandMatch.props,
+            distMeter: locationKm * 1000,
+            approximiert: false
+        };
     }
 
-    let match = findeNaechsteStrassenFeature(referenzPunkt, strName, zielAchse);
-    if (!match) match = findeNaechsteStrassenFeature(basisPt, strName, zielAchse);
-    if (!match) {
-        if (bestandMatch) {
-            return {
-                point: referenzPunkt,
-                coords: turf.getCoord(referenzPunkt),
-                feature: referenzFeature,
-                props: referenzProps,
-                distMeter: (referenzPunkt.properties.location || 0) * 1000
-            };
-        }
-        return basisErgebnis;
+    let dirFeatures = holeStrassenFeatures(strName, zielAchse, true);
+    if (absNr) {
+        let passendAbs = dirFeatures.filter(f => (f.properties || {}).ABSNr === absNr);
+        if (passendAbs.length > 0) dirFeatures = passendAbs;
     }
 
-    let snapped = turf.nearestPointOnLine(match.feature, referenzPunkt, {units: 'kilometers'});
+    let dirFeature = waehleParallelesSegment(dirFeatures, bestandSnap);
+    if (!dirFeature) {
+        let pt = offsetKmPunktQuerachse(strName, km, zielAchse) || bestandSnap;
+        return {
+            point: pt,
+            coords: turf.getCoord(pt),
+            feature: null,
+            props: {},
+            distMeter: locationKm * 1000,
+            approximiert: true
+        };
+    }
+
+    let dirSnap = punktAufAchseBeiLage(dirFeature, locationKm);
+    if (!dirSnap) {
+        dirSnap = turf.nearestPointOnLine(dirFeature, bestandSnap, {units: "kilometers"});
+    }
+
     return {
-        point: snapped,
-        coords: turf.getCoord(snapped),
-        feature: match.feature,
-        props: match.props,
-        distMeter: (referenzPunkt.properties.location || 0) * 1000
+        point: dirSnap,
+        coords: turf.getCoord(dirSnap),
+        feature: dirFeature,
+        props: dirFeature.properties || {},
+        distMeter: locationKm * 1000,
+        approximiert: false
     };
 }
 
@@ -1046,6 +1122,9 @@ function berechnen(isManual = false){
     
     if(fahrbahnPosition && fahrbahnPosition.point) {
         let gemeinde = findeGemeindeFuerPunkt(fahrbahnPosition.point);
+        if (fahrbahnPosition.approximiert && datenBAB.length === 0) {
+            gemeinde += " (≈ ohne BAB-Geometrie)";
+        }
         document.getElementById("g").innerText = gemeinde;
         if (fahrbahnPosition.coords) {
             aktiveLat = fahrbahnPosition.coords[1];
