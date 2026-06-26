@@ -919,66 +919,124 @@ function updateUI() {
     }
 }
  
-function findeGemeindeFuerPunkt(pt) {
-    if (datenGemeinden.length === 0) return "-";
+function ermittleGemeindePunkt(strName, km) {
+    let coords = holeKoordinateFuerKM(strName, km);
+    if (!coords) return null;
+    let pt = turf.point(coords);
+
+    if (datenBAB.length > 0) {
+        let match = findeNaechsteStrassenFeature(pt, strName, "Bestandsachse");
+        if (!match) match = findeNaechsteStrassenFeature(pt, strName, "");
+        if (match) {
+            let snapped = turf.nearestPointOnLine(match.feature, pt, {units: "kilometers"});
+            let dist = turf.distance(pt, snapped, {units: "kilometers"});
+            if (dist <= 0.08) pt = snapped;
+        }
+    }
+    return pt;
+}
+
+function findeGemeindeTreffer(pt) {
     let treffer = [];
     for (let f of datenGemeinden) {
         try {
-            if (turf.booleanPointInPolygon(pt, f)) {
-                treffer.push(f);
-            }
+            if (turf.booleanPointInPolygon(pt, f)) treffer.push(f);
         } catch (e) {}
     }
-    if (treffer.length === 1) return treffer[0].properties.GN || "Unbekannt";
     if (treffer.length > 1) {
         treffer.sort((a, b) => turf.area(a) - turf.area(b));
-        return treffer[0].properties.GN || "Unbekannt";
     }
+    return treffer;
+}
+
+function gemeindeNameAusFeature(f) {
+    return (f.properties || {}).GN || (f.properties || {}).GEN || (f.properties || {}).NAME || "Unbekannt";
+}
+
+function findeGemeindeFuerPunktInner(pt) {
+    if (datenGemeinden.length === 0) return "-";
+    let treffer = findeGemeindeTreffer(pt);
+    if (treffer.length > 0) return gemeindeNameAusFeature(treffer[0]);
+    return null;
+}
+
+function findeGemeindeFuerPunkt(pt, strName, km) {
+    if (datenGemeinden.length === 0) return "-";
+
+    let direkt = findeGemeindeFuerPunktInner(pt);
+    if (direkt) return direkt;
+
+    if (strName && !isNaN(km)) {
+        let ptVor = ermittleGemeindePunkt(strName, km - 0.08);
+        let ptNach = ermittleGemeindePunkt(strName, km + 0.08);
+        if (ptVor && ptNach) {
+            let bearing = turf.bearing(ptVor, ptNach);
+            let probes = [
+                turf.destination(pt, 0.04, bearing, {units: "kilometers"}),
+                turf.destination(pt, 0.04, bearing - 180, {units: "kilometers"}),
+                pt
+            ];
+            let stimmen = {};
+            probes.forEach(p => {
+                let g = findeGemeindeFuerPunktInner(p);
+                if (g) stimmen[g] = (stimmen[g] || 0) + 1;
+            });
+            let best = null;
+            let bestW = 0;
+            Object.keys(stimmen).forEach(g => {
+                if (stimmen[g] > bestW) { bestW = stimmen[g]; best = g; }
+            });
+            if (best) return best;
+        }
+    }
+
     try {
         if (typeof turf.polygonToLine === "function") {
             let nearest = null;
             datenGemeinden.forEach(f => {
                 try {
                     let outline = turf.polygonToLine(f);
-                    let d = turf.pointToLineDistance(pt, outline, {units: 'kilometers'});
-                    if (d <= 0.03 && (!nearest || d < nearest.dist)) nearest = { feature: f, dist: d };
+                    let d = turf.pointToLineDistance(pt, outline, {units: "kilometers"});
+                    if (d <= 0.05 && (!nearest || d < nearest.dist)) nearest = { feature: f, dist: d };
                 } catch (e) {}
             });
-            if (nearest) return nearest.feature.properties.GN || "Unbekannt";
+            if (nearest) return gemeindeNameAusFeature(nearest.feature);
         }
 
-        let buffered = turf.buffer(pt, 0.03, {units: 'kilometers'});
+        let buffered = turf.buffer(pt, 0.05, {units: "kilometers"});
         let grenzTreffer = [];
         for (let f of datenGemeinden) {
             try {
                 if (turf.booleanIntersects(buffered, f)) {
                     let outline = typeof turf.polygonToLine === "function" ? turf.polygonToLine(f) : null;
-                    let d = outline ? turf.pointToLineDistance(pt, outline, {units: 'kilometers'}) : 0.03;
+                    let d = outline ? turf.pointToLineDistance(pt, outline, {units: "kilometers"}) : 0.05;
                     grenzTreffer.push({ feature: f, dist: d });
                 }
             } catch (e) {}
         }
         if (grenzTreffer.length > 0) {
             grenzTreffer.sort((a, b) => a.dist - b.dist);
-            return grenzTreffer[0].feature.properties.GN || "Unbekannt";
+            return gemeindeNameAusFeature(grenzTreffer[0].feature);
         }
     } catch (e) {}
     return "Außerhalb NRW";
 }
 
-function gemeindeBeiKm(strName, km, achse) {
-    let pos = ermittleFahrbahnPosition(strName, km, achse);
-    if (!pos || !pos.point) return null;
-    return findeGemeindeFuerPunkt(pos.point);
+function gemeindeBeiKm(strName, km) {
+    let pt = ermittleGemeindePunkt(strName, km);
+    if (!pt) return null;
+    return findeGemeindeFuerPunkt(pt, strName, km);
 }
 
 function findeGemeindeAnFahrbahn(strName, km, achse) {
     if (datenGemeinden.length === 0) return "-";
-    let deltas = [0, -0.05, 0.05, -0.1, 0.1];
-    let gewichte = { "0": 3 };
+    void achse;
+    let deltas = [0, -0.05, 0.05, -0.1, 0.1, -0.15, 0.15];
+    let gewichte = { "0": 4 };
     let stimmen = {};
     deltas.forEach(delta => {
-        let name = gemeindeBeiKm(strName, km + delta, achse);
+        let k = km + delta;
+        let name = gemeindeBeiKm(strName, k);
         if (!name || name === "-" || name === "Außerhalb NRW") return;
         let w = gewichte[String(delta)] || 1;
         stimmen[name] = (stimmen[name] || 0) + w;
@@ -991,24 +1049,25 @@ function findeGemeindeAnFahrbahn(strName, km, achse) {
             best = n;
         }
     });
-    return best || gemeindeBeiKm(strName, km, achse) || "-";
+    return best || gemeindeBeiKm(strName, km) || "-";
 }
 
 function ermittleGemeindeKmBereich(strName, achse, gemeindeName, km) {
+    void achse;
     let grenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
     let minScan = grenzen ? Math.min(...grenzen) : km - 25;
     let maxScan = grenzen ? Math.max(...grenzen) : km + 25;
-    let step = 0.2;
+    let step = 0.05;
     let minKm = km;
     let maxKm = km;
 
     for (let k = km - step; k >= minScan; k -= step) {
-        let g = gemeindeBeiKm(strName, k, achse);
+        let g = gemeindeBeiKm(strName, k);
         if (g !== gemeindeName) break;
         minKm = k;
     }
     for (let k = km + step; k <= maxScan; k += step) {
-        let g = gemeindeBeiKm(strName, k, achse);
+        let g = gemeindeBeiKm(strName, k);
         if (g !== gemeindeName) break;
         maxKm = k;
     }
