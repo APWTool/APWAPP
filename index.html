@@ -348,13 +348,12 @@ async function ladeAlleGeoDaten() {
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
 
     let info = document.getElementById("gps-info");
-    let strassenInfo = 'A: ' + strassen.anzahlA + ' | B: ' + strassen.anzahlB + ' (gesamt ' + datenBAB.length + ')';
     if (geoDatenBereit) {
-        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
     } else if (fehler.length > 0) {
-        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
     } else {
-        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span><br><span style="font-size:0.8em;">Straßen: ' + strassenInfo + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span>';
     }
 
     loadWacheSetting();
@@ -534,10 +533,7 @@ function ermittleFahrbahnPosition(strName, km, achse = "") {
         };
     }
 
-    let dirSnap = punktAufAchseBeiLage(dirFeature, locationKm);
-    if (!dirSnap) {
-        dirSnap = turf.nearestPointOnLine(dirFeature, bestandSnap, {units: "kilometers"});
-    }
+    let dirSnap = turf.nearestPointOnLine(dirFeature, bestandSnap, {units: "kilometers"});
 
     return {
         point: dirSnap,
@@ -650,38 +646,82 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
  
+function holeKmAnkerKoordinaten() {
+    if (letzteLat !== 0 && letzteLon !== 0) return [letzteLon, letzteLat];
+    if (wachenAnker[aktuelleWache]) return wachenAnker[aktuelleWache];
+    return wachenAnker["Hilden"] || [6.95, 51.17];
+}
+
+function waehleKmCluster(mitKm, km) {
+    if (mitKm.length <= 1) return mitKm;
+    let clusters = [];
+    let current = [mitKm[0]];
+    for (let i = 1; i < mitKm.length; i++) {
+        if (mitKm[i].km - mitKm[i - 1].km > 15) {
+            clusters.push(current);
+            current = [];
+        }
+        current.push(mitKm[i]);
+    }
+    clusters.push(current);
+
+    let passend = clusters.filter(c => km >= c[0].km - 2 && km <= c[c.length - 1].km + 2);
+    if (passend.length === 1) return passend[0];
+    if (passend.length > 1) {
+        let anchorPt = turf.point(holeKmAnkerKoordinaten());
+        passend.sort((a, b) => {
+            let midA = (a[0].km + a[a.length - 1].km) / 2;
+            let midB = (b[0].km + b[b.length - 1].km) / 2;
+            let ptA = turf.point(a[Math.floor(a.length / 2)].coord);
+            let ptB = turf.point(b[Math.floor(b.length / 2)].coord);
+            return turf.distance(anchorPt, ptA) - turf.distance(anchorPt, ptB);
+        });
+        return passend[0];
+    }
+    clusters.sort((a, b) => {
+        let midA = (a[0].km + a[a.length - 1].km) / 2;
+        let midB = (b[0].km + b[b.length - 1].km) / 2;
+        return Math.abs(km - midA) - Math.abs(km - midB);
+    });
+    return clusters[0];
+}
+
+function interpoliereKmKoordinate(before, after, km) {
+    if (!before && !after) return null;
+    if (!before) return after.coord;
+    if (!after) return before.coord;
+    if (before.km === after.km) return before.coord;
+    let t = (km - before.km) / (after.km - before.km);
+    t = Math.max(0, Math.min(1, t));
+    return [
+        before.coord[0] + t * (after.coord[0] - before.coord[0]),
+        before.coord[1] + t * (after.coord[1] - before.coord[1])
+    ];
+}
+
 function holeKoordinateFuerKM(autobahn, km) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
-    let suchNummer = autobahn.toUpperCase().replace('A', ''); 
+    let suchNummer = autobahn.toUpperCase().replace('A', '');
     let passende = referenzPunkte.filter(f => {
-       if(!f.properties) return false;
+        if (!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
     });
-   if(passende.length > 0) {
-        let candidates = [];
-       passende.forEach(p => {
-            let pKm = Number(p.properties.Kilometer || 0);
-            candidates.push({ pt: p, diff: Math.abs(pKm - km) });
-        });
-        if (candidates.length > 0) {
-           candidates.sort((a, b) => a.diff - b.diff);
-            let bestDiff = candidates[0].diff;
-            let topCandidates = candidates.filter(c => c.diff <= bestDiff + 1.5);
-            if (topCandidates.length > 1) {
-                let anchorCoords = wachenAnker["Hilden"]; 
-                if (letzteLat !== 0 && letzteLon !== 0) anchorCoords = [letzteLon, letzteLat];
-                else if (wachenAnker[aktuelleWache]) anchorCoords = wachenAnker[aktuelleWache];
-                let anchorPt = turf.point(anchorCoords);
-               topCandidates.forEach(c => {
-                   let cCoord = turf.getCoord(turf.centroid(c.pt));
-                   c.anchorDist = turf.distance(anchorPt, turf.point(cCoord));
-                });
-               topCandidates.sort((a, b) => a.anchorDist - b.anchorDist);
-            }
-            return turf.getCoord(turf.centroid(topCandidates[0].pt)); 
-        }
-    }
-    return null;
+    if (passende.length === 0) return null;
+
+    let mitKm = passende.map(p => ({
+        pt: p,
+        km: Number(p.properties.Kilometer || 0),
+        coord: turf.getCoord(turf.centroid(p))
+    })).sort((a, b) => a.km - b.km);
+
+    let cluster = waehleKmCluster(mitKm, km);
+    let before = null;
+    let after = null;
+    cluster.forEach(item => {
+        if (item.km <= km) before = item;
+        if (item.km >= km && !after) after = item;
+    });
+    return interpoliereKmKoordinate(before, after, km);
 }
  
 function updateRichtungDropdown(a) {
@@ -799,8 +839,18 @@ function updateUI() {
  
 function findeGemeindeFuerPunkt(pt) {
     if (datenGemeinden.length === 0) return "-";
+    let treffer = [];
     for (let f of datenGemeinden) {
-        try { if (turf.booleanPointInPolygon(pt, f)) return f.properties.GN || "Unbekannt"; } catch(e) {}
+        try {
+            if (turf.booleanPointInPolygon(pt, f)) {
+                treffer.push(f);
+            }
+        } catch (e) {}
+    }
+    if (treffer.length === 1) return treffer[0].properties.GN || "Unbekannt";
+    if (treffer.length > 1) {
+        treffer.sort((a, b) => turf.area(a) - turf.area(b));
+        return treffer[0].properties.GN || "Unbekannt";
     }
     try {
         if (typeof turf.polygonToLine === "function") {
@@ -809,18 +859,104 @@ function findeGemeindeFuerPunkt(pt) {
                 try {
                     let outline = turf.polygonToLine(f);
                     let d = turf.pointToLineDistance(pt, outline, {units: 'kilometers'});
-                    if (d <= 0.05 && (!nearest || d < nearest.dist)) nearest = { feature: f, dist: d };
-                } catch(e) {}
+                    if (d <= 0.03 && (!nearest || d < nearest.dist)) nearest = { feature: f, dist: d };
+                } catch (e) {}
             });
             if (nearest) return nearest.feature.properties.GN || "Unbekannt";
         }
 
-        let buffered = turf.buffer(pt, 0.05, {units: 'kilometers'}); 
+        let buffered = turf.buffer(pt, 0.03, {units: 'kilometers'});
+        let grenzTreffer = [];
         for (let f of datenGemeinden) {
-            if (turf.booleanIntersects(buffered, f)) return f.properties.GN || "Unbekannt";
+            try {
+                if (turf.booleanIntersects(buffered, f)) {
+                    let outline = typeof turf.polygonToLine === "function" ? turf.polygonToLine(f) : null;
+                    let d = outline ? turf.pointToLineDistance(pt, outline, {units: 'kilometers'}) : 0.03;
+                    grenzTreffer.push({ feature: f, dist: d });
+                }
+            } catch (e) {}
         }
-    } catch(e) {}
+        if (grenzTreffer.length > 0) {
+            grenzTreffer.sort((a, b) => a.dist - b.dist);
+            return grenzTreffer[0].feature.properties.GN || "Unbekannt";
+        }
+    } catch (e) {}
     return "Außerhalb NRW";
+}
+
+function gemeindeBeiKm(strName, km, achse) {
+    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    if (!pos || !pos.point) return null;
+    return findeGemeindeFuerPunkt(pos.point);
+}
+
+function findeGemeindeAnFahrbahn(strName, km, achse) {
+    if (datenGemeinden.length === 0) return "-";
+    let deltas = [0, -0.05, 0.05, -0.1, 0.1];
+    let gewichte = { "0": 3 };
+    let stimmen = {};
+    deltas.forEach(delta => {
+        let name = gemeindeBeiKm(strName, km + delta, achse);
+        if (!name || name === "-" || name === "Außerhalb NRW") return;
+        let w = gewichte[String(delta)] || 1;
+        stimmen[name] = (stimmen[name] || 0) + w;
+    });
+    let best = null;
+    let bestW = 0;
+    Object.keys(stimmen).forEach(n => {
+        if (stimmen[n] > bestW) {
+            bestW = stimmen[n];
+            best = n;
+        }
+    });
+    return best || gemeindeBeiKm(strName, km, achse) || "-";
+}
+
+function ermittleGemeindeKmBereich(strName, achse, gemeindeName, km) {
+    let grenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
+    let minScan = grenzen ? Math.min(...grenzen) : km - 25;
+    let maxScan = grenzen ? Math.max(...grenzen) : km + 25;
+    let step = 0.2;
+    let minKm = km;
+    let maxKm = km;
+
+    for (let k = km - step; k >= minScan; k -= step) {
+        let g = gemeindeBeiKm(strName, k, achse);
+        if (g !== gemeindeName) break;
+        minKm = k;
+    }
+    for (let k = km + step; k <= maxScan; k += step) {
+        let g = gemeindeBeiKm(strName, k, achse);
+        if (g !== gemeindeName) break;
+        maxKm = k;
+    }
+    return { von: minKm, bis: maxKm };
+}
+
+function formatiereGemeindeKm(km) {
+    let r = Math.round(km * 10) / 10;
+    return (Math.abs(r % 1) < 0.001 ? r.toFixed(0) : r.toFixed(1)).replace('.', ',');
+}
+
+function formatiereGemeindeAnzeige(name, bereich) {
+    if (!bereich) return name;
+    return name + ' (von ' + formatiereGemeindeKm(bereich.von) + '–' + formatiereGemeindeKm(bereich.bis) + ')';
+}
+
+function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
+    let gemeinde = findeGemeindeAnFahrbahn(strName, km, achse);
+    if (!gemeinde || gemeinde === "-") {
+        document.getElementById("g").innerText = gemeinde || "-";
+        return gemeinde;
+    }
+    let text = gemeinde;
+    if (strName && km > 0 && gemeinde !== "Außerhalb NRW") {
+        let bereich = ermittleGemeindeKmBereich(strName, achse, gemeinde, km);
+        text = formatiereGemeindeAnzeige(gemeinde, bereich);
+    }
+    if (opts.approximiert && datenBAB.length === 0) text += " (≈ ohne BAB-Geometrie)";
+    document.getElementById("g").innerText = text;
+    return gemeinde;
 }
  
 let watchId=null;
@@ -954,11 +1090,7 @@ async function verarbeiteGPS(lat, lon, acc){
             let selectedRichtung = document.getElementById("richtung").value;
             if (bkm > 0) {
                 let gemeindeAchse = selectedRichtung || achse;
-                let gPos = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
-                if (gPos) {
-                    aktuelleGemeinde = findeGemeindeFuerPunkt(gPos.point);
-                    document.getElementById("g").innerText = aktuelleGemeinde;
-                }
+                setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
             }
             
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
@@ -1121,11 +1253,7 @@ function berechnen(isManual = false){
     let fahrbahnPosition = ermittleFahrbahnPosition(a, km, gemeindeAchse);
     
     if(fahrbahnPosition && fahrbahnPosition.point) {
-        let gemeinde = findeGemeindeFuerPunkt(fahrbahnPosition.point);
-        if (fahrbahnPosition.approximiert && datenBAB.length === 0) {
-            gemeinde += " (≈ ohne BAB-Geometrie)";
-        }
-        document.getElementById("g").innerText = gemeinde;
+        setzeGemeindeAnzeige(a, km, gemeindeAchse, { approximiert: fahrbahnPosition.approximiert });
         if (fahrbahnPosition.coords) {
             aktiveLat = fahrbahnPosition.coords[1];
             aktiveLon = fahrbahnPosition.coords[0];
@@ -1288,16 +1416,11 @@ function calculateMapResult() {
             if (strName.startsWith("A") && bkm > 0) {
                 let selectedRichtung = document.getElementById("richtung").value;
                 let gemeindeAchse = selectedRichtung || achse;
-                let gPos = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
-                if (gPos) {
-                    aktuelleGemeinde = findeGemeindeFuerPunkt(gPos.point);
-                } else {
-                    aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
-                }
+                aktuelleGemeinde = setzeGemeindeAnzeige(strName, bkm, gemeindeAchse) || "-";
             } else {
                 aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
+                document.getElementById("g").innerText = aktuelleGemeinde;
             }
-            document.getElementById("g").innerText = aktuelleGemeinde;
             
             if (strName.startsWith("A") && bkm > 0) {
                 setzeMeistereiAnzeige(strName, bkm);
