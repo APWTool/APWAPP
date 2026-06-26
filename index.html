@@ -74,14 +74,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .map-footer { flex-shrink: 0; padding: 15px; background: var(--bg-card); box-shadow: 0 -2px 10px rgba(0,0,0,0.2); z-index: 10000; }
 #nk-map-result { display: none; margin-top: 10px; }
  
-/* RECHERCHE CSS */
-#recherche-map-container { width: 100%; height: 280px; border-radius: 6px; overflow: hidden; border: 1px solid var(--input-border); margin-bottom: 15px; position: relative; }
-#recherche-karte { width: 100%; height: 100%; z-index: 10; }
-.warning-box { background: #ffe6e6; border-left: 4px solid #dc3545; padding: 10px; color: #900; font-size: 0.85em; border-radius: 4px; margin-bottom: 15px; line-height: 1.4; }
-[data-theme="dark"] .warning-box { background: #3b1c1c; color: #ff9999; border-left-color: #ff4d4d; }
-.recherche-data { background: var(--result-bg); border: 1px solid var(--input-border); padding: 12px; border-radius: 6px; font-size: 0.9em; line-height: 1.5; }
-.recherche-data p { margin: 5px 0; }
-
 /* FUSSEILE */
 .footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
 .footer-nav a { color: var(--text-secondary); text-decoration: none; font-weight: bold; cursor: pointer; }
@@ -129,10 +121,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     <input id="km" placeholder="Kilometer manuell eingeben" inputmode="decimal" oninput="berechnen(false)" onchange="berechnen(true)">
     
     <select id="richtung" onchange="berechnen(true)">
-        <option value="">Fahrtrichtung wählen (optional)</option>
-        <option value="Hauptachse">Hauptachse (+)</option>
-        <option value="Nebenachse">Nebenachse (-)</option>
-        <option value="Bestandsachse">Bestandsachse (Ungetrennt)</option>
+        <option value="">Richtungsfahrbahn wählen (optional)</option>
     </select>
  
     <button id="gpsBtn" onclick="toggleGPS()">📡 GPS Live-Erfassung starten</button>
@@ -143,7 +132,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('KM')">📍 KM auf Karte erfassen</button>
     </div>
     <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
-    <button class="btn-action" style="background-color: #17a2b8;" onclick="oeffneRecherche()">🔎 Recherche & Skizze (Satellit + Daten)</button>
  
     <div class="result">
        <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
@@ -174,34 +162,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
 </div>
 
-<div class="card" id="page-recherche" style="display:none;">
-    <h2>🔎 Recherche & Skizze</h2>
-    
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -10px; margin-bottom: 10px;">
-        <span id="recherche-titel" style="font-weight: bold; color: var(--text-secondary); font-size: 1.1em;">-</span>
-        <label style="font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 4px; background: var(--bg-body); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--input-border);">
-            <input type="checkbox" id="toggle-recherche-pin" onchange="toggleRecherchePin()" checked>
-            📍 Nadel
-        </label>
-    </div>
-    
-    <div id="recherche-map-container">
-        <div id="recherche-karte"></div>
-    </div>
-    
-    <div class="warning-box">
-        <strong>⚠️ WICHTIGER HINWEIS (Ermittlungsgrundlage):</strong><br>
-        Sperrflächen, Ein-/Ausfädelungsstreifen sowie Kurven und Gefälle sind über das obige Satellitenbild visuell zu bewerten.<br><br>
-        Die unten aufgeführten OSM-Daten stellen <b>ausschließlich statische Werte</b> dar. Sie berücksichtigen <u>keine</u> temporären Baustellen oder Schaltzustände von Streckenbeeinflussungsanlagen (SBA)!
-    </div>
-    
-    <div class="recherche-data" id="recherche-osm-daten">
-        <i>Lade OSM-Daten...</i>
-    </div>
-    
-    <button class="btn-action" style="margin-top: 15px;" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
-</div>
- 
 <div class="card" id="page-wegzeit" style="display:none;">
     <h2>Live Weg-Zeit Tracker</h2>
     <div class="wache-buttons">
@@ -282,8 +242,6 @@ let manuellerFokus = null;
 let map = null;
 let mapLineLayer = null; 
 let mapMode = 'NK';
-let rechercheMap = null;
-let rechercheMarker = null;
 let wzInterval = null;
 let wzStartTime = 0;
 let wzStartKm = 0;
@@ -303,7 +261,6 @@ function toggleTheme() {
 function showPage(pageId) {
    document.getElementById('page-main').style.display = 'none';
    document.getElementById('page-wegzeit').style.display = 'none';
-   document.getElementById('page-recherche').style.display = 'none';
    document.getElementById('page-impressum').style.display = 'none';
    document.getElementById('page-hinweise').style.display = 'none';
    document.getElementById('map-overlay').style.display = 'none';
@@ -509,6 +466,24 @@ function holeKoordinateFuerKM(autobahn, km) {
     return null;
 }
  
+function updateRichtungDropdown(a) {
+    let rDrop = document.getElementById("richtung");
+    if (!rDrop) return;
+    let saved = rDrop.value;
+    rDrop.innerHTML = "";
+    rDrop.add(new Option("Richtungsfahrbahn wählen (optional)", ""));
+    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[a];
+    if (rfListe && rfListe[0]) rDrop.add(new Option(rfListe[0], "Hauptachse"));
+    if (rfListe && rfListe[1]) rDrop.add(new Option(rfListe[1], "Nebenachse"));
+    rDrop.add(new Option("Bestandsachse (Ungetrennt)", "Bestandsachse"));
+    if (Array.from(rDrop.options).some(o => o.value === saved)) rDrop.value = saved;
+}
+
+function uebernehmeKmAusListe(kmWert) {
+    document.getElementById("km").value = Number(kmWert).toFixed(3).replace('.', ',');
+    berechnen(true);
+}
+
 function updateUI() {
     let a = document.getElementById("autobahn").value;
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
@@ -525,6 +500,7 @@ function updateUI() {
        document.getElementById("b").innerText = "-";
        bereichDiv.style.display = "none";
        leftArrow.style.display = "none"; rightArrow.style.display = "none";
+       updateRichtungDropdown(a);
         return;
     }
  
@@ -538,6 +514,8 @@ function updateUI() {
     } else {
        leftArrow.style.display = "none"; rightArrow.style.display = "none";
     }
+
+    updateRichtungDropdown(a);
  
    if(wachenListen[a]) {
        wachenListen[a].forEach(e => {
@@ -553,8 +531,12 @@ function updateUI() {
                 }
             }
             if (rf) nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
+            let kmHtml = kmRaw;
+            if (!isNaN(baseKm)) {
+                kmHtml = `<a href="#" onclick="uebernehmeKmAusListe(${baseKm}); return false;" title="KM übernehmen">${kmRaw}</a>`;
+            }
             let tr = document.createElement("tr");
-           tr.innerHTML = `<td>${typ}</td><td>${nameHtml}</td><td>${kmRaw}</td>`;
+           tr.innerHTML = `<td>${typ}</td><td>${nameHtml}</td><td>${kmHtml}</td>`;
            tbody.appendChild(tr);
         });
     } else {
@@ -868,43 +850,10 @@ function berechnen(isManual = false){
  
     let selectedRichtung = document.getElementById("richtung").value;
     let fahrbahnPosition = ermittleFahrbahnPosition(a, km, selectedRichtung);
-    let coords = fahrbahnPosition ? fahrbahnPosition.coords : null;
     let aktuelleGemeinde = "-";
     
     if(fahrbahnPosition) {
-        let pt = fahrbahnPosition.point;
-        let selRichtung = document.getElementById("richtung").value;
-
-        // NEU: Exaktes Snapping für die Gemeinde bei Handeingabe anhand der Richtungsfahrbahn
-        if(isManual) {
-            let relevanteLinien = datenBAB.filter(f => {
-                let p = f.properties || {};
-                let name = String(p.STRBEZ || "").toUpperCase().replace(/\s/g, '');
-                return name === normalisiereStrassenName(a);
-            });
-            
-            if (selRichtung) {
-                let gefiltert = relevanteLinien.filter(f => normalisiereAchse((f.properties || {}).Sk_Achse) === normalisiereAchse(selRichtung));
-                if (gefiltert.length > 0) relevanteLinien = gefiltert; 
-            }
-            
-            if (relevanteLinien.length > 0) {
-                let closestLine = null;
-                let minDist = Infinity;
-                relevanteLinien.forEach(f => {
-                    let d = turf.pointToLineDistance(pt, f);
-                    if (d < minDist) { minDist = d; closestLine = f; }
-                });
-                
-                if (closestLine) {
-                    let snapped = turf.nearestPointOnLine(closestLine, pt);
-                    pt = snapped; 
-                    coords = turf.getCoord(snapped);
-                }
-            }
-        }
-
-        aktuelleGemeinde = findeGemeindeFuerPunkt(pt);
+        aktuelleGemeinde = findeGemeindeFuerPunkt(fahrbahnPosition.point);
         document.getElementById("g").innerText = aktuelleGemeinde;
     } else {
         document.getElementById("g").innerText = "-";
@@ -921,7 +870,6 @@ function berechnen(isManual = false){
         let distMeter = 0;
         
         let displayDir = "";
-        let selectedRichtung = document.getElementById("richtung").value;
         let rfListe = datenWachen[aktuelleWache].richtungen[a];
         if (selectedRichtung === 'Hauptachse') displayDir = rfListe ? ` | <strong>${rfListe[0]}</strong>` : "";
         else if (selectedRichtung === 'Nebenachse') displayDir = rfListe ? ` | <strong>${rfListe[1]}</strong>` : "";
@@ -929,31 +877,20 @@ function berechnen(isManual = false){
 
         document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>${displayDir}`;
 
-        if (coords) {
-            let pt = turf.point([coords[0], coords[1]]);
-            let hits = findeKandidaten(datenBAB, pt, null, 0.5); 
-            let matchedFeature = hits.find(h => h.name === a);
-            
-            if (matchedFeature) {
-                let props = matchedFeature.feature.properties || {};
-                rawAbs = props.ABSNr || "";
-                let snapped = turf.nearestPointOnLine(matchedFeature.feature, pt, {units: 'kilometers'});
-                let distAufLinieKm = snapped.properties.location || 0;
-                distMeter = distAufLinieKm * 1000;
-                
-                let snappedCoord = turf.getCoord(snapped);
-                aktiveLat = snappedCoord[1];
-                aktiveLon = snappedCoord[0];
-            } else {
-                aktiveLat = coords[1];
-                aktiveLon = coords[0];
-            }
-            aktiveKM = km; 
-            
-            if (rechercheMap && (aktiveLat !== 0 && aktiveLon !== 0)) {
-                rechercheMap.setView([aktiveLat, aktiveLon], 19, {animate: false});
-                if (rechercheMarker) rechercheMarker.setLatLng([aktiveLat, aktiveLon]);
-            }
+        if (fahrbahnPosition && fahrbahnPosition.feature) {
+            let props = fahrbahnPosition.props || {};
+            rawAbs = props.ABSNr || "";
+            let snapped = turf.nearestPointOnLine(fahrbahnPosition.feature, fahrbahnPosition.point, {units: 'kilometers'});
+            let distAufLinieKm = snapped.properties.location || 0;
+            distMeter = distAufLinieKm * 1000;
+            let snappedCoord = turf.getCoord(snapped);
+            aktiveLat = snappedCoord[1];
+            aktiveLon = snappedCoord[0];
+            aktiveKM = km;
+        } else if (fahrbahnPosition && fahrbahnPosition.coords) {
+            aktiveLat = fahrbahnPosition.coords[1];
+            aktiveLon = fahrbahnPosition.coords[0];
+            aktiveKM = km;
         }
         
         let m_name = ermittleAM(rawAbs, distMeter);
@@ -1148,107 +1085,6 @@ function calculateMapResult() {
     }
 }
 
-// --- NEU: RECHERCHE BEREICH PIN TOGGLE ---
-function toggleRecherchePin() {
-    let cb = document.getElementById("toggle-recherche-pin");
-    if(cb.checked) {
-        if(rechercheMarker && rechercheMap) rechercheMarker.addTo(rechercheMap);
-    } else {
-        if(rechercheMarker) rechercheMarker.remove();
-    }
-}
-
-async function oeffneRecherche() {
-    let a = document.getElementById("autobahn").value;
-    let kmRaw = document.getElementById("km").value.replace(',', '.');
-    let km = parseFloat(kmRaw);
-
-    let strassenName = manuellerFokus || a;
-
-    if (!strassenName || isNaN(km)) {
-        if(aktiveLat === 0 && aktiveLon === 0) {
-            alert("Bitte wähle zuerst eine Straße aus und trage einen Kilometer ein (oder nutze die GPS/Karten-Erfassung).");
-            return;
-        }
-    }
-
-    showPage('page-recherche');
-    
-    let lat = aktiveLat;
-    let lon = aktiveLon;
-    
-    if (!isNaN(km) && Math.abs(km - aktiveKM) > 0.005) {
-        let coords = holeKoordinateFuerKM(strassenName, km);
-        if (coords) { lon = coords[0]; lat = coords[1]; aktiveKM = km; }
-    }
-
-    if (lat === 0 || lon === 0) {
-        let coords = holeKoordinateFuerKM(strassenName, km);
-        if (coords) { lon = coords[0]; lat = coords[1]; }
-    }
-
-    if (strassenName && !isNaN(km)) document.getElementById("recherche-titel").innerText = `${strassenName} | KM ${km.toFixed(3).replace('.',',')}`;
-    else document.getElementById("recherche-titel").innerText = "Aktueller Standort";
-
-    if (lat === 0 || lon === 0) {
-        document.getElementById("recherche-osm-daten").innerHTML = "<i>Konnte keine Koordinaten ermitteln.</i>";
-        return;
-    }
-
-    if (!rechercheMap) {
-        rechercheMap = L.map('recherche-karte', { zoomControl: false, attributionControl: false }).setView([lat, lon], 19);
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19 }).addTo(rechercheMap);
-        rechercheMarker = L.marker([lat, lon]).addTo(rechercheMap);
-    } else {
-        // FORCE SYNC (Springen der Karte)
-        rechercheMap.setView([lat, lon], 19, {animate: false});
-        if (rechercheMarker) rechercheMarker.setLatLng([lat, lon]);
-    }
-    
-    let isChecked = document.getElementById("toggle-recherche-pin").checked;
-    if(!isChecked && rechercheMarker) rechercheMarker.remove();
-    else if(isChecked && rechercheMarker && !rechercheMap.hasLayer(rechercheMarker)) rechercheMarker.addTo(rechercheMap);
-    
-    setTimeout(() => {
-        rechercheMap.invalidateSize();
-        rechercheMap.setView([lat, lon], 19, {animate: false});
-    }, 200);
-
-    document.getElementById("recherche-osm-daten").innerHTML = "<i>Lade Strukturdaten über OpenStreetMap...</i>";
-    
-    let query = `[out:json];way(around:30, ${lat}, ${lon})["highway"~"motorway|trunk|motorway_link|trunk_link"];out tags;`;
-    let url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
-
-    try {
-        let response = await fetch(url);
-        let data = await response.json();
-        
-        if (data.elements && data.elements.length > 0) {
-            let tags = data.elements[0].tags;
-            let lanes = tags.lanes || "<i>Nicht erfasst</i>";
-            let maxspeed = tags.maxspeed || "<i>Nicht erfasst / Unbegrenzt</i>";
-            let surface = tags.surface || "<i>Nicht erfasst</i>";
-            
-            let surfaceDe = surface;
-            if(surface === 'asphalt') surfaceDe = 'Asphalt';
-            else if(surface === 'concrete') surfaceDe = 'Beton';
-            else if(surface === 'paved') surfaceDe = 'Befestigt';
-
-            document.getElementById("recherche-osm-daten").innerHTML = `
-                <table style="width:100%; border-collapse: collapse;">
-                    <tr><td style="padding: 4px 0; width: 55%;"><strong>Fahrstreifen (Anzahl):</strong></td><td>${lanes}</td></tr>
-                    <tr><td style="padding: 4px 0;"><strong>Tempolimit (statisch):</strong></td><td>${maxspeed} ${maxspeed !== '<i>Nicht erfasst / Unbegrenzt</i>' && maxspeed !== 'none' ? 'km/h' : ''}</td></tr>
-                    <tr><td style="padding: 4px 0;"><strong>Fahrbahnbelag:</strong></td><td>${surfaceDe}</td></tr>
-                </table>
-            `;
-        } else {
-            document.getElementById("recherche-osm-daten").innerHTML = "<i>Keine Straßendaten für diesen exakten Punkt in OSM gefunden.</i>";
-        }
-    } catch(e) {
-        document.getElementById("recherche-osm-daten").innerHTML = "<i>Fehler beim Laden der OSM-Daten.</i>";
-    }
-}
- 
 // --- WEG ZEIT RECHNER FUNKTIONEN ---
 function toggleSpeedMode() {
     let mode = document.querySelector('input[name="speed_mode"]:checked').value;
