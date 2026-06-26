@@ -328,7 +328,7 @@ function normalisiereAchse(achse) {
     return String(achse || "").trim();
 }
 
-function holeStrassenFeatures(strName, achse = "") {
+function holeStrassenFeatures(strName, achse = "", strikt = false) {
     let zielName = normalisiereStrassenName(strName);
     let zielAchse = normalisiereAchse(achse);
     let features = datenBAB.filter(f => {
@@ -339,12 +339,14 @@ function holeStrassenFeatures(strName, achse = "") {
     if (zielAchse) {
         let gefiltert = features.filter(f => normalisiereAchse((f.properties || {}).Sk_Achse) === zielAchse);
         if (gefiltert.length > 0) return gefiltert;
+        if (strikt) return [];
     }
     return features;
 }
 
 function findeNaechsteStrassenFeature(pt, strName, achse = "") {
-    let features = holeStrassenFeatures(strName, achse);
+    let zielAchse = normalisiereAchse(achse);
+    let features = holeStrassenFeatures(strName, achse, !!zielAchse);
     let best = null;
     let minDist = Infinity;
     features.forEach(f => {
@@ -364,18 +366,76 @@ function ermittleFahrbahnPosition(strName, km, achse = "") {
     if (!coords) return null;
 
     let basisPt = turf.point([coords[0], coords[1]]);
-    let match = findeNaechsteStrassenFeature(basisPt, strName, achse);
-    if (!match) return { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0 };
+    let zielAchse = normalisiereAchse(achse);
 
-    let snapped = turf.nearestPointOnLine(match.feature, basisPt, {units: 'kilometers'});
-    let snappedCoords = turf.getCoord(snapped);
+    let bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "Bestandsachse");
+    let referenzPunkt = basisPt;
+    let referenzFeature = null;
+    let referenzProps = {};
+
+    if (bestandMatch) {
+        referenzPunkt = turf.nearestPointOnLine(bestandMatch.feature, basisPt, {units: 'kilometers'});
+        referenzFeature = bestandMatch.feature;
+        referenzProps = bestandMatch.props;
+    }
+
+    if (!zielAchse || zielAchse === "Bestandsachse") {
+        if (bestandMatch) {
+            return {
+                point: referenzPunkt,
+                coords: turf.getCoord(referenzPunkt),
+                feature: referenzFeature,
+                props: referenzProps,
+                distMeter: (referenzPunkt.properties.location || 0) * 1000
+            };
+        }
+        let fallback = findeNaechsteStrassenFeature(basisPt, strName, "");
+        if (fallback) {
+            let snapped = turf.nearestPointOnLine(fallback.feature, basisPt, {units: 'kilometers'});
+            return {
+                point: snapped,
+                coords: turf.getCoord(snapped),
+                feature: fallback.feature,
+                props: fallback.props,
+                distMeter: (snapped.properties.location || 0) * 1000
+            };
+        }
+        return { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0 };
+    }
+
+    let match = findeNaechsteStrassenFeature(referenzPunkt, strName, zielAchse);
+    if (!match) match = findeNaechsteStrassenFeature(basisPt, strName, zielAchse);
+    if (!match) return null;
+
+    let snapped = turf.nearestPointOnLine(match.feature, referenzPunkt, {units: 'kilometers'});
     return {
         point: snapped,
-        coords: snappedCoords,
+        coords: turf.getCoord(snapped),
         feature: match.feature,
         props: match.props,
-        distMeter: (snapped.properties.location || 0) * 1000
+        distMeter: (referenzPunkt.properties.location || 0) * 1000
     };
+}
+
+function ermittleMeistereiFuerKM(strName, km) {
+    let pos = ermittleFahrbahnPosition(strName, km, "Bestandsachse");
+    if (!pos || !pos.feature) {
+        return { name: "Nicht in DB", addr: "-", phone: "-", rawAbs: "", distMeter: 0 };
+    }
+    let rawAbs = pos.props.ABSNr || "";
+    let snapped = turf.nearestPointOnLine(pos.feature, pos.point, {units: 'kilometers'});
+    let distMeter = (snapped.properties.location || 0) * 1000;
+    let m_name = ermittleAM(rawAbs, distMeter);
+    let kontakte = holeAdresseUndTelefon(m_name);
+    return { name: m_name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: rawAbs, distMeter: distMeter };
+}
+
+function setzeMeistereiAnzeige(strName, km) {
+    let m = ermittleMeistereiFuerKM(strName, km);
+    document.getElementById("m").innerText = m.name;
+    document.getElementById("m_address").innerText = m.addr;
+    document.getElementById("m_phone").innerText = m.phone;
+    return m;
 }
  
 function saveWacheSetting() {
@@ -484,6 +544,26 @@ function uebernehmeKmAusListe(kmWert) {
     berechnen(true);
 }
 
+function rfTextZuAchse(rfText, autobahn) {
+    if (!rfText) return "";
+    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[autobahn];
+    if (!rfListe) return "";
+    let t = rfText.trim().toLowerCase();
+    let kern = t.replace(/^rf\s*/i, '').trim();
+    for (let i = 0; i < 2; i++) {
+        if (!rfListe[i]) continue;
+        let label = rfListe[i].toLowerCase();
+        if (label.includes(t)) return i === 0 ? "Hauptachse" : "Nebenachse";
+        if (kern.length >= 2 && label.includes(kern)) return i === 0 ? "Hauptachse" : "Nebenachse";
+    }
+    return "";
+}
+
+function uebernehmeRichtungAusListe(achse) {
+    document.getElementById("richtung").value = achse;
+    berechnen(true);
+}
+
 function updateUI() {
     let a = document.getElementById("autobahn").value;
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
@@ -511,8 +591,16 @@ function updateUI() {
        document.getElementById("dir-plus-text").innerText = wachenRichtungen[a][0] || "";
        document.getElementById("dir-minus-text").innerText = wachenRichtungen[a][1] || "";
        leftArrow.style.display = "flex"; rightArrow.style.display = "flex";
+       leftArrow.style.cursor = "pointer";
+       rightArrow.style.cursor = "pointer";
+       leftArrow.title = "Richtungsfahrbahn wählen: " + (wachenRichtungen[a][0] || "");
+       rightArrow.title = "Richtungsfahrbahn wählen: " + (wachenRichtungen[a][1] || "");
+       leftArrow.onclick = () => uebernehmeRichtungAusListe("Hauptachse");
+       rightArrow.onclick = () => uebernehmeRichtungAusListe("Nebenachse");
     } else {
        leftArrow.style.display = "none"; rightArrow.style.display = "none";
+       leftArrow.onclick = null;
+       rightArrow.onclick = null;
     }
 
     updateRichtungDropdown(a);
@@ -530,7 +618,14 @@ function updateUI() {
                    nameHtml = `<a href="${mapLink}" target="_blank">${name}</a>`;
                 }
             }
-            if (rf) nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
+            if (rf) {
+                let achseRf = rfTextZuAchse(rf, a);
+                if (achseRf) {
+                    nameHtml += `<br><a href="#" onclick="uebernehmeRichtungAusListe('${achseRf}'); return false;" title="Richtungsfahrbahn wählen" style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</a>`;
+                } else {
+                    nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
+                }
+            }
             let kmHtml = kmRaw;
             if (!isNaN(baseKm)) {
                 kmHtml = `<a href="#" onclick="uebernehmeKmAusListe(${baseKm}); return false;" title="KM übernehmen">${kmRaw}</a>`;
@@ -681,8 +776,6 @@ async function verarbeiteGPS(lat, lon, acc){
         let snappedCoord = turf.getCoord(snapped);
         aktiveLat = snappedCoord[1];
         aktiveLon = snappedCoord[0];
-        aktuelleGemeinde = findeGemeindeFuerPunkt(snapped);
-        document.getElementById("g").innerText = aktuelleGemeinde;
 
         let distAufLinieKm = snapped.properties.location || 0;
         let distMeter = distAufLinieKm * 1000; 
@@ -699,6 +792,16 @@ async function verarbeiteGPS(lat, lon, acc){
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName);
             aktiveKM = bkm;
+
+            let selectedRichtung = document.getElementById("richtung").value;
+            if (bkm > 0) {
+                let gemeindeAchse = selectedRichtung || achse;
+                let gPos = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
+                if (gPos) {
+                    aktuelleGemeinde = findeGemeindeFuerPunkt(gPos.point);
+                    document.getElementById("g").innerText = aktuelleGemeinde;
+                }
+            }
             
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
@@ -742,17 +845,24 @@ async function verarbeiteGPS(lat, lon, acc){
             let kl = String(strName.charAt(0)).toUpperCase();
             let icon = (kl === "B") ? "🚙" : "🌲";
             
+            aktuelleGemeinde = findeGemeindeFuerPunkt(snapped);
+            document.getElementById("g").innerText = aktuelleGemeinde;
+
             document.getElementById("erfasste-strasse").innerHTML = `<span style="color:orange;font-weight:bold;">${icon} ${strName}</span> | Abs: ${abschnitt}`;
             document.getElementById("km").value = "";
             document.getElementById("progress").style.width="0%";
             document.getElementById("liste").innerHTML="";
         }
 
-        let m_name = ermittleAM(rawAbs, distMeter);
-        let kontakte = holeAdresseUndTelefon(m_name);
-        document.getElementById("m").innerText = m_name;
-        document.getElementById("m_address").innerText = kontakte.addr;
-        document.getElementById("m_phone").innerText = kontakte.phone;
+        if (strName.startsWith("A") && bkm > 0) {
+            setzeMeistereiAnzeige(strName, bkm);
+        } else {
+            let m_name = ermittleAM(rawAbs, distMeter);
+            let kontakte = holeAdresseUndTelefon(m_name);
+            document.getElementById("m").innerText = m_name;
+            document.getElementById("m_address").innerText = kontakte.addr;
+            document.getElementById("m_phone").innerText = kontakte.phone;
+        }
  
         let htmlOutput = techInfo;
         let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 0.8);
@@ -849,12 +959,16 @@ function berechnen(isManual = false){
     }
  
     let selectedRichtung = document.getElementById("richtung").value;
-    let fahrbahnPosition = ermittleFahrbahnPosition(a, km, selectedRichtung);
-    let aktuelleGemeinde = "-";
+    let gemeindeAchse = selectedRichtung || "Bestandsachse";
+    let fahrbahnPosition = ermittleFahrbahnPosition(a, km, gemeindeAchse);
     
     if(fahrbahnPosition) {
-        aktuelleGemeinde = findeGemeindeFuerPunkt(fahrbahnPosition.point);
-        document.getElementById("g").innerText = aktuelleGemeinde;
+        document.getElementById("g").innerText = findeGemeindeFuerPunkt(fahrbahnPosition.point);
+        if (fahrbahnPosition.coords) {
+            aktiveLat = fahrbahnPosition.coords[1];
+            aktiveLon = fahrbahnPosition.coords[0];
+            aktiveKM = km;
+        }
     } else {
         document.getElementById("g").innerText = "-";
     }
@@ -864,11 +978,10 @@ function berechnen(isManual = false){
         let percent = ((km - wachenGrenzen[a][0]) / (wachenGrenzen[a][1] - wachenGrenzen[a][0])) * 100;
         document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
     }
+
+    setzeMeistereiAnzeige(a, km);
  
     if (isManual) {
-        let rawAbs = "";
-        let distMeter = 0;
-        
         let displayDir = "";
         let rfListe = datenWachen[aktuelleWache].richtungen[a];
         if (selectedRichtung === 'Hauptachse') displayDir = rfListe ? ` | <strong>${rfListe[0]}</strong>` : "";
@@ -876,28 +989,6 @@ function berechnen(isManual = false){
         else if (selectedRichtung === 'Bestandsachse') displayDir = ` | <strong>Bestandsachse</strong>`;
 
         document.getElementById("erfasste-strasse").innerHTML = `<span style="color:var(--text-secondary);">⌨️ ${a} | BKM: ${km.toFixed(3).replace('.',',')}</span>${displayDir}`;
-
-        if (fahrbahnPosition && fahrbahnPosition.feature) {
-            let props = fahrbahnPosition.props || {};
-            rawAbs = props.ABSNr || "";
-            let snapped = turf.nearestPointOnLine(fahrbahnPosition.feature, fahrbahnPosition.point, {units: 'kilometers'});
-            let distAufLinieKm = snapped.properties.location || 0;
-            distMeter = distAufLinieKm * 1000;
-            let snappedCoord = turf.getCoord(snapped);
-            aktiveLat = snappedCoord[1];
-            aktiveLon = snappedCoord[0];
-            aktiveKM = km;
-        } else if (fahrbahnPosition && fahrbahnPosition.coords) {
-            aktiveLat = fahrbahnPosition.coords[1];
-            aktiveLon = fahrbahnPosition.coords[0];
-            aktiveKM = km;
-        }
-        
-        let m_name = ermittleAM(rawAbs, distMeter);
-        let kontakte = holeAdresseUndTelefon(m_name);
-        document.getElementById("m").innerText = m_name;
-        document.getElementById("m_address").innerText = kontakte.addr;
-        document.getElementById("m_phone").innerText = kontakte.phone;
     }
 }
  
@@ -1031,16 +1122,31 @@ function calculateMapResult() {
                 }
             }
             
-            let aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
+            let aktuelleGemeinde = "-";
+            if (strName.startsWith("A") && bkm > 0) {
+                let selectedRichtung = document.getElementById("richtung").value;
+                let gemeindeAchse = selectedRichtung || achse;
+                let gPos = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
+                if (gPos) {
+                    aktuelleGemeinde = findeGemeindeFuerPunkt(gPos.point);
+                } else {
+                    aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
+                }
+            } else {
+                aktuelleGemeinde = findeGemeindeFuerPunkt(snappedKm);
+            }
             document.getElementById("g").innerText = aktuelleGemeinde;
             
-            let rawAbs = props.ABSNr || "";
-            let m_name = ermittleAM(rawAbs, distMeter);
-            let kontakte = holeAdresseUndTelefon(m_name);
-            
-            document.getElementById("m").innerText = m_name;
-            document.getElementById("m_address").innerText = kontakte.addr;
-            document.getElementById("m_phone").innerText = kontakte.phone;
+            if (strName.startsWith("A") && bkm > 0) {
+                setzeMeistereiAnzeige(strName, bkm);
+            } else {
+                let rawAbs = props.ABSNr || "";
+                let m_name = ermittleAM(rawAbs, distMeter);
+                let kontakte = holeAdresseUndTelefon(m_name);
+                document.getElementById("m").innerText = m_name;
+                document.getElementById("m_address").innerText = kontakte.addr;
+                document.getElementById("m_phone").innerText = kontakte.phone;
+            }
             
             let drop = document.getElementById("autobahn");
             if (strName.startsWith("A") && Array.from(drop.options).some(o=>o.value===strName)) {
