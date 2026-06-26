@@ -118,7 +118,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     
     <select id="autobahn" onchange="manuellerFokus = this.value; updateUI(); berechnen(true);"></select>
-    <input id="km" placeholder="Kilometer manuell eingeben" inputmode="decimal" oninput="berechnen(false)" onchange="berechnen(true)">
+    <input id="km" placeholder="Kilometer manuell eingeben" inputmode="decimal" oninput="berechnenDebounced(false)" onchange="berechnen(true)">
     
     <select id="richtung" onchange="berechnen(true)">
         <option value="">Richtungsfahrbahn wählen (optional)</option>
@@ -234,7 +234,9 @@ const meistereiTelefon={"AM Weilerswist":"02254 601410","AM Titz":"-","AM Sankt 
 const wachenAnker={"Hilden":[6.935,51.168],"Mülheim":[6.881,51.424],"Hünxe":[6.765,51.642],"Moers":[6.628,51.458],"Gladbach":[6.439,51.196]};
 
 let aktuelleWache = "Hilden"; 
-let datenLand=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let datenLand=[], datenAutobahn=[], datenBund=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let berechnenTimer = null;
+let gemeindeBereichCache = {};
 let meistereiMap = { am: {}, sm: {} }; 
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
@@ -327,8 +329,11 @@ async function ladeStrassenNetz() {
     let listeA = extrahiere(babJson, true);
     let listeB = extrahiere(bundJson, true);
     let listeL = extrahiere(landJson, true);
+    datenAutobahn = listeA;
+    datenBund = listeB;
     datenLand = listeL;
     datenBAB = listeA.concat(listeB).concat(listeL);
+    gemeindeBereichCache = {};
 
     return { anzahlA: listeA.length, anzahlB: listeB.length, anzahlL: listeL.length, fehler: fehler };
 }
@@ -403,10 +408,18 @@ function normalisiereAchse(achse) {
     return String(achse || "").trim();
 }
 
+function holeStrassenListeFuerName(strName) {
+    let k = String(strName || "").charAt(0).toUpperCase();
+    if (k === "L" && datenLand.length > 0) return datenLand;
+    if (k === "B" && datenBund.length > 0) return datenBund;
+    if (k === "A" && datenAutobahn.length > 0) return datenAutobahn;
+    return datenBAB;
+}
+
 function holeStrassenFeatures(strName, achse = "", strikt = false) {
     let zielName = normalisiereStrassenName(strName);
     let zielAchse = normalisiereAchse(achse);
-    let features = datenBAB.filter(f => {
+    let features = holeStrassenListeFuerName(strName).filter(f => {
         let p = f.properties || {};
         return normalisiereStrassenName(p.STRBEZ) === zielName;
     });
@@ -486,9 +499,9 @@ function berechneStationAufAbschnitt(feature, pt) {
 }
 
 function findeKandidatenFuerPin(pt, maxDistKm, priorisiereAutobahn) {
-    let babHits = findeKandidaten(datenBAB, pt, null, maxDistKm).filter(k => k.name.startsWith("A"));
-    let bundHits = findeKandidaten(datenBAB, pt, "BUND", maxDistKm);
-    let landHits = findeKandidaten(datenBAB, pt, "LAND", maxDistKm);
+    let babHits = findeKandidaten(datenAutobahn.length ? datenAutobahn : datenBAB, pt, null, maxDistKm).filter(k => k.name.startsWith("A"));
+    let bundHits = findeKandidaten(datenBund.length ? datenBund : datenBAB, pt, "BUND", maxDistKm);
+    let landHits = findeKandidaten(datenLand.length ? datenLand : datenBAB, pt, "LAND", maxDistKm);
     let byName = {};
     babHits.concat(bundHits).concat(landHits).forEach(k => {
         if (!byName[k.name] || k.dist < byName[k.name].dist) byName[k.name] = k;
@@ -506,15 +519,17 @@ function findeKandidatenFuerPin(pt, maxDistKm, priorisiereAutobahn) {
     return liste;
 }
 
-function findeAlleSegmenteImUmkreis(pt, maxDistKm) {
-    let treffer = [];
-    datenBAB.forEach(f => {
-        try {
-            let d = turf.pointToLineDistance(pt, f, {units: "kilometers"});
-            if (d <= maxDistKm) treffer.push({ feature: f, dist: d });
-        } catch (e) {}
-    });
-    return treffer.sort((a, b) => a.dist - b.dist);
+function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm) {
+    if (!kandidaten || kandidaten.length === 0) return null;
+    let best = kandidaten[0];
+    if (!fokusName) return best;
+    let focus = waehleStrassenKandidat(pt, fokusName);
+    if (focus && focus.dist <= best.dist + maxFokusAbweichungKm) return focus;
+    return best;
+}
+
+function findeSegmenteFuerKarte(pt, maxDistKm) {
+    return findeKandidatenFuerPin(pt, maxDistKm, false).slice(0, 10).map(k => k.feature);
 }
 
 function anwendenLbErgebnis(strName, feature, pt) {
@@ -1022,7 +1037,12 @@ function findeGemeindeFuerPunkt(pt, strName, km) {
     return "Außerhalb NRW";
 }
 
-function gemeindeBeiKm(strName, km) {
+function gemeindeBeiKm(strName, km, achse) {
+    let zielAchse = achse || "Bestandsachse";
+    let pos = ermittleFahrbahnPosition(strName, km, zielAchse);
+    if (pos && pos.point) {
+        return findeGemeindeFuerPunkt(pos.point, strName, km);
+    }
     let pt = ermittleGemeindePunkt(strName, km);
     if (!pt) return null;
     return findeGemeindeFuerPunkt(pt, strName, km);
@@ -1030,13 +1050,12 @@ function gemeindeBeiKm(strName, km) {
 
 function findeGemeindeAnFahrbahn(strName, km, achse) {
     if (datenGemeinden.length === 0) return "-";
-    void achse;
-    let deltas = [0, -0.05, 0.05, -0.1, 0.1, -0.15, 0.15];
-    let gewichte = { "0": 4 };
+    let zielAchse = achse || "Bestandsachse";
+    let deltas = [0, -0.05, 0.05, -0.1, 0.1];
+    let gewichte = { "0": 3 };
     let stimmen = {};
     deltas.forEach(delta => {
-        let k = km + delta;
-        let name = gemeindeBeiKm(strName, k);
+        let name = gemeindeBeiKm(strName, km + delta, zielAchse);
         if (!name || name === "-" || name === "Außerhalb NRW") return;
         let w = gewichte[String(delta)] || 1;
         stimmen[name] = (stimmen[name] || 0) + w;
@@ -1049,29 +1068,35 @@ function findeGemeindeAnFahrbahn(strName, km, achse) {
             best = n;
         }
     });
-    return best || gemeindeBeiKm(strName, km) || "-";
+    return best || gemeindeBeiKm(strName, km, zielAchse) || "-";
 }
 
 function ermittleGemeindeKmBereich(strName, achse, gemeindeName, km) {
-    void achse;
+    let zielAchse = achse || "Bestandsachse";
+    let cacheKey = strName + "|" + zielAchse + "|" + gemeindeName + "|" + km.toFixed(2);
+    if (gemeindeBereichCache[cacheKey]) return gemeindeBereichCache[cacheKey];
+
     let grenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
-    let minScan = grenzen ? Math.min(...grenzen) : km - 25;
-    let maxScan = grenzen ? Math.max(...grenzen) : km + 25;
-    let step = 0.05;
+    let minScan = grenzen ? Math.min(...grenzen) : km - 15;
+    let maxScan = grenzen ? Math.max(...grenzen) : km + 15;
+    let step = 0.12;
     let minKm = km;
     let maxKm = km;
+    let maxSteps = 100;
 
-    for (let k = km - step; k >= minScan; k -= step) {
-        let g = gemeindeBeiKm(strName, k);
+    for (let i = 0, k = km - step; k >= minScan && i < maxSteps; k -= step, i++) {
+        let g = gemeindeBeiKm(strName, k, zielAchse);
         if (g !== gemeindeName) break;
         minKm = k;
     }
-    for (let k = km + step; k <= maxScan; k += step) {
-        let g = gemeindeBeiKm(strName, k);
+    for (let i = 0, k = km + step; k <= maxScan && i < maxSteps; k += step, i++) {
+        let g = gemeindeBeiKm(strName, k, zielAchse);
         if (g !== gemeindeName) break;
         maxKm = k;
     }
-    return { von: minKm, bis: maxKm };
+    let result = { von: minKm, bis: maxKm };
+    gemeindeBereichCache[cacheKey] = result;
+    return result;
 }
 
 function formatiereGemeindeKm(km) {
@@ -1175,11 +1200,7 @@ async function verarbeiteGPS(lat, lon, acc){
     let sortKandidaten = findeKandidatenFuerPin(pt, 2.0, true);
  
     if(sortKandidaten.length > 0) {
-        let sel = null;
-        if (manuellerFokus) {
-            sel = waehleStrassenKandidat(pt, manuellerFokus);
-        }
-        if (!sel) sel = sortKandidaten[0];
+        let sel = waehleKandidatMitFokus(pt, sortKandidaten, manuellerFokus, 0.12);
 
         const props = sel.feature.properties || {};
         const strName = sel.name; 
@@ -1239,7 +1260,11 @@ async function verarbeiteGPS(lat, lon, acc){
                    document.getElementById("autobahn").value = strName;
                    updateUI();
                 }
-                berechnen(false);
+                let wachenGrenzen = datenWachen[aktuelleWache].grenzen[strName];
+                if (wachenGrenzen && bkm > 0) {
+                    let percent = ((bkm - wachenGrenzen[0]) / (wachenGrenzen[1] - wachenGrenzen[0])) * 100;
+                    document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
+                }
             } else {
                 document.getElementById("km").value = "";
                 document.getElementById("progress").style.width = "0%";
@@ -1262,6 +1287,7 @@ async function verarbeiteGPS(lat, lon, acc){
 
         } else {
             anwendenLbErgebnis(strName, sel.feature, pt);
+            manuellerFokus = strName;
         }
 
         if (strName.startsWith("A") && bkm > 0) {
@@ -1336,6 +1362,11 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     return 0;
 }
  
+function berechnenDebounced(isManual = false) {
+    clearTimeout(berechnenTimer);
+    berechnenTimer = setTimeout(() => berechnen(isManual), isManual ? 0 : 200);
+}
+
 function berechnen(isManual = false){
     let kmRaw = document.getElementById("km").value.replace(',','.');
     let km = parseFloat(kmRaw);
@@ -1541,8 +1572,9 @@ function calculateMapResult() {
     let ptPin = turf.point([pos.lng, pos.lat]);
     let maxDist = 0.15;
     let kandidaten = findeKandidatenFuerPin(ptPin, maxDist, false);
-    let sel = manuellerFokus ? waehleStrassenKandidat(ptPin, manuellerFokus) : null;
-    if (!sel && kandidaten.length > 0) sel = kandidaten[0];
+    let sel = mapMode === 'NK'
+        ? waehleKandidatMitFokus(ptPin, kandidaten, manuellerFokus, 0.03)
+        : (kandidaten.length > 0 ? kandidaten[0] : null);
 
     let resDiv = document.getElementById('nk-map-result');
     if (mapLineLayer) map.removeLayer(mapLineLayer);
@@ -1551,7 +1583,7 @@ function calculateMapResult() {
         let props = sel.feature.properties || {};
         let strName = sel.name;
         let achse = normalisiereAchse(props.Sk_Achse);
-        let alleImUmkreis = findeAlleSegmenteImUmkreis(ptPin, maxDist).map(t => t.feature);
+        let alleImUmkreis = findeSegmenteFuerKarte(ptPin, maxDist);
         
         let rDrop = document.getElementById("richtung");
         if (rDrop && Array.from(rDrop.options).some(o => o.value === achse)) {
@@ -1606,6 +1638,7 @@ function calculateMapResult() {
                 setzeMeistereiAnzeige(strName, bkm);
             } else {
                 anwendenLbErgebnis(strName, sel.feature, ptPin);
+                manuellerFokus = strName;
             }
             
             let drop = document.getElementById("autobahn");
