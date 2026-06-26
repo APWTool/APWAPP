@@ -276,37 +276,75 @@ function showPage(pageId) {
  
 let geoDatenBereit = false;
 
-function ladeGeoJson(url) {
-    return fetch(url).then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' für ' + url);
-        return res.json();
-    });
+function istLfsPointer(text) {
+    return String(text || "").trim().startsWith("version https://git-lfs");
 }
 
-Promise.all([
-   ladeGeoJson('AbschnittBAB.json'),
-   ladeGeoJson('BABKM.json'),
-   ladeGeoJson('Gemeinden.json'),
-   fetch('amDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
-   fetch('smDatenbank.json').then(res => res.ok ? res.json() : {}).catch(() => ({})) 
-]).then(([bab, punkte, gem, amData, smData])=>{
+function istHtmlAntwort(text) {
+    let t = String(text || "").trim().toLowerCase();
+    return t.startsWith("<!doctype") || t.startsWith("<html");
+}
+
+async function ladeGeoJson(url, optional = false) {
+    let res;
+    try {
+        res = await fetch(url, { cache: "no-store" });
+    } catch (e) {
+        throw new Error(url + ": Netzwerkfehler (" + (e.message || e) + ")");
+    }
+
+    let text = await res.text();
+
+    if (!res.ok) {
+        throw new Error(url + ": HTTP " + res.status);
+    }
+    if (istLfsPointer(text)) {
+        throw new Error(url + ": Git-LFS-Pointer statt JSON. Auf GitHub Pages muss die Datei als normales JSON committed sein (nicht per Git LFS).");
+    }
+    if (istHtmlAntwort(text)) {
+        throw new Error(url + ": HTML statt JSON (Pfad falsch oder 404).");
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error(url + ": Ungültiges JSON (" + e.message + ")");
+    }
+}
+
+async function ladeAlleGeoDaten() {
+    let fehler = [];
+    let bab = {}, punkte = {}, gem = {}, amData = {}, smData = {};
+
+    try { bab = await ladeGeoJson("AbschnittBAB.json"); } catch (e) { fehler.push(e.message); }
+    try { punkte = await ladeGeoJson("BABKM.json"); } catch (e) { fehler.push(e.message); }
+    try { gem = await ladeGeoJson("Gemeinden.json"); } catch (e) { fehler.push(e.message); }
+    try { amData = await ladeGeoJson("amDatenbank.json", true); } catch (e) { amData = {}; }
+    try { smData = await ladeGeoJson("smDatenbank.json", true); } catch (e) { smData = {}; }
+
     datenBAB = extrahiere(bab, true);
     referenzPunkte = extrahiere(punkte, false);
-    datenGemeinden = extrahiereGemeinden(gem); 
-    
+    datenGemeinden = extrahiereGemeinden(gem);
+
     meistereiMap.am = amData || {};
     meistereiMap.sm = smData || {};
 
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
 
+    let info = document.getElementById("gps-info");
     if (geoDatenBereit) {
-       document.getElementById("gps-info").innerHTML='<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+    } else if (fehler.length > 0) {
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
     } else {
-       document.getElementById("gps-info").innerHTML='<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
+        info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span><br><span style="font-size:0.8em;">BAB: ' + datenBAB.length + ' | KM: ' + referenzPunkte.length + ' | Gemeinden: ' + datenGemeinden.length + '</span>';
     }
-   loadWacheSetting();
-}).catch(e => { 
-   document.getElementById("gps-info").innerHTML='<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien: ' + (e.message || e) + '</span><br><span style="font-size:0.8em;">JSON-Dateien müssen im gleichen Ordner wie index.html liegen.</span>';
+
+    loadWacheSetting();
+}
+
+ladeAlleGeoDaten().catch(e => {
+    document.getElementById("gps-info").innerHTML = '<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien: ' + (e.message || e) + '</span>';
 });
  
 function extrahiere(json, erwarteLinien){
