@@ -73,37 +73,11 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .center-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); font-size: 45px; z-index: 1000; pointer-events: none; text-shadow: 0px 2px 5px rgba(0,0,0,0.5); }
 .map-footer { flex-shrink: 0; padding: 15px; background: var(--bg-card); box-shadow: 0 -2px 10px rgba(0,0,0,0.2); z-index: 10000; }
 #nk-map-result { display: none; margin-top: 10px; }
-#map-overlay.pruef-modus .center-pin { display: none; }
-#map-overlay.pruef-modus #map-action-btn { display: none; }
-#pruef-controls { display: none; width: 100%; }
-#map-overlay.pruef-modus #pruef-controls { display: block; }
-#map-overlay.pruef-modus .map-footer { padding: 10px 12px; max-height: 42vh; overflow-y: auto; }
-.pruef-stufe-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
-.pruef-stufe-btn { width: 100%; margin: 0; padding: 10px 4px; font-size: 0.78em; line-height: 1.25; background: var(--input-bg); color: var(--text-main); border: 2px solid var(--input-border); border-radius: 6px; }
-.pruef-stufe-btn small { display: block; font-weight: normal; opacity: 0.85; margin-top: 2px; }
-.pruef-stufe-btn.active-stufe { background: var(--accent); color: white; border-color: var(--accent); }
-#pruef-info-box { font-size: 0.88em; line-height: 1.5; text-align: left; }
-.pruef-info-haupt { padding: 12px; background: var(--result-bg); border-radius: 8px; border-left: 4px solid var(--accent); margin-bottom: 10px; }
-.pruef-info-haupt .pruef-zeile { margin: 4px 0; }
-.pruef-info-haupt .pruef-zeile strong { display: inline-block; min-width: 5.5em; color: var(--text-secondary); }
-.pruef-stufen-legende { padding: 10px 12px; background: var(--bg-body); border: 1px solid var(--input-border); border-radius: 8px; font-size: 0.82em; }
-.pruef-stufen-legende h4 { margin: 0 0 8px 0; font-size: 1em; color: var(--text-secondary); }
-.pruef-stufen-legende ul { margin: 0; padding-left: 18px; }
-.pruef-stufen-legende li { margin-bottom: 5px; }
-.pruef-stufen-legende .enthalten { color: #198754; }
-.pruef-stufen-legende .nicht-enthalten { color: #6c757d; }
-.pruef-marker-wrap { background: transparent; border: none; }
-.pruef-infra-marker { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.pruef-infra-pin { font-size: 20px; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
-.pruef-infra-tag { background: var(--bg-card); color: var(--text-main); border: 2px solid #444; border-radius: 8px; padding: 5px 10px; font-size: 11px; line-height: 1.4; box-shadow: 0 2px 8px rgba(0,0,0,0.2); margin-top: 1px; max-width: 160px; }
-.pruef-infra-tag .typ { font-weight: bold; font-size: 12px; }
-.pruef-infra-tag .name { display: block; margin-top: 2px; word-break: break-word; }
-.pruef-infra-tag .km { display: block; color: var(--text-secondary); font-size: 10px; margin-top: 2px; }
-.pruef-rf-label { background: rgba(0,123,255,0.92); color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; line-height: 1.3; border: 1px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); white-space: nowrap; }
-.pruef-gemeinde-label { background: rgba(255,255,255,0.95); color: #333; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: bold; border: 1px solid #999; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
-.pruef-bkm-label { background: rgba(255,152,0,0.95); color: #111; padding: 3px 7px; border-radius: 5px; font-size: 10px; font-weight: bold; border: 1px solid #e65100; }
-.pruef-am-label { background: rgba(232,62,140,0.92); color: white; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; line-height: 1.35; max-width: 140px; word-break: break-word; border: 1px solid white; }
-.pruef-grenze-label { background: rgba(111,66,193,0.92); color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: 1px solid white; }
+.hilfs-box { font-size: 0.88em; line-height: 1.5; padding: 10px; background: var(--result-bg); border-radius: 6px; margin-top: 10px; }
+.hilfs-box-warn { border-left: 4px solid #dc3545; background: #fff5f5; }
+[data-theme="dark"] .hilfs-box-warn { background: #2a1a1a; }
+.hilfs-box-infra { border-left: 4px solid var(--accent); }
+.hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; }
  
 /* FUSSEILE */
 .footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
@@ -131,15 +105,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     <div class="map-footer">
         <p id="map-hint" style="margin: 0 0 10px 0; font-size: 0.9em; text-align: center;">Bewege die Karte exakt unter die Nadelspitze.</p>
-        <div id="pruef-controls">
-            <div class="pruef-stufe-row">
-                <button type="button" class="pruef-stufe-btn active-stufe" data-stufe="1" onclick="setPruefStufe(1)">Stufe 1<small>Basis</small></button>
-                <button type="button" class="pruef-stufe-btn" data-stufe="2" onclick="setPruefStufe(2)">Stufe 2<small>Kontext</small></button>
-                <button type="button" class="pruef-stufe-btn" data-stufe="3" onclick="setPruefStufe(3)">Stufe 3<small>Detail</small></button>
-                <button type="button" class="pruef-stufe-btn" data-stufe="4" onclick="setPruefStufe(4)">Stufe 4<small>Experte</small></button>
-            </div>
-            <div id="pruef-info-box"></div>
-        </div>
         <button id="map-action-btn" onclick="calculateMapResult()">Hier erfassen</button>
         <div id="nk-map-result"></div>
     </div>
@@ -171,12 +136,14 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('NK')">📝 NK erfassen</button>
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('KM')">📍 KM auf Karte erfassen</button>
     </div>
-    <button class="btn-action" id="btn-pruefen" onclick="openMap('PRUEFEN')" disabled>🔍 Position prüfen</button>
     <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
  
+    <div id="grenzfall-warnungen" class="hilfs-box hilfs-box-warn" style="display:none;"></div>
+
     <div class="result">
        <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
        <p><strong>Gemeinde:</strong> <span id="g">-</span></p>
+       <div id="vertrauen-info" style="display:none;"></div>
        <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
        <p><strong>Adresse:</strong> <span id="m_address">-</span></p>
        <p><strong>Telefon:</strong> <span id="m_phone">-</span></p>
@@ -186,6 +153,9 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     <div id="bereich-info" style="text-align:center; font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; font-weight: bold; display: none;">
         Bereich: <span id="b">-</span>
     </div>
+
+    <div id="naechste-infra" style="display:none;"></div>
+    <div id="am-wechsel-info" style="display:none;"></div>
 
     <div class="table-container">
         <div id="dir-plus" class="direction-arrow"><span class="dir-text" id="dir-plus-text"></span><span class="arrow-icon">⬇</span></div>
@@ -227,6 +197,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     <div class="result" id="wz_result_box" style="display:none; border-left-color: #dc3545;">
        <p><strong>Aktueller Fahrzeug-KM:</strong> <span id="wz_aktuell_km" style="font-size:1.2em; color:#dc3545; font-weight:bold;">-</span></p>
        <p><strong>Verstrichene Zeit:</strong> <span id="wz_zeit">0:00</span> min</p>
+       <p><strong>Nächste AS/PP:</strong> <span id="wz_ankunft">-</span></p>
     </div>
     <div class="table-container">
         <div class="table-wrapper">
@@ -285,9 +256,7 @@ let manuellerFokus = null;
 let erzwungenerFokus = false;
 let aktiveStrasse = "";
 let aktiveAchse = "";
-let pruefStufe = 1;
-let mapPruefLayer = null;
-let pruefMoveTimer = null;
+let letzteKontextMeta = { snapDistM: null, gpsAccM: 0, rfApproximiert: false, manuell: false };
 let map = null;
 let mapLineLayer = null; 
 let mapMode = 'NK';
@@ -415,7 +384,6 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
-    aktualisierePruefButton();
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -570,7 +538,7 @@ function findeKandidatenFuerPin(pt, maxDistKm, priorisiereAutobahn) {
 function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm, erzwingen) {
     if (!kandidaten || kandidaten.length === 0) return null;
     if (fokusName && (erzwingen || erzwungenerFokus)) {
-        let focus = waehleStrassenKandidat(pt, fokusName);
+        let focus = waehleStrassenKandidat(pt, fokusName, 2.5);
         if (focus) {
             erzwungenerFokus = false;
             return focus;
@@ -578,7 +546,7 @@ function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm,
     }
     let best = kandidaten[0];
     if (!fokusName) return best;
-    let focus = waehleStrassenKandidat(pt, fokusName);
+    let focus = waehleStrassenKandidat(pt, fokusName, 2.0);
     if (focus && focus.dist <= best.dist + maxFokusAbweichungKm) return focus;
     return best;
 }
@@ -632,7 +600,7 @@ function anwendenLbErgebnis(strName, feature, pt) {
     document.getElementById("m").innerText = m_name;
     document.getElementById("m_address").innerText = kontakte.addr;
     document.getElementById("m_phone").innerText = kontakte.phone;
-    aktualisierePruefButton();
+    aktualisiereKontextAnzeigen({ strName, km: station.stationKm || 0, achse: "", pt, snapDistM: Math.round((turf.pointToLineDistance(pt, feature, {units:"kilometers"}) || 0) * 1000), manuell: false });
     return station;
 }
 
@@ -1046,7 +1014,8 @@ function updateUI() {
             let nameHtml = name;
  
             if (!isNaN(baseKm)) {
-                let coords = holeKoordinateFuerKM(a, baseKm);
+                let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
+                let coords = holeKoordinateFuerKM(a, baseKm, anchor);
                 if (coords) {
                    let mapLink = `https://www.google.com/maps/search/?api=1&query=${coords[1]},${coords[0]}`;
                    nameHtml = `<a href="${mapLink}" target="_blank">${name}</a>`;
@@ -1263,6 +1232,210 @@ function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
     document.getElementById("g").innerText = text;
     return gemeinde;
 }
+
+function parseListenKm(wert) {
+    let km = parseFloat(String(wert || "").split("-")[0].replace(",", "."));
+    return isNaN(km) ? null : km;
+}
+
+function istInfraTyp(typ) {
+    if (!typ) return false;
+    let t = String(typ).toUpperCase();
+    return ["AS", "PP", "TUR", "RUT", "AK"].indexOf(t) >= 0 || t.indexOf("RAST") >= 0;
+}
+
+function holeListenEintraegeMitKm(strName) {
+    let liste = (datenWachen[aktuelleWache].listen || {})[strName] || [];
+    return liste.map(e => {
+        let km = parseListenKm(e[2]);
+        if (km === null) return null;
+        return { typ: e[0], name: e[1], km: km, kmText: e[2], rf: e[3] || "" };
+    }).filter(Boolean);
+}
+
+function naechsteInfrastruktur(strName, km) {
+    let eintraege = holeListenEintraegeMitKm(strName).filter(e => istInfraTyp(e.typ));
+    let vor = null, hinter = null;
+    eintraege.forEach(e => {
+        let diff = e.km - km;
+        if (diff > 0.01 && (!vor || diff < vor.diff)) vor = Object.assign({}, e, { diff: diff });
+        if (diff < -0.01 && (!hinter || diff > hinter.diff)) hinter = Object.assign({}, e, { diff: diff });
+    });
+    return { vor: vor, hinter: hinter };
+}
+
+function formatiereInfraZeile(e, richtung) {
+    if (!e) return "–";
+    let diffStr = Math.abs(e.diff).toFixed(1).replace(".", ",");
+    return e.typ + " " + e.name + " (km " + e.kmText + ", " + diffStr + " km " + richtung + ")";
+}
+
+function ermittleGemeindeGrenzAbstand(strName, km, achse) {
+    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    if (!pos || !pos.point) return null;
+    let aktuelle = findeGemeindeFuerPunktInner(pos.point);
+    if (!aktuelle) return null;
+    let minDist = null;
+    for (let f of datenGemeinden) {
+        try {
+            if (gemeindeNameAusFeature(f) === aktuelle) continue;
+            if (typeof turf.polygonToLine !== "function") continue;
+            let outline = turf.polygonToLine(f);
+            let d = turf.pointToLineDistance(pos.point, outline, { units: "kilometers" });
+            if (minDist === null || d < minDist) minDist = d;
+        } catch (e) {}
+    }
+    return minDist;
+}
+
+function naechsterAmWechsel(strName, km) {
+    let schritt = 0.2;
+    let scan = 20;
+    let startAm = ermittleMeistereiFuerKM(strName, km).name;
+    let vor = null, hinter = null;
+    for (let k = km + schritt; k <= km + scan; k += schritt) {
+        let am = ermittleMeistereiFuerKM(strName, k).name;
+        if (am && am !== startAm && am !== "Nicht in DB") {
+            vor = { km: k, am: am, dist: k - km };
+            break;
+        }
+    }
+    for (let k = km - schritt; k >= km - scan; k -= schritt) {
+        let am = ermittleMeistereiFuerKM(strName, k).name;
+        if (am && am !== startAm && am !== "Nicht in DB") {
+            hinter = { km: k, am: am, dist: km - k };
+            break;
+        }
+    }
+    return { vor: vor, hinter: hinter, aktuell: startAm };
+}
+
+function ermittleGrenzfallWarnungen(opts) {
+    let warn = [];
+    let strName = opts.strName;
+    let km = opts.km;
+    let achse = opts.achse || "Bestandsachse";
+
+    if (km > 0 && strName) {
+        let gemDist = ermittleGemeindeGrenzAbstand(strName, km, achse);
+        if (gemDist !== null && gemDist < 0.2) {
+            warn.push("Gemeindegrenze ca. " + Math.round(gemDist * 1000) + " m entfernt");
+        }
+        let grenzen = datenWachen[aktuelleWache].grenzen[strName];
+        if (grenzen) {
+            let minG = Math.min.apply(null, grenzen);
+            let maxG = Math.max.apply(null, grenzen);
+            if (km - minG < 0.5 && km > minG) warn.push("Nahe Wachen-Anfang (km " + minG + ")");
+            if (maxG - km < 0.5 && km < maxG) warn.push("Nahe Wachen-Ende (km " + maxG + ")");
+        }
+        let amW = naechsterAmWechsel(strName, km);
+        if (amW.vor && amW.vor.dist < 1.5) {
+            warn.push("AM-Wechsel in " + amW.vor.dist.toFixed(1).replace(".", ",") + " km → " + amW.vor.am);
+        }
+    }
+    if (opts.pt) {
+        let kreuz = findeKandidatenFuerPin(opts.pt, 0.5, false);
+        if (kreuz.length > 1) warn.push("Autobahnkreuz: mehrere Straßen < 500 m");
+    }
+    return warn;
+}
+
+function baueVertrauensHtml(meta) {
+    let teile = [];
+    if (meta.manuell) teile.push("Manuelle KM-Eingabe");
+    if (meta.snapDistM !== null && meta.snapDistM !== undefined && !meta.manuell) {
+        teile.push("Snap " + Math.round(meta.snapDistM) + " m zur Achse");
+    }
+    if (meta.gpsAccM > 0) teile.push("GPS ±" + Math.round(meta.gpsAccM) + " m");
+    if (meta.rfApproximiert) teile.push("RF approximiert");
+    if (teile.length === 0) return "";
+    return '<div style="font-size:0.82em;color:var(--text-secondary);margin-top:6px;">📐 ' + teile.join(" · ") + '</div>';
+}
+
+function leereKontextAnzeigen() {
+    ["grenzfall-warnungen", "naechste-infra", "am-wechsel-info", "vertrauen-info"].forEach(id => {
+        let el = document.getElementById(id);
+        if (el) { el.style.display = "none"; el.innerHTML = ""; }
+    });
+}
+
+function aktualisiereKontextAnzeigen(opts) {
+    opts = opts || {};
+    let strName = opts.strName || aktiveStrasse || document.getElementById("autobahn").value;
+    let km = opts.km;
+    if (km === undefined || km === null || isNaN(km)) {
+        km = aktiveKM;
+        if (!km || km <= 0) {
+            km = parseFloat(String(document.getElementById("km").value || "").replace(",", "."));
+        }
+    }
+    let achse = opts.achse || document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
+    let pt = opts.pt || (aktiveLat !== 0 ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null));
+
+    if (!strName || !(km > 0) || isNaN(km)) {
+        leereKontextAnzeigen();
+        return;
+    }
+
+    if (opts.snapDistM !== undefined) letzteKontextMeta.snapDistM = opts.snapDistM;
+    if (opts.gpsAccM !== undefined) letzteKontextMeta.gpsAccM = opts.gpsAccM;
+    if (opts.rfApproximiert !== undefined) letzteKontextMeta.rfApproximiert = opts.rfApproximiert;
+    if (opts.manuell !== undefined) letzteKontextMeta.manuell = opts.manuell;
+
+    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[strName] || [];
+    let rfPlus = rfListe[0] || "Fahrtrichtung +";
+    let rfMinus = rfListe[1] || "Fahrtrichtung -";
+
+    let infraBox = document.getElementById("naechste-infra");
+    if (infraBox) {
+        let ni = naechsteInfrastruktur(strName, km);
+        infraBox.innerHTML = '<div class="hilfs-box hilfs-box-infra"><strong>📍 Nächste Infrastruktur</strong><br>' +
+            '<span style="color:var(--text-secondary);">▲ ' + rfPlus + ':</span> ' + formatiereInfraZeile(ni.vor, "voraus") + '<br>' +
+            '<span style="color:var(--text-secondary);">▼ ' + rfMinus + ':</span> ' + formatiereInfraZeile(ni.hinter, "zurück") +
+            '</div>';
+        infraBox.style.display = "block";
+    }
+
+    let amBox = document.getElementById("am-wechsel-info");
+    if (amBox) {
+        if (!istLandesOderBundesstrasse(strName)) {
+            let amW = naechsterAmWechsel(strName, km);
+            let html = '<div class="hilfs-box hilfs-box-am"><strong>🏢 AM/SM:</strong> ' + amW.aktuell;
+            if (amW.vor) html += '<br>→ voraus km ' + amW.vor.km.toFixed(1).replace(".", ",") + ': <b>' + amW.vor.am + '</b> (' + amW.vor.dist.toFixed(1).replace(".", ",") + ' km)';
+            if (amW.hinter) html += '<br>← zurück km ' + amW.hinter.km.toFixed(1).replace(".", ",") + ': <b>' + amW.hinter.am + '</b> (' + amW.hinter.dist.toFixed(1).replace(".", ",") + ' km)';
+            html += '</div>';
+            amBox.innerHTML = html;
+            amBox.style.display = "block";
+        } else {
+            amBox.style.display = "none";
+            amBox.innerHTML = "";
+        }
+    }
+
+    let warnBox = document.getElementById("grenzfall-warnungen");
+    if (warnBox) {
+        let warn = ermittleGrenzfallWarnungen({ strName: strName, km: km, achse: achse, pt: pt });
+        if (warn.length > 0) {
+            warnBox.innerHTML = '<strong>⚠️ Grenzfall-Hinweise</strong><br>' + warn.map(w => "• " + w).join("<br>");
+            warnBox.style.display = "block";
+        } else {
+            warnBox.style.display = "none";
+            warnBox.innerHTML = "";
+        }
+    }
+
+    let vertrauenBox = document.getElementById("vertrauen-info");
+    if (vertrauenBox) {
+        let vHtml = baueVertrauensHtml(letzteKontextMeta);
+        if (vHtml) {
+            vertrauenBox.innerHTML = vHtml;
+            vertrauenBox.style.display = "block";
+        } else {
+            vertrauenBox.style.display = "none";
+            vertrauenBox.innerHTML = "";
+        }
+    }
+}
  
 let watchId=null;
 function toggleGPS(){
@@ -1353,6 +1526,7 @@ async function verarbeiteGPS(lat, lon, acc){
         
         let accStr = `±${Math.round(acc)}m`;
         let snapDistStr = `${Math.round(sel.dist * 1000)}m`;
+        letzteKontextMeta = { snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc, rfApproximiert: false, manuell: false };
         let techInfo = `<div style="margin-top:0px; font-size:0.85em; color:var(--text-secondary);">Genauigkeit: <b>${accStr}</b> | Abstand zur Achse: <b>${snapDistStr}</b></div>`;
  
         let rawAbs = props.ABSNr || "";
@@ -1382,6 +1556,7 @@ async function verarbeiteGPS(lat, lon, acc){
             if (bkm > 0) {
                 let gemeindeAchse = selectedRichtung || achse;
                 setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
+                letzteKontextMeta.rfApproximiert = false;
             }
             
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
@@ -1426,8 +1601,9 @@ async function verarbeiteGPS(lat, lon, acc){
             document.getElementById("erfasste-strasse").innerHTML = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName}</span> | BKM: ${bkmAnzeige}`;
 
         } else {
-            anwendenLbErgebnis(strName, sel.feature, pt);
+            let station = anwendenLbErgebnis(strName, sel.feature, pt);
             manuellerFokus = strName;
+            aktualisiereKontextAnzeigen({ strName: strName, km: station.stationKm, pt: pt, snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc });
         }
 
         if (strName.startsWith("A") && bkm > 0) {
@@ -1454,11 +1630,13 @@ async function verarbeiteGPS(lat, lon, acc){
             htmlOutput += `</div>`;
         }
         document.getElementById("gps-info").innerHTML = htmlOutput;
-        aktualisierePruefButton();
+        if (strName.startsWith("A") && bkm > 0) {
+            aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: pt, snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc });
+        }
  
     } else {
         document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
-        aktualisierePruefButton();
+        leereKontextAnzeigen();
     }
 }
 
@@ -1521,6 +1699,7 @@ function berechnen(isManual = false){
         document.getElementById("m").innerText = "-";
         document.getElementById("m_address").innerText = "-";
         document.getElementById("m_phone").innerText = "-";
+        leereKontextAnzeigen();
         return;
     }
  
@@ -1557,7 +1736,16 @@ function berechnen(isManual = false){
     } else {
         document.getElementById("g").innerText = datenGemeinden.length === 0 ? "-" : "Außerhalb NRW";
     }
-    aktualisierePruefButton();
+
+    letzteKontextMeta = {
+        snapDistM: null,
+        gpsAccM: (watchId && letzteAcc > 0) ? letzteAcc : 0,
+        rfApproximiert: !!(fahrbahnPosition && fahrbahnPosition.approximiert),
+        manuell: isManual || !watchId
+    };
+    if (!istLandesOderBundesstrasse(a)) {
+        aktualisiereKontextAnzeigen({ strName: a, km: km, achse: gemeindeAchse, manuell: letzteKontextMeta.manuell, rfApproximiert: letzteKontextMeta.rfApproximiert, gpsAccM: letzteKontextMeta.gpsAccM });
+    }
  
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
     if(wachenGrenzen[a]) {
@@ -1585,6 +1773,7 @@ function berechnen(isManual = false){
                 document.getElementById("m").innerText = m_name;
                 document.getElementById("m_address").innerText = kontakte.addr;
                 document.getElementById("m_phone").innerText = kontakte.phone;
+                aktualisiereKontextAnzeigen({ strName: a, km: stationKm, achse: "", manuell: true });
             }
         } else {
             let displayDir = "";
@@ -1668,67 +1857,41 @@ function holeNKHtml(props, distMeter, strName) {
         '</table></div>';
 }
 
-function waehleStrassenKandidat(pt, zielName) {
+function waehleStrassenKandidat(pt, zielName, maxDistKm) {
     if (!zielName) return null;
+    maxDistKm = maxDistKm || 2.0;
     let liste = holeStrassenListeFuerName(zielName);
-    let hits = findeKandidaten(liste.length ? liste : datenBAB, pt, null, 2.0).filter(h => h.name === zielName);
+    let hits = findeKandidaten(liste.length ? liste : datenBAB, pt, null, maxDistKm).filter(h => h.name === zielName);
     if (hits.length === 0) return null;
     hits.sort((a, b) => a.dist - b.dist);
     return hits[0];
 }
 
-function aktualisierePruefButton() {
-    let btn = document.getElementById("btn-pruefen");
-    if (!btn) return;
-    let ok = aktiveLat !== 0 && aktiveLon !== 0 && geoDatenBereit;
-    btn.disabled = !ok;
-}
- 
 function openMap(mode = 'NK') {
     mapMode = mode;
-    let overlay = document.getElementById('map-overlay');
-    overlay.classList.toggle('pruef-modus', mode === 'PRUEFEN');
+    document.getElementById('map-overlay').style.display = 'flex';
     document.getElementById('nk-map-result').style.display = 'none';
-    document.getElementById('pruef-controls').style.display = mode === 'PRUEFEN' ? 'block' : 'none';
-    document.getElementById('map-hint').style.display = mode === 'PRUEFEN' ? 'none' : 'block';
-
+    document.getElementById('map-hint').style.display = 'block';
     if (mode === 'NK') {
         document.getElementById('map-title').innerText = '📝 Netzknoten erfassen';
         document.getElementById('map-action-btn').innerText = 'Hier erfassen';
-        document.getElementById('map-action-btn').style.display = 'block';
-    } else if (mode === 'KM') {
+    } else {
         document.getElementById('map-title').innerText = '📍 KM auf Karte erfassen';
         document.getElementById('map-action-btn').innerText = 'KM übernehmen';
-        document.getElementById('map-action-btn').style.display = 'block';
-    } else {
-        document.getElementById('map-title').innerText = '🔍 Position prüfen';
-        document.getElementById('map-action-btn').style.display = 'none';
     }
-
-    let initLat = aktiveLat !== 0 ? aktiveLat : (letzteLat !== 0 ? letzteLat : 51.3);
-    let initLon = aktiveLon !== 0 ? aktiveLon : (letzteLon !== 0 ? letzteLon : 6.85);
-
+    let initLat = letzteLat !== 0 ? letzteLat : 51.3;
+    let initLon = letzteLon !== 0 ? letzteLon : 6.85;
     if (!map) {
-        map = L.map('karte', { zoomControl: false }).setView([initLat, initLon], 17);
+        map = L.map('karte', { zoomControl: false }).setView([initLat, initLon], 18);
         let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22 });
         let satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 });
         osmLayer.addTo(map);
         L.control.layers({ "Standard Karte": osmLayer, "Satellit": satLayer }).addTo(map);
-        map.on('moveend', () => {
-            if (mapMode !== 'PRUEFEN') return;
-            clearTimeout(pruefMoveTimer);
-            pruefMoveTimer = setTimeout(() => renderPruefKarte(), 400);
-        });
     } else {
-        map.setView([initLat, initLon], 17);
+        map.setView([initLat, initLon], 18);
     }
-    overlay.style.display = 'flex';
-    setTimeout(() => {
-        map.invalidateSize();
-        if (mode === 'PRUEFEN') renderPruefKarte();
-    }, 200);
-
-    if (mode !== 'PRUEFEN' && letzteLat === 0 && navigator.geolocation) {
+    setTimeout(() => map.invalidateSize(), 200);
+    if (letzteLat === 0 && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
             map.setView([pos.coords.latitude, pos.coords.longitude], 18);
         }, () => {}, { timeout: 5000 });
@@ -1737,368 +1900,9 @@ function openMap(mode = 'NK') {
 
 function closeMap() {
     document.getElementById('map-overlay').style.display = 'none';
-    document.getElementById('map-overlay').classList.remove('pruef-modus');
     if (mapLineLayer) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
-    if (mapPruefLayer) { map.removeLayer(mapPruefLayer); mapPruefLayer = null; }
 }
 
-function setPruefStufe(stufe) {
-    pruefStufe = stufe;
-    document.querySelectorAll('.pruef-stufe-btn').forEach(btn => {
-        btn.classList.toggle('active-stufe', Number(btn.dataset.stufe) === stufe);
-    });
-    renderPruefKarte();
-}
-
-function holeAktuellePositionsDaten() {
-    let strName = aktiveStrasse || document.getElementById("autobahn").value;
-    let km = aktiveKM;
-    if (!km || km <= 0) {
-        let kmRaw = document.getElementById("km").value.replace(',', '.');
-        km = parseFloat(kmRaw);
-    }
-    let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
-    let lat = aktiveLat;
-    let lon = aktiveLon;
-    if (lat === 0 && letzteLat !== 0) { lat = letzteLat; lon = letzteLon; }
-    if (!strName || lat === 0) return null;
-
-    let pos = ermittleFahrbahnPosition(strName, km, achse);
-    if (pos && pos.coords) { lat = pos.coords[1]; lon = pos.coords[0]; }
-    let pt = turf.point([lon, lat]);
-    let gemeinde = document.getElementById("g").innerText || "-";
-    let m = {
-        name: document.getElementById("m").innerText,
-        addr: document.getElementById("m_address").innerText,
-        phone: document.getElementById("m_phone").innerText
-    };
-    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[strName] || [];
-    let rfName = achse === "Hauptachse" ? (rfListe[0] || "Hauptachse") : achse === "Nebenachse" ? (rfListe[1] || "Nebenachse") : "Bestandsachse";
-    let wacheGrenzen = datenWachen[aktuelleWache].grenzen[strName];
-    return { strName, km, achse, lat, lon, pt, pos, gemeinde, m, rfName, rfListe, wacheGrenzen };
-}
-
-const PRUEF_STUFEN = {
-    1: {
-        titel: "Stufe 1 – Basis (Schnellprüfung)",
-        enthalten: [
-            "Erfasste Position (roter Punkt) auf der gewählten Richtungsfahrbahn",
-            "Gewählte RF als grüne Linie, Bestandsachse als graue Hilfslinie",
-            "Gemeinde-Polygon der erkannten Gemeinde",
-            "BKM-Fixpunkte ±2 km (orange, Antippen für KM-Wert)",
-            "GPS-Genauigkeitskreis (falls GPS aktiv)"
-        ],
-        nicht: [
-            "Keine Anschlussstellen / PP / AK auf der Karte",
-            "Keine Gemeindenamen, keine AM-Grenzen",
-            "Keine RF-Beschriftung entlang der Fahrbahn",
-            "Keine weiteren Richtungsfahrbahnen (nur die gewählte + Bestandsachse)"
-        ]
-    },
-    2: {
-        titel: "Stufe 2 – Kontext (Umgebung)",
-        enthalten: [
-            "Alles aus Stufe 1",
-            "Wachen-KM-Grenzen (Anfang/Ende des Streckenbands)",
-            "Anschlussstellen, PP, AK, TuR, RuT aus dem Streckenband (±6 km, an Straßengeometrie)",
-            "Gemeindenamen im sichtbaren Kartenausschnitt (max. 12)"
-        ],
-        nicht: [
-            "Keine AM/SM-Wechselpunkte",
-            "Keine RF-Beschriftung entlang der Fahrbahn",
-            "Keine Nebenachse als eigene Linie (nur gewählte RF + Bestandsachse)",
-            "Kein erweitertes BKM-Raster"
-        ]
-    },
-    3: {
-        titel: "Stufe 3 – Detail (Zuständigkeit & RF)",
-        enthalten: [
-            "Alles aus Stufe 2",
-            "AM/SM-Wechsel entlang der Strecke (±5 km)",
-            "RF-Beschriftung alle 1 km entlang der gewählten Fahrbahn (±4 km)",
-            "BKM-Fixpunkte mit dauerhafter Beschriftung"
-        ],
-        nicht: [
-            "Keine zweite/dritte RF-Achse als separate Linie",
-            "Kein vollständiges Streckenband der gesamten Wache",
-            "Keine Gemeinden außerhalb des Kartenausschnitts"
-        ]
-    },
-    4: {
-        titel: "Stufe 4 – Experte (Vollansicht)",
-        enthalten: [
-            "Alles aus Stufe 3",
-            "Alle drei Achsen: Hauptachse, Nebenachse, Bestandsachse",
-            "Streckenband-Einträge ±15 km",
-            "BKM-Fixpunkte ±5 km mit Beschriftung",
-            "Bis zu 25 Gemeindenamen im Ausschnitt",
-            "RF-Beschriftung im erweiterten Umkreis (0,5 km Raster)"
-        ],
-        nicht: [
-            "Keine AM-Flächengrenzen (nur Wechselpunkte, keine Polygone)",
-            "Kein gesamtes NRW-Straßennetz",
-            "Keine L/B-Straßen außer der erfassten Position"
-        ]
-    }
-};
-
-const PRUEF_INFRA_FARBEN = { AS: "#28a745", PP: "#fd7e14", AK: "#dc3545", TuR: "#6f42c1", RuT: "#17a2b8", AD: "#6c757d", GÜ: "#343a40", R: "#6c757d", T: "#6c757d" };
-
-function findeGemeindeFeatureByName(name) {
-    let ziel = String(name || "").split(" (")[0].trim();
-    return datenGemeinden.find(f => gemeindeNameAusFeature(f) === ziel) || null;
-}
-
-function holeKarteKoordinateFuerKm(strName, km, achse, pt) {
-    if (isNaN(km)) return null;
-    let zielAchse = achse || "Bestandsachse";
-    let pos = ermittleFahrbahnPosition(strName, km, zielAchse);
-    if (pos && pos.coords) return pos.coords;
-
-    let coords = holeKoordinateFuerKM(strName, km, pt);
-    if (!coords) return null;
-
-    let hit = findeStrassenFeatureFuerPunkt(turf.point(coords), strName, zielAchse);
-    if (!hit) hit = findeStrassenFeatureFuerPunkt(turf.point(coords), strName, "");
-    if (hit && hit.feature) {
-        let snapped = turf.nearestPointOnLine(hit.feature, turf.point(coords), { units: "kilometers" });
-        return turf.getCoord(snapped);
-    }
-    return coords;
-}
-
-function holeBkmFixpunkteInRange(strName, km, spanKm, pt) {
-    let suchNummer = autobahnSuchNummer(strName);
-    let passende = referenzPunkte.filter(f => f.properties && String(f.properties.Bez) === suchNummer);
-    let mitKm = referenzPunkteMitKm(passende);
-    let anchor = pt || turf.point([aktiveLon, aktiveLat]);
-    let cluster = waehleReferenzCluster(mitKm, anchor, strName, km);
-    return cluster.filter(p => Math.abs(p.km - km) <= spanKm);
-}
-
-function parseListenKm(wert) {
-    let km = parseFloat(String(wert || "").replace(",", "."));
-    return isNaN(km) ? null : km;
-}
-
-function holeInfrastrukturEintraege(strName, km, radiusKm) {
-    let liste = (datenWachen[aktuelleWache].listen || {})[strName] || [];
-    return liste.map((e, idx) => {
-        let ekm = parseListenKm(e[2]);
-        if (ekm === null) return null;
-        if (km > 0 && Math.abs(ekm - km) > radiusKm) return null;
-        return { typ: e[0], name: e[1], km: ekm, kmText: e[2], rf: e[3] || "", idx: idx };
-    }).filter(Boolean);
-}
-
-function zeichneInfraMarker(layer, typ, name, kmText, coords) {
-    let farbe = PRUEF_INFRA_FARBEN[typ] || "#444";
-    let html = '<div class="pruef-infra-marker">' +
-        '<div class="pruef-infra-pin" style="color:' + farbe + '">●</div>' +
-        '<div class="pruef-infra-tag" style="border-color:' + farbe + '">' +
-        '<span class="typ">' + typ + '</span>' +
-        '<span class="name">' + name + '</span>' +
-        '<span class="km">km ' + kmText + '</span>' +
-        '</div></div>';
-    L.marker([coords[1], coords[0]], {
-        icon: L.divIcon({ className: "pruef-marker-wrap", html: html, iconSize: [150, 58], iconAnchor: [75, 58] }),
-        interactive: true,
-        zIndexOffset: 400
-    }).bindPopup("<b>" + typ + " " + name + "</b><br>KM " + kmText).addTo(layer);
-}
-
-function zeichneTextMarker(layer, lat, lon, text, klasse, iconW, iconH, anchorY) {
-    let html = '<div class="' + klasse + '">' + text + '</div>';
-    L.marker([lat, lon], {
-        icon: L.divIcon({ className: "pruef-marker-wrap", html: html, iconSize: [iconW, iconH], iconAnchor: [iconW / 2, anchorY] }),
-        interactive: false,
-        zIndexOffset: 200
-    }).addTo(layer);
-}
-
-function zeichneAchsen(layer, strName, achsen, aktiveAchse, pt) {
-    let farben = { Hauptachse: "#28a745", Nebenachse: "#0d6efd", Bestandsachse: "#6c757d" };
-    achsen.forEach(ax => {
-        let features = holeStrassenFeatures(strName, ax, true);
-        if (features.length === 0) features = holeStrassenFeatures(strName, ax, false);
-        if (features.length === 0) return;
-        let istAktiv = ax === aktiveAchse;
-        let farbe = farben[ax] || "#888";
-        features.forEach(f => {
-            try {
-                if (pt && !istAktiv) {
-                    let d = turf.pointToLineDistance(pt, f, { units: "kilometers" });
-                    if (d > 8) return;
-                }
-            } catch (e) {}
-            L.geoJSON(f, {
-                style: {
-                    color: farbe,
-                    weight: istAktiv ? 5 : 2,
-                    opacity: istAktiv ? 0.95 : 0.4,
-                    dashArray: ax === "Bestandsachse" ? "10 8" : null
-                }
-            }).addTo(layer);
-        });
-    });
-}
-
-function findeAmWechselEntlang(strName, vonKm, bisKm, schritt, achse, pt) {
-    let wechsel = [];
-    let lastAm = null;
-    for (let k = vonKm; k <= bisKm; k += schritt) {
-        let info = ermittleMeistereiFuerKM(strName, k);
-        if (info.name && info.name !== lastAm && info.name !== "Nicht in DB") {
-            let coords = holeKarteKoordinateFuerKm(strName, k, achse, pt);
-            if (coords) wechsel.push({ km: k, am: info.name, coords: coords });
-            lastAm = info.name;
-        }
-    }
-    return wechsel;
-}
-
-function bauePruefInfoHtml(data) {
-    let stufe = PRUEF_STUFEN[pruefStufe];
-    let kmFmt = data.km > 0 ? data.km.toFixed(3).replace(".", ",") : "-";
-    let html = '<div class="pruef-info-haupt">';
-    html += '<div class="pruef-zeile"><strong>Straße</strong> ' + data.strName + '</div>';
-    html += '<div class="pruef-zeile"><strong>BKM</strong> ' + kmFmt + '</div>';
-    html += '<div class="pruef-zeile"><strong>RF</strong> ' + data.rfName + ' <span style="color:var(--text-secondary)">(' + data.achse + ')</span></div>';
-    html += '<div class="pruef-zeile"><strong>Gemeinde</strong> ' + data.gemeinde + '</div>';
-    html += '<div class="pruef-zeile"><strong>AM/SM</strong> ' + data.m.name + '</div>';
-    if (data.m.addr && data.m.addr !== "-") html += '<div class="pruef-zeile"><strong>Adresse</strong> ' + data.m.addr + '</div>';
-    if (letzteAcc > 0) html += '<div class="pruef-zeile"><strong>GPS</strong> ±' + Math.round(letzteAcc) + ' m</div>';
-    html += '<div class="pruef-zeile"><strong>Wache</strong> ' + aktuelleWache;
-    if (data.wacheGrenzen) html += ' <span style="color:var(--text-secondary)">(km ' + data.wacheGrenzen[0] + '–' + data.wacheGrenzen[1] + ')</span>';
-    html += '</div></div>';
-
-    html += '<div class="pruef-stufen-legende"><h4>' + stufe.titel + '</h4>';
-    html += '<p style="margin:0 0 6px 0;font-weight:bold;" class="enthalten">✓ Enthalten:</p><ul>';
-    stufe.enthalten.forEach(t => { html += '<li class="enthalten">' + t + '</li>'; });
-    html += '</ul><p style="margin:8px 0 6px 0;font-weight:bold;" class="nicht-enthalten">✗ Nicht enthalten:</p><ul>';
-    stufe.nicht.forEach(t => { html += '<li class="nicht-enthalten">' + t + '</li>'; });
-    html += '</ul></div>';
-    return html;
-}
-
-function renderPruefKarte() {
-    if (!map || mapMode !== "PRUEFEN") return;
-    let data = holeAktuellePositionsDaten();
-    if (!data) {
-        document.getElementById("pruef-info-box").innerHTML = '<span style="color:red;">Keine Position – zuerst GPS oder KM erfassen.</span>';
-        return;
-    }
-    document.getElementById("pruef-info-box").innerHTML = bauePruefInfoHtml(data);
-
-    if (mapPruefLayer) map.removeLayer(mapPruefLayer);
-    mapPruefLayer = L.layerGroup().addTo(map);
-    let layer = mapPruefLayer;
-    let stufe = pruefStufe;
-    let strName = data.strName;
-    let km = data.km || 0;
-    let achse = data.achse || "Bestandsachse";
-    let pt = data.pt;
-
-    // --- Stufe 1+: Position ---
-    let popupHtml = "<b>" + strName + "</b><br>BKM " + (km > 0 ? km.toFixed(3).replace(".", ",") : "-") +
-        "<br>" + data.rfName + "<br>" + data.gemeinde.split(" (")[0];
-    L.circleMarker([data.lat, data.lon], { radius: 11, color: "#dc3545", fillColor: "#dc3545", fillOpacity: 0.95, weight: 3, zIndexOffset: 1000 })
-        .bindPopup(popupHtml).addTo(layer);
-
-    if (letzteAcc > 0 && letzteLat !== 0) {
-        L.circle([letzteLat, letzteLon], { radius: letzteAcc, color: "#ffc107", fillColor: "#ffc107", fillOpacity: 0.1, weight: 2, dashArray: "5 5" }).addTo(layer);
-    }
-
-    // --- Achsen ---
-    let achsenListe = stufe >= 4 ? ["Hauptachse", "Nebenachse", "Bestandsachse"] : [achse, "Bestandsachse"];
-    achsenListe = [...new Set(achsenListe)];
-    zeichneAchsen(layer, strName, achsenListe, achse, pt);
-
-    // --- Gemeinde ---
-    let gemFeat = findeGemeindeFeatureByName(data.gemeinde);
-    if (gemFeat) {
-        L.geoJSON(gemFeat, { style: { color: "#9c27b0", weight: 2, fillColor: "#9c27b0", fillOpacity: 0.1 } }).addTo(layer);
-    }
-
-    // --- BKM-Fixpunkte ---
-    let bkmSpan = stufe >= 4 ? 5 : stufe >= 3 ? 3 : 2;
-    holeBkmFixpunkteInRange(strName, km, bkmSpan, pt).forEach(p => {
-        let marker = L.circleMarker([p.coord[1], p.coord[0]], {
-            radius: 6, color: "#e65100", fillColor: "#ff9800", fillOpacity: 0.9, weight: 2
-        }).bindTooltip("BKM " + p.km.toFixed(2).replace(".", ","), { direction: "top", offset: [0, -6] });
-        marker.addTo(layer);
-        if (stufe >= 3) {
-            zeichneTextMarker(layer, p.coord[1], p.coord[0], p.km.toFixed(1).replace(".", ","), "pruef-bkm-label", 50, 20, 10);
-        }
-    });
-
-    // --- Stufe 2+: Kontext ---
-    if (stufe >= 2) {
-        if (data.wacheGrenzen && km > 0) {
-            [data.wacheGrenzen[0], data.wacheGrenzen[1]].forEach(gkm => {
-                let c = holeKarteKoordinateFuerKm(strName, gkm, achse, pt);
-                if (c) zeichneTextMarker(layer, c[1], c[0], "Wache km " + gkm, "pruef-grenze-label", 100, 26, 13);
-            });
-        }
-
-        let infraRadius = stufe >= 4 ? 15 : 6;
-        let kmOffsetZaehler = {};
-        holeInfrastrukturEintraege(strName, km, infraRadius).forEach(e => {
-            let c = holeKarteKoordinateFuerKm(strName, e.km, achse, pt);
-            if (!c) return;
-            let key = e.km.toFixed(3);
-            let offsetNr = kmOffsetZaehler[key] || 0;
-            kmOffsetZaehler[key] = offsetNr + 1;
-            if (offsetNr > 0) {
-                let bearing = berechneFahrtBearing(strName, e.km) || 0;
-                let versatz = turf.destination(turf.point(c), 0.025 * offsetNr, bearing + 90, { units: "kilometers" });
-                c = turf.getCoord(versatz);
-            }
-            zeichneInfraMarker(layer, e.typ, e.name, e.kmText, c);
-        });
-
-        if (map) {
-            let bounds = map.getBounds();
-            let bboxPoly = turf.bboxPolygon([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
-            let maxGem = stufe >= 4 ? 25 : 12;
-            let count = 0;
-            datenGemeinden.forEach(f => {
-                if (count >= maxGem) return;
-                try {
-                    if (!turf.booleanIntersects(f, bboxPoly)) return;
-                    let coord = turf.getCoord(turf.centroid(f));
-                    zeichneTextMarker(layer, coord[1], coord[0], gemeindeNameAusFeature(f), "pruef-gemeinde-label", 90, 22, 11);
-                    count++;
-                } catch (e) {}
-            });
-        }
-    }
-
-    // --- Stufe 3+: Detail ---
-    if (stufe >= 3 && km > 0) {
-        let von = Math.max((data.wacheGrenzen ? data.wacheGrenzen[0] : km - 5), km - 4);
-        let bis = Math.min((data.wacheGrenzen ? data.wacheGrenzen[1] : km + 5), km + 4);
-
-        findeAmWechselEntlang(strName, von, bis, 0.25, achse, pt).forEach(w => {
-            zeichneTextMarker(layer, w.coords[1], w.coords[0], "→ " + w.am, "pruef-am-label", 130, 36, 18);
-        });
-
-        let rfLabel = achse === "Hauptachse" ? (data.rfListe[0] || "HA") : achse === "Nebenachse" ? (data.rfListe[1] || "NA") : "BA";
-        let schritt = stufe >= 4 ? 0.5 : 1;
-        for (let k = Math.floor(von); k <= Math.ceil(bis); k += schritt) {
-            let txt = "km " + k.toFixed(1).replace(".", ",") + "<br>" + rfLabel;
-            let coords = holeKarteKoordinateFuerKm(strName, k, achse, pt);
-            if (!coords) continue;
-            let bearing = berechneFahrtBearing(strName, k) || 0;
-            let html = '<div class="pruef-rf-label" style="transform:rotate(' + bearing + 'deg)">' + txt + '</div>';
-            L.marker([coords[1], coords[0]], {
-                icon: L.divIcon({ className: "pruef-marker-wrap", html: html, iconSize: [110, 36], iconAnchor: [55, 18] }),
-                interactive: false, zIndexOffset: 100
-            }).addTo(layer);
-        }
-    }
-}
- 
 function calculateMapResult() {
     let pos = map.getCenter(); 
     let ptPin = turf.point([pos.lng, pos.lat]);
@@ -2205,7 +2009,8 @@ function calculateMapResult() {
                 document.getElementById("erfasste-strasse").innerHTML = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | BKM: ${bkmAnzeige}`;
                 
                 updateUI();
-                aktualisierePruefButton();
+                letzteKontextMeta = { snapDistM: Math.round(sel.dist * 1000), gpsAccM: 0, rfApproximiert: false, manuell: false };
+                aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: ptPin, snapDistM: letzteKontextMeta.snapDistM, manuell: false });
             }
             closeMap();
         }
@@ -2289,8 +2094,21 @@ function stopWegZeit() {
     let mode = document.querySelector('input[name="speed_mode"]:checked').value;
     if(mode === 'manual') document.getElementById("speed").disabled = false;
    document.querySelectorAll('input[name="speed_mode"]').forEach(r => r.disabled = false);
+   document.getElementById("wz_ankunft").innerText = "-";
 }
  
+function findeNaechsteAsWz(currentKm) {
+    let a = document.getElementById("wz_autobahn").value;
+    if (!a) return null;
+    let best = null;
+    holeListenEintraegeMitKm(a).forEach(e => {
+        if (!istInfraTyp(e.typ)) return;
+        let diff = (e.km - currentKm) * wzDir;
+        if (diff > 0.05 && (!best || diff < best.diff)) best = Object.assign({}, e, { diff: diff });
+    });
+    return best;
+}
+
 function tickWegZeit() {
     let elapsedMs = Date.now() - wzStartTime;
     let elapsedHours = elapsedMs / (1000 * 60 * 60);
@@ -2300,6 +2118,16 @@ function tickWegZeit() {
    document.getElementById("wz_aktuell_km").innerText = currentKm.toFixed(3).replace('.',',');
    document.getElementById("wz_zeit").innerText = `${elapsedMin}:${elapsedSec.toString().padStart(2, '0')}`;
    highlightWzList(currentKm);
+    let naechste = findeNaechsteAsWz(currentKm);
+    let ankunftEl = document.getElementById("wz_ankunft");
+    if (ankunftEl) {
+        if (naechste && wzSpeed > 0) {
+            let min = (naechste.diff / wzSpeed) * 60;
+            ankunftEl.innerText = naechste.typ + " " + naechste.name + " in ca. " + Math.round(min) + " min (km " + naechste.kmText + ", " + naechste.diff.toFixed(1).replace(".", ",") + " km voraus)";
+        } else {
+            ankunftEl.innerText = "-";
+        }
+    }
 }
  
 function highlightWzList(currentKm) {
