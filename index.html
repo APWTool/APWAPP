@@ -73,6 +73,16 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .center-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); font-size: 45px; z-index: 1000; pointer-events: none; text-shadow: 0px 2px 5px rgba(0,0,0,0.5); }
 .map-footer { flex-shrink: 0; padding: 15px; background: var(--bg-card); box-shadow: 0 -2px 10px rgba(0,0,0,0.2); z-index: 10000; }
 #nk-map-result { display: none; margin-top: 10px; }
+#map-overlay.pruef-modus .center-pin { display: none; }
+#map-overlay.pruef-modus #map-action-btn { display: none; }
+#pruef-controls { display: none; width: 100%; }
+#map-overlay.pruef-modus #pruef-controls { display: block; }
+.pruef-stufe-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
+.pruef-stufe-btn { width: auto; flex: 1; min-width: 70px; margin: 0; padding: 8px 4px; font-size: 0.8em; background: var(--input-bg); color: var(--text-main); border: 2px solid var(--input-border); }
+.pruef-stufe-btn.active-stufe { background: var(--accent); color: white; border-color: var(--accent); }
+#pruef-info-box { font-size: 0.85em; line-height: 1.45; text-align: left; padding: 10px; background: var(--result-bg); border-radius: 6px; border-left: 4px solid var(--accent); max-height: 28vh; overflow-y: auto; }
+.rf-map-label { background: rgba(0,123,255,0.88); color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; white-space: nowrap; border: 1px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+.gemeinde-map-label { background: rgba(255,255,255,0.92); color: #333; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; border: 1px solid #888; }
  
 /* FUSSEILE */
 .footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
@@ -100,6 +110,15 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     <div class="map-footer">
         <p id="map-hint" style="margin: 0 0 10px 0; font-size: 0.9em; text-align: center;">Bewege die Karte exakt unter die Nadelspitze.</p>
+        <div id="pruef-controls">
+            <div class="pruef-stufe-row">
+                <button type="button" class="pruef-stufe-btn active-stufe" data-stufe="1" onclick="setPruefStufe(1)">Stufe 1</button>
+                <button type="button" class="pruef-stufe-btn" data-stufe="2" onclick="setPruefStufe(2)">Stufe 2</button>
+                <button type="button" class="pruef-stufe-btn" data-stufe="3" onclick="setPruefStufe(3)">Stufe 3</button>
+                <button type="button" class="pruef-stufe-btn" data-stufe="4" onclick="setPruefStufe(4)">Stufe 4</button>
+            </div>
+            <div id="pruef-info-box"></div>
+        </div>
         <button id="map-action-btn" onclick="calculateMapResult()">Hier erfassen</button>
         <div id="nk-map-result"></div>
     </div>
@@ -131,6 +150,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('NK')">📝 NK erfassen</button>
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('KM')">📍 KM auf Karte erfassen</button>
     </div>
+    <button class="btn-action" id="btn-pruefen" onclick="openMap('PRUEFEN')" disabled>🔍 Position prüfen</button>
     <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
  
     <div class="result">
@@ -241,6 +261,11 @@ let meistereiMap = { am: {}, sm: {} };
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
 let manuellerFokus = null;
+let erzwungenerFokus = false;
+let aktiveStrasse = "";
+let aktiveAchse = "";
+let pruefStufe = 1;
+let mapPruefLayer = null;
 let map = null;
 let mapLineLayer = null; 
 let mapMode = 'NK';
@@ -368,6 +393,7 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
+    aktualisierePruefButton();
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -519,8 +545,15 @@ function findeKandidatenFuerPin(pt, maxDistKm, priorisiereAutobahn) {
     return liste;
 }
 
-function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm) {
+function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm, erzwingen) {
     if (!kandidaten || kandidaten.length === 0) return null;
+    if (fokusName && (erzwingen || erzwungenerFokus)) {
+        let focus = waehleStrassenKandidat(pt, fokusName);
+        if (focus) {
+            erzwungenerFokus = false;
+            return focus;
+        }
+    }
     let best = kandidaten[0];
     if (!fokusName) return best;
     let focus = waehleStrassenKandidat(pt, fokusName);
@@ -530,6 +563,28 @@ function waehleKandidatMitFokus(pt, kandidaten, fokusName, maxFokusAbweichungKm)
 
 function findeSegmenteFuerKarte(pt, maxDistKm) {
     return findeKandidatenFuerPin(pt, maxDistKm, false).slice(0, 10).map(k => k.feature);
+}
+
+function holeRegionHint(strName, km, pt) {
+    if (!strName || !strName.startsWith("A") || !(km > 0)) return "";
+    let wachen = [];
+    for (let wache in datenWachen) {
+        let g = datenWachen[wache].grenzen[strName];
+        if (g && km >= g[0] && km <= g[1]) wachen.push(wache);
+    }
+    if (wachen.length <= 1) return "";
+    let w = findeWacheFuerAutobahnKm(strName, km, pt) || aktuelleWache;
+    let listen = (datenWachen[w].listen || {})[strName] || [];
+    let bestName = "";
+    let bestD = Infinity;
+    listen.forEach(e => {
+        let ekm = parseFloat(String(e[2] || "").replace(",", "."));
+        if (!isNaN(ekm)) {
+            let d = Math.abs(ekm - km);
+            if (d < bestD) { bestD = d; bestName = e[1]; }
+        }
+    });
+    return bestName ? " | <em>" + bestName + "</em>" : "";
 }
 
 function anwendenLbErgebnis(strName, feature, pt) {
@@ -547,12 +602,15 @@ function anwendenLbErgebnis(strName, feature, pt) {
     aktiveLat = station.coords[1];
     aktiveLon = station.coords[0];
     aktiveKM = 0;
+    aktiveStrasse = strName;
+    aktiveAchse = "";
 
     let m_name = ermittleAM(absNetz, station.stationMeter);
     let kontakte = holeAdresseUndTelefon(m_name);
     document.getElementById("m").innerText = m_name;
     document.getElementById("m_address").innerText = kontakte.addr;
     document.getElementById("m_phone").innerText = kontakte.phone;
+    aktualisierePruefButton();
     return station;
 }
 
@@ -743,38 +801,101 @@ function holeKmAnkerKoordinaten() {
     return wachenAnker["Hilden"] || [6.95, 51.17];
 }
 
-function waehleKmCluster(mitKm, km) {
-    if (mitKm.length <= 1) return mitKm;
+function referenzPunkteMitKm(passende) {
+    return passende.map(p => ({
+        pt: p,
+        km: Number(p.properties.Kilometer || 0),
+        coord: turf.getCoord(turf.centroid(p))
+    })).sort((a, b) => a.km - b.km);
+}
+
+function clustereReferenzPunkte(mitKm) {
+    if (mitKm.length <= 1) return [mitKm];
     let clusters = [];
     let current = [mitKm[0]];
     for (let i = 1; i < mitKm.length; i++) {
-        if (mitKm[i].km - mitKm[i - 1].km > 15) {
+        let gapKm = mitKm[i].km - mitKm[i - 1].km;
+        let gapGeo = turf.distance(turf.point(mitKm[i - 1].coord), turf.point(mitKm[i].coord), { units: "kilometers" });
+        if (gapKm > 12 || gapGeo > 20) {
             clusters.push(current);
             current = [];
         }
         current.push(mitKm[i]);
     }
     clusters.push(current);
+    return clusters;
+}
+
+function waehleReferenzCluster(mitKm, pt, strName, hintKm) {
+    let clusters = clustereReferenzPunkte(mitKm);
+    if (clusters.length === 1) return clusters[0];
+    let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
+
+    let scored = clusters.map(c => {
+        let mid = c[Math.floor(c.length / 2)];
+        let distGeo = turf.distance(anchorPt, turf.point(mid.coord), { units: "kilometers" });
+        let score = distGeo;
+        let cMin = c[0].km;
+        let cMax = c[c.length - 1].km;
+        if (hintKm !== undefined && !isNaN(hintKm) && hintKm >= cMin - 2 && hintKm <= cMax + 2) score -= 80;
+        if (strName) {
+            for (let wache in datenWachen) {
+                let g = datenWachen[wache].grenzen[strName];
+                if (!g) continue;
+                let midKm = (cMin + cMax) / 2;
+                if (midKm >= g[0] - 3 && midKm <= g[1] + 3) {
+                    let wDist = turf.distance(anchorPt, turf.point(wachenAnker[wache] || holeKmAnkerKoordinaten()), { units: "kilometers" });
+                    score += wDist * 0.15;
+                    if (wache === aktuelleWache) score -= 5;
+                }
+            }
+        }
+        return { c, score };
+    });
+    scored.sort((a, b) => a.score - b.score);
+    return scored[0].c;
+}
+
+function findeWacheFuerAutobahnKm(strName, bkm, pt) {
+    let kandidaten = [];
+    for (let wache in datenWachen) {
+        let g = datenWachen[wache].grenzen[strName];
+        if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) kandidaten.push(wache);
+    }
+    if (kandidaten.length === 0) return null;
+    if (kandidaten.length === 1) return kandidaten[0];
+    if (!pt) return kandidaten.includes(aktuelleWache) ? aktuelleWache : kandidaten[0];
+
+    let scored = kandidaten.map(wache => {
+        let lineDist = 99;
+        holeStrassenFeatures(strName).forEach(f => {
+            try {
+                let d = turf.pointToLineDistance(pt, f, { units: "kilometers" });
+                if (d < lineDist) lineDist = d;
+            } catch (e) {}
+        });
+        let ankerDist = turf.distance(pt, turf.point(wachenAnker[wache] || holeKmAnkerKoordinaten()), { units: "kilometers" });
+        return { wache, score: lineDist * 50 + ankerDist };
+    });
+    scored.sort((a, b) => a.score - b.score);
+    return scored[0].wache;
+}
+
+function waehleKmCluster(mitKm, km, pt, strName) {
+    let clusters = clustereReferenzPunkte(mitKm);
+    if (clusters.length === 1) return clusters[0];
 
     let passend = clusters.filter(c => km >= c[0].km - 2 && km <= c[c.length - 1].km + 2);
     if (passend.length === 1) return passend[0];
-    if (passend.length > 1) {
-        let anchorPt = turf.point(holeKmAnkerKoordinaten());
-        passend.sort((a, b) => {
-            let midA = (a[0].km + a[a.length - 1].km) / 2;
-            let midB = (b[0].km + b[b.length - 1].km) / 2;
-            let ptA = turf.point(a[Math.floor(a.length / 2)].coord);
-            let ptB = turf.point(b[Math.floor(b.length / 2)].coord);
-            return turf.distance(anchorPt, ptA) - turf.distance(anchorPt, ptB);
-        });
-        return passend[0];
-    }
-    clusters.sort((a, b) => {
-        let midA = (a[0].km + a[a.length - 1].km) / 2;
-        let midB = (b[0].km + b[b.length - 1].km) / 2;
-        return Math.abs(km - midA) - Math.abs(km - midB);
+
+    let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
+    let pool = passend.length > 0 ? passend : clusters;
+    pool.sort((a, b) => {
+        let midA = a[Math.floor(a.length / 2)];
+        let midB = b[Math.floor(b.length / 2)];
+        return turf.distance(anchorPt, turf.point(midA.coord)) - turf.distance(anchorPt, turf.point(midB.coord));
     });
-    return clusters[0];
+    return pool[0];
 }
 
 function interpoliereKmKoordinate(before, after, km) {
@@ -796,7 +917,7 @@ function autobahnSuchNummer(strName) {
     return n.replace(/^A/, "");
 }
 
-function holeKoordinateFuerKM(autobahn, km) {
+function holeKoordinateFuerKM(autobahn, km, pt) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
     let suchNummer = autobahnSuchNummer(autobahn);
     let passende = referenzPunkte.filter(f => {
@@ -805,13 +926,9 @@ function holeKoordinateFuerKM(autobahn, km) {
     });
     if (passende.length === 0) return null;
 
-    let mitKm = passende.map(p => ({
-        pt: p,
-        km: Number(p.properties.Kilometer || 0),
-        coord: turf.getCoord(turf.centroid(p))
-    })).sort((a, b) => a.km - b.km);
-
-    let cluster = waehleKmCluster(mitKm, km);
+    let mitKm = referenzPunkteMitKm(passende);
+    let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let cluster = waehleKmCluster(mitKm, km, anchorPt, autobahn);
     let before = null;
     let after = null;
     cluster.forEach(item => {
@@ -1200,11 +1317,13 @@ async function verarbeiteGPS(lat, lon, acc){
     let sortKandidaten = findeKandidatenFuerPin(pt, 2.0, true);
  
     if(sortKandidaten.length > 0) {
-        let sel = waehleKandidatMitFokus(pt, sortKandidaten, manuellerFokus, 0.12);
+        let sel = waehleKandidatMitFokus(pt, sortKandidaten, manuellerFokus, 0.12, erzwungenerFokus);
 
         const props = sel.feature.properties || {};
         const strName = sel.name; 
+        aktiveStrasse = strName;
         const achse = normalisiereAchse(props.Sk_Achse);
+        aktiveAchse = achse;
 
         if (manuellerFokus === strName && Array.from(document.getElementById("autobahn").options).some(o => o.value === strName)) {
             document.getElementById("autobahn").value = strName;
@@ -1246,10 +1365,8 @@ async function verarbeiteGPS(lat, lon, acc){
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
             if (needsSwitch) {
-                for (let wache in datenWachen) {
-                   let g = datenWachen[wache].grenzen[strName];
-                    if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) { wechsleWache(wache, true, strName); break; }
-                }
+                let zielWache = findeWacheFuerAutobahnKm(strName, bkm, pt);
+                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName);
             }
             
             let isOnCurrentWache = Array.from(document.getElementById("autobahn").options).some(o=>o.value===strName);
@@ -1283,6 +1400,7 @@ async function verarbeiteGPS(lat, lon, acc){
 
             let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
             if(dirText) bkmAnzeige += ` | <strong>${dirText}</strong>`;
+            bkmAnzeige += holeRegionHint(strName, bkm, pt);
             document.getElementById("erfasste-strasse").innerHTML = `<span style="color:${isOnCurrentWache ? 'green' : 'orange'};font-weight:bold;">${isOnCurrentWache ? '✅' : '⚠️'} ${strName}</span> | BKM: ${bkmAnzeige}`;
 
         } else {
@@ -1309,19 +1427,22 @@ async function verarbeiteGPS(lat, lon, acc){
                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
                    btnText = `${k_icon} ${k.name} [${distMeterCross}m]`;
                 }
-                htmlOutput += `<button type="button" onclick="wechsleFokus('${k.name}')" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
+                htmlOutput += `<button type="button" class="gps-wechsel-btn" data-str="${k.name}" style="margin: 4px 4px 0 0; padding: 6px 12px; width: auto; font-size: 0.85em; background: transparent; color: var(--text-main); border: 1px solid var(--accent); border-radius: 6px;">${btnText}</button>`;
             });
             htmlOutput += `</div>`;
         }
         document.getElementById("gps-info").innerHTML = htmlOutput;
+        aktualisierePruefButton();
  
     } else {
         document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
+        aktualisierePruefButton();
     }
 }
- 
+
 function wechsleFokus(zielName) {
     manuellerFokus = zielName;
+    erzwungenerFokus = true;
     let drop = document.getElementById("autobahn");
     if (Array.from(drop.options).some(o => o.value === zielName)) {
         drop.value = zielName;
@@ -1341,23 +1462,22 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         if(!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
     });
-    
-    if(passende.length > 1){
-        passende.forEach(p => p.tempDist = turf.distance(meinPunkt, p));
-        passende.sort((a, b) => a.tempDist - b.tempDist);
-        let closest = passende[0];
-        let secondClosest = passende[1];
-        let refKM1 = Number(closest.properties.Kilometer || 0);
-        let refKM2 = Number(secondClosest.properties.Kilometer || 0);
-        
+    if (passende.length === 0) return 0;
+
+    let mitKm = referenzPunkteMitKm(passende);
+    let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, null);
+    cluster.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord)); });
+    cluster.sort((a, b) => a.tempDist - b.tempDist);
+
+    if(cluster.length > 1){
+        let closest = cluster[0];
+        let secondClosest = cluster[1];
+        let refKM1 = closest.km;
+        let refKM2 = secondClosest.km;
         if (refKM2 < refKM1) return refKM1 - closest.tempDist;
-        else return refKM1 + closest.tempDist;
-        
-    } else if (passende.length === 1) {
-        let closest = passende[0];
-        let refKM = Number(closest.properties.Kilometer || 0);
-        let dist = turf.distance(meinPunkt, closest);
-        return refKM + dist;
+        return refKM1 + closest.tempDist;
+    } else if (cluster.length === 1) {
+        return cluster[0].km + cluster[0].tempDist;
     }
     return 0;
 }
@@ -1388,6 +1508,9 @@ function berechnen(isManual = false){
             let minKm = Math.min(...currentGrenzen);
             let maxKm = Math.max(...currentGrenzen);
             if (km < minKm || km > maxKm) {
+                let pt = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
+                let zielWache = findeWacheFuerAutobahnKm(a, km, pt);
+                if (zielWache) { wechsleWache(zielWache, true, a); return; }
                 for (let wache in datenWachen) {
                    let g = datenWachen[wache].grenzen[a];
                     if (g && km >= Math.min(...g) && km <= Math.max(...g)) { wechsleWache(wache, true, a); return; }
@@ -1406,10 +1529,13 @@ function berechnen(isManual = false){
             aktiveLat = fahrbahnPosition.coords[1];
             aktiveLon = fahrbahnPosition.coords[0];
             aktiveKM = km;
+            aktiveStrasse = a;
+            aktiveAchse = gemeindeAchse;
         }
     } else {
         document.getElementById("g").innerText = datenGemeinden.length === 0 ? "-" : "Außerhalb NRW";
     }
+    aktualisierePruefButton();
  
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
     if(wachenGrenzen[a]) {
@@ -1522,49 +1648,287 @@ function holeNKHtml(props, distMeter, strName) {
 
 function waehleStrassenKandidat(pt, zielName) {
     if (!zielName) return null;
-    let hits = findeKandidaten(datenBAB, pt, null, 2.0).filter(h => h.name === zielName);
+    let liste = holeStrassenListeFuerName(zielName);
+    let hits = findeKandidaten(liste.length ? liste : datenBAB, pt, null, 2.0).filter(h => h.name === zielName);
     if (hits.length === 0) return null;
     hits.sort((a, b) => a.dist - b.dist);
     return hits[0];
 }
+
+function aktualisierePruefButton() {
+    let btn = document.getElementById("btn-pruefen");
+    if (!btn) return;
+    let ok = aktiveLat !== 0 && aktiveLon !== 0 && geoDatenBereit;
+    btn.disabled = !ok;
+}
  
 function openMap(mode = 'NK') {
     mapMode = mode;
-   document.getElementById('map-overlay').style.display = 'flex';
-   document.getElementById('nk-map-result').style.display = 'none';
-   
-   if (mode === 'NK') {
-       document.getElementById('map-title').innerText = '📝 Netzknoten erfassen';
-       document.getElementById('map-action-btn').innerText = 'Hier erfassen';
-   } else {
-       document.getElementById('map-title').innerText = '📍 KM auf Karte erfassen';
-       document.getElementById('map-action-btn').innerText = 'KM übernehmen';
-   }
-    
-    let initLat = letzteLat !== 0 ? letzteLat : 51.3;
-    let initLon = letzteLon !== 0 ? letzteLon : 6.85;
- 
+    let overlay = document.getElementById('map-overlay');
+    overlay.classList.toggle('pruef-modus', mode === 'PRUEFEN');
+    document.getElementById('nk-map-result').style.display = 'none';
+    document.getElementById('pruef-controls').style.display = mode === 'PRUEFEN' ? 'block' : 'none';
+    document.getElementById('map-hint').style.display = mode === 'PRUEFEN' ? 'none' : 'block';
+
+    if (mode === 'NK') {
+        document.getElementById('map-title').innerText = '📝 Netzknoten erfassen';
+        document.getElementById('map-action-btn').innerText = 'Hier erfassen';
+        document.getElementById('map-action-btn').style.display = 'block';
+    } else if (mode === 'KM') {
+        document.getElementById('map-title').innerText = '📍 KM auf Karte erfassen';
+        document.getElementById('map-action-btn').innerText = 'KM übernehmen';
+        document.getElementById('map-action-btn').style.display = 'block';
+    } else {
+        document.getElementById('map-title').innerText = '🔍 Position prüfen';
+        document.getElementById('map-action-btn').style.display = 'none';
+    }
+
+    let initLat = aktiveLat !== 0 ? aktiveLat : (letzteLat !== 0 ? letzteLat : 51.3);
+    let initLon = aktiveLon !== 0 ? aktiveLon : (letzteLon !== 0 ? letzteLon : 6.85);
+
     if (!map) {
-        map = L.map('karte', { zoomControl: false }).setView([initLat, initLon], 18);
+        map = L.map('karte', { zoomControl: false }).setView([initLat, initLon], 17);
         let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22 });
         let satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 });
-       osmLayer.addTo(map);
-       L.control.layers({ "Standard Karte": osmLayer, "Satellit": satLayer }).addTo(map);
+        osmLayer.addTo(map);
+        L.control.layers({ "Standard Karte": osmLayer, "Satellit": satLayer }).addTo(map);
+        map.on('moveend', () => { if (mapMode === 'PRUEFEN') renderPruefKarte(); });
     } else {
-       map.setView([initLat, initLon], 18);
+        map.setView([initLat, initLon], 17);
     }
-    setTimeout(() => map.invalidateSize(), 200); 
- 
-    if(letzteLat === 0 && navigator.geolocation) {
-       navigator.geolocation.getCurrentPosition(pos => {
-           map.setView([pos.coords.latitude, pos.coords.longitude], 18);
-        }, ()=>{}, {timeout: 5000});
+    overlay.style.display = 'flex';
+    setTimeout(() => {
+        map.invalidateSize();
+        if (mode === 'PRUEFEN') renderPruefKarte();
+    }, 200);
+
+    if (mode !== 'PRUEFEN' && letzteLat === 0 && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+        }, () => {}, { timeout: 5000 });
     }
 }
- 
-function closeMap() { 
-   document.getElementById('map-overlay').style.display = 'none'; 
-    if (mapLineLayer) map.removeLayer(mapLineLayer);
+
+function closeMap() {
+    document.getElementById('map-overlay').style.display = 'none';
+    document.getElementById('map-overlay').classList.remove('pruef-modus');
+    if (mapLineLayer) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
+    if (mapPruefLayer) { map.removeLayer(mapPruefLayer); mapPruefLayer = null; }
+}
+
+function setPruefStufe(stufe) {
+    pruefStufe = stufe;
+    document.querySelectorAll('.pruef-stufe-btn').forEach(btn => {
+        btn.classList.toggle('active-stufe', Number(btn.dataset.stufe) === stufe);
+    });
+    renderPruefKarte();
+}
+
+function holeAktuellePositionsDaten() {
+    let strName = aktiveStrasse || document.getElementById("autobahn").value;
+    let km = aktiveKM;
+    if (!km || km <= 0) {
+        let kmRaw = document.getElementById("km").value.replace(',', '.');
+        km = parseFloat(kmRaw);
+    }
+    let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
+    let lat = aktiveLat;
+    let lon = aktiveLon;
+    if (lat === 0 && letzteLat !== 0) { lat = letzteLat; lon = letzteLon; }
+    if (!strName || lat === 0) return null;
+
+    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    if (pos && pos.coords) { lat = pos.coords[1]; lon = pos.coords[0]; }
+    let pt = turf.point([lon, lat]);
+    let gemeinde = document.getElementById("g").innerText || "-";
+    let m = {
+        name: document.getElementById("m").innerText,
+        addr: document.getElementById("m_address").innerText,
+        phone: document.getElementById("m_phone").innerText
+    };
+    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[strName] || [];
+    let rfName = achse === "Hauptachse" ? (rfListe[0] || "Hauptachse") : achse === "Nebenachse" ? (rfListe[1] || "Nebenachse") : "Bestandsachse";
+    let wacheGrenzen = datenWachen[aktuelleWache].grenzen[strName];
+    return { strName, km, achse, lat, lon, pt, pos, gemeinde, m, rfName, rfListe, wacheGrenzen };
+}
+
+function findeGemeindeFeatureByName(name) {
+    let ziel = String(name || "").split(" (")[0].trim();
+    return datenGemeinden.find(f => gemeindeNameAusFeature(f) === ziel) || null;
+}
+
+function holeBkmFixpunkteInRange(strName, km, spanKm) {
+    let suchNummer = autobahnSuchNummer(strName);
+    let passende = referenzPunkte.filter(f => f.properties && String(f.properties.Bez) === suchNummer);
+    let mitKm = referenzPunkteMitKm(passende);
+    let cluster = waehleReferenzCluster(mitKm, turf.point([aktiveLon, aktiveLat]), strName, km);
+    return cluster.filter(p => Math.abs(p.km - km) <= spanKm);
+}
+
+function zeichneRfLabelAnKm(layer, strName, km, text, farbe) {
+    let coords = holeKoordinateFuerKM(strName, km, turf.point([aktiveLon, aktiveLat]));
+    if (!coords) return;
+    let pt = turf.point(coords);
+    let bearing = berechneFahrtBearing(strName, km) || 0;
+    let html = '<div class="rf-map-label" style="background:' + farbe + ';transform:rotate(' + bearing + 'deg);">' + text + '</div>';
+    L.marker([coords[1], coords[0]], {
+        icon: L.divIcon({ className: '', html: html, iconSize: [0, 0] }),
+        interactive: false
+    }).addTo(layer);
+}
+
+function findeAmWechselEntlang(strName, vonKm, bisKm, schritt) {
+    let wechsel = [];
+    let lastAm = null;
+    for (let k = vonKm; k <= bisKm; k += schritt) {
+        let info = ermittleMeistereiFuerKM(strName, k);
+        if (info.name && info.name !== lastAm && info.name !== "Nicht in DB") {
+            let coords = holeKoordinateFuerKM(strName, k, turf.point([aktiveLon, aktiveLat]));
+            if (coords) wechsel.push({ km: k, am: info.name, coords: coords });
+            lastAm = info.name;
+        }
+    }
+    return wechsel;
+}
+
+function bauePruefInfoHtml(data) {
+  let kmFmt = data.km > 0 ? data.km.toFixed(3).replace('.', ',') : '-';
+  let html = '<strong>' + data.strName + '</strong> | BKM ' + kmFmt + '<br>';
+  html += 'RF: <b>' + data.rfName + '</b> (' + data.achse + ')<br>';
+  html += 'Gemeinde: ' + data.gemeinde + '<br>';
+  html += 'AM/SM: ' + data.m.name + '<br>';
+  if (data.m.addr !== '-') html += 'Adresse: ' + data.m.addr + '<br>';
+  if (letzteAcc > 0) html += 'GPS-Genauigkeit: ±' + Math.round(letzteAcc) + ' m<br>';
+  html += 'Wache: ' + aktuelleWache;
+  if (data.wacheGrenzen) html += ' | Streckenband ' + data.wacheGrenzen[0] + '–' + data.wacheGrenzen[1];
+  html += '<br><span style="font-size:0.85em;color:var(--text-secondary);">Stufe ' + pruefStufe + ': ';
+  if (pruefStufe === 1) html += 'Position, RF, Gemeinde, BKM-Fixpunkte';
+  else if (pruefStufe === 2) html += '+ Grenzen, Infrastruktur, Gemeindenamen';
+  else if (pruefStufe === 3) html += '+ AM-Wechsel, RF-Beschriftung';
+  else html += '+ alle RF-Achsen, erweiterte Layer';
+  html += '</span>';
+  return html;
+}
+
+function renderPruefKarte() {
+    if (!map || mapMode !== 'PRUEFEN') return;
+    let data = holeAktuellePositionsDaten();
+    if (!data) {
+        document.getElementById('pruef-info-box').innerHTML = '<span style="color:red;">Keine Position – zuerst GPS oder KM erfassen.</span>';
+        return;
+    }
+    document.getElementById('pruef-info-box').innerHTML = bauePruefInfoHtml(data);
+
+    if (mapPruefLayer) map.removeLayer(mapPruefLayer);
+    mapPruefLayer = L.layerGroup().addTo(map);
+    let layer = mapPruefLayer;
+    let stufe = pruefStufe;
+    let strName = data.strName;
+    let km = data.km || 0;
+
+    // Position + Genauigkeitskreis
+    L.circleMarker([data.lat, data.lon], { radius: 10, color: '#dc3545', fillColor: '#dc3545', fillOpacity: 0.9, weight: 2 })
+        .bindPopup(data.strName + ' | ' + (km > 0 ? km.toFixed(3) : '-') + ' km').addTo(layer);
+    if (letzteAcc > 0 && letzteLat !== 0) {
+        L.circle([letzteLat, letzteLon], { radius: letzteAcc, color: '#ffc107', fillColor: '#ffc107', fillOpacity: 0.12, weight: 1, dashArray: '4' }).addTo(layer);
+    }
+
+    // Bestandsachse + gewählte RF
+    let achsen = stufe >= 4 ? ["Hauptachse", "Nebenachse", "Bestandsachse"] : [data.achse || "Bestandsachse"];
+    let farben = { Hauptachse: '#28a745', Nebenachse: '#17a2b8', Bestandsachse: '#6c757d' };
+    achsen.forEach(ax => {
+        let features = holeStrassenFeatures(strName, ax, true);
+        if (features.length === 0) features = holeStrassenFeatures(strName, ax, false);
+        let farbe = farben[ax] || '#888';
+        let gewicht = ax === data.achse ? 4 : 2;
+        let dash = ax === 'Bestandsachse' ? '8 6' : null;
+        features.forEach(f => {
+            L.geoJSON(f, { style: { color: farbe, weight: gewicht, opacity: ax === data.achse ? 0.95 : 0.45, dashArray: dash } }).addTo(layer);
+        });
+    });
+
+    // Gemeinde-Polygon
+    let gemFeat = findeGemeindeFeatureByName(data.gemeinde);
+    if (gemFeat) {
+        L.geoJSON(gemFeat, { style: { color: '#9c27b0', weight: 2, fillColor: '#9c27b0', fillOpacity: 0.12 } }).addTo(layer);
+    }
+
+    // BKM-Fixpunkte
+    let bkmSpan = stufe >= 4 ? 5 : 3;
+    holeBkmFixpunkteInRange(strName, km, bkmSpan).forEach(p => {
+        L.circleMarker([p.coord[1], p.coord[0]], { radius: 5, color: '#ff9800', fillColor: '#ff9800', fillOpacity: 0.8, weight: 1 })
+            .bindTooltip('BKM ' + p.km.toFixed(2).replace('.', ','), { permanent: stufe >= 3, direction: 'top' }).addTo(layer);
+    });
+
+    if (stufe >= 2) {
+        // Wachen-KM-Grenzen
+        if (data.wacheGrenzen && km > 0) {
+            [data.wacheGrenzen[0], data.wacheGrenzen[1]].forEach(gkm => {
+                let c = holeKoordinateFuerKM(strName, gkm, data.pt);
+                if (c) L.marker([c[1], c[0]], { icon: L.divIcon({ className: '', html: '<div class="rf-map-label" style="background:#6f42c1;">Wache ' + gkm + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(layer);
+            });
+        }
+        // Streckenband-Einträge
+        let liste = (datenWachen[aktuelleWache].listen || {})[strName] || [];
+        liste.forEach(e => {
+            let ekm = parseFloat(String(e[2] || '').replace(',', '.'));
+            if (isNaN(ekm)) return;
+            if (km > 0 && Math.abs(ekm - km) > (stufe >= 4 ? 15 : 8)) return;
+            let c = holeKoordinateFuerKM(strName, ekm, data.pt);
+            if (!c) return;
+            L.marker([c[1], c[0]], {
+                icon: L.divIcon({ className: '', html: '<div class="gemeinde-map-label">' + e[0] + ' ' + e[1] + '<br>' + e[2] + '</div>', iconSize: [0, 0] }),
+                interactive: false
+            }).addTo(layer);
+        });
+        // Gemeindenamen im Kartenausschnitt
+        if (map) {
+            let bounds = map.getBounds();
+            let bboxPoly = turf.bboxPolygon([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+            let maxGem = stufe >= 4 ? 40 : 15;
+            let count = 0;
+            datenGemeinden.forEach(f => {
+                if (count >= maxGem) return;
+                try {
+                    if (!turf.booleanIntersects(f, bboxPoly)) return;
+                    let c = turf.centroid(f);
+                    let coord = turf.getCoord(c);
+                    L.marker([coord[1], coord[0]], {
+                        icon: L.divIcon({ className: '', html: '<div class="gemeinde-map-label">' + gemeindeNameAusFeature(f) + '</div>', iconSize: [0, 0] }),
+                        interactive: false
+                    }).addTo(layer);
+                    count++;
+                } catch (e) {}
+            });
+        }
+    }
+
+    if (stufe >= 3 && km > 0) {
+        let von = Math.max((data.wacheGrenzen ? data.wacheGrenzen[0] : km - 5), km - 5);
+        let bis = Math.min((data.wacheGrenzen ? data.wacheGrenzen[1] : km + 5), km + 5);
+        findeAmWechselEntlang(strName, von, bis, 0.3).forEach(w => {
+            L.marker([w.coords[1], w.coords[0]], {
+                icon: L.divIcon({ className: '', html: '<div class="rf-map-label" style="background:#e83e8c;">→ ' + w.am + '</div>', iconSize: [0, 0] }),
+                interactive: false
+            }).addTo(layer);
+        });
+        let labelSchritt = stufe >= 4 ? 0.5 : 1;
+        for (let k = Math.floor(von); k <= Math.ceil(bis); k += labelSchritt) {
+            if (Math.abs(k - km) > 6 && stufe < 4) continue;
+            let ax = data.achse || "Bestandsachse";
+            let txt = k.toFixed(1).replace('.', ',') + ' | ' + (ax === 'Hauptachse' ? data.rfListe[0] : ax === 'Nebenachse' ? data.rfListe[1] : 'BA');
+            if (data.rfListe.length) zeichneRfLabelAnKm(layer, strName, k, txt, '#007bff');
+        }
+    }
+
+    if (stufe >= 4 && km > 0) {
+        holeBkmFixpunkteInRange(strName, km, 8).forEach(p => {
+            L.marker([p.coord[1], p.coord[0]], {
+                icon: L.divIcon({ className: '', html: '<div class="gemeinde-map-label">BKM ' + p.km.toFixed(2).replace('.', ',') + '</div>', iconSize: [0, 0] }),
+                interactive: false
+            }).addTo(layer);
+        });
+    }
 }
  
 function calculateMapResult() {
@@ -1625,10 +1989,8 @@ function calculateMapResult() {
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
             if (needsSwitch && bkm > 0) {
-                for (let wache in datenWachen) {
-                    let g = datenWachen[wache].grenzen[strName];
-                    if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) { wechsleWache(wache, true, strName); break; }
-                }
+                let zielWache = findeWacheFuerAutobahnKm(strName, bkm, ptPin);
+                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName);
             }
             
             if (strName.startsWith("A") && bkm > 0) {
@@ -1636,6 +1998,14 @@ function calculateMapResult() {
                 let gemeindeAchse = selectedRichtung || achse;
                 setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
                 setzeMeistereiAnzeige(strName, bkm);
+                aktiveStrasse = strName;
+                aktiveAchse = gemeindeAchse;
+                aktiveKM = bkm;
+                let posPin = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
+                if (posPin && posPin.coords) {
+                    aktiveLat = posPin.coords[1];
+                    aktiveLon = posPin.coords[0];
+                }
             } else {
                 anwendenLbErgebnis(strName, sel.feature, ptPin);
                 manuellerFokus = strName;
@@ -1663,9 +2033,11 @@ function calculateMapResult() {
 
                 let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
                 if (dirText) bkmAnzeige += ` | <strong>${dirText}</strong>`;
+                bkmAnzeige += holeRegionHint(strName, bkm, ptPin);
                 document.getElementById("erfasste-strasse").innerHTML = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | BKM: ${bkmAnzeige}`;
                 
                 updateUI();
+                aktualisierePruefButton();
             }
             closeMap();
         }
@@ -1777,6 +2149,11 @@ function highlightWzList(currentKm) {
     });
     if(closestRow) closestRow.classList.add('wz-highlight');
 }
+
+document.getElementById('gps-info').addEventListener('click', function(ev) {
+    let btn = ev.target.closest('.gps-wechsel-btn');
+    if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
+});
 </script>
 </body>
 </html>
