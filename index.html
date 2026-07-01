@@ -306,7 +306,7 @@ function istHtmlAntwort(text) {
 async function ladeGeoJson(url, optional = false) {
     let res;
     try {
-        res = await fetch(url, { cache: "no-store" });
+        res = await fetch(url, { cache: "default" });
     } catch (e) {
         throw new Error(url + ": Netzwerkfehler (" + (e.message || e) + ")");
     }
@@ -332,14 +332,13 @@ async function ladeGeoJson(url, optional = false) {
 
 async function ladeStrassenNetz() {
     let fehler = [];
-    let babJson = {};
-    let bundJson = {};
-    let landJson = {};
-
-    try { babJson = await ladeGeoJson("AbschnittBAB.json"); } catch (e) { fehler.push(e.message); }
-    try { bundJson = await ladeGeoJson("AbschnittBund.json"); } catch (e) { /* optional */ }
-    try { landJson = await ladeGeoJson("Abschnitt.json"); } catch (e1) {
-        try { landJson = await ladeGeoJson("AbschnittLand.json"); } catch (e2) { /* optional */ }
+    let [babJson, bundJson, landJson] = await Promise.all([
+        ladeGeoJson("AbschnittBAB.json").catch(e => { fehler.push(e.message); return {}; }),
+        ladeGeoJson("AbschnittBund.json").catch(() => ({})),
+        ladeGeoJson("Abschnitt.json").catch(() => null)
+    ]);
+    if (!landJson || !landJson.features) {
+        try { landJson = await ladeGeoJson("AbschnittLand.json"); } catch (e) { landJson = {}; }
     }
 
     let listeA = extrahiere(babJson, true);
@@ -355,16 +354,18 @@ async function ladeStrassenNetz() {
 }
 
 async function ladeAlleGeoDaten() {
+    // #region agent log
+    const _loadT0 = performance.now();
+    // #endregion
     let fehler = [];
-    let punkte = {}, gem = {}, amData = {}, smData = {};
-
-    let strassen = await ladeStrassenNetz();
-    fehler = fehler.concat(strassen.fehler);
-
-    try { punkte = await ladeGeoJson("BABKM.json"); } catch (e) { fehler.push(e.message); }
-    try { gem = await ladeGeoJson("Gemeinden.json"); } catch (e) { fehler.push(e.message); }
-    try { amData = await ladeGeoJson("amDatenbank.json", true); } catch (e) { amData = {}; }
-    try { smData = await ladeGeoJson("smDatenbank.json", true); } catch (e) { smData = {}; }
+    const [strassen, punkte, gem, amData, smData] = await Promise.all([
+        ladeStrassenNetz(),
+        ladeGeoJson("BABKM.json").catch(e => { fehler.push(e.message); return {}; }),
+        ladeGeoJson("Gemeinden.json").catch(e => { fehler.push(e.message); return {}; }),
+        ladeGeoJson("amDatenbank.json", true).catch(() => ({})),
+        ladeGeoJson("smDatenbank.json", true).catch(() => ({}))
+    ]);
+    fehler = fehler.concat(strassen.fehler || []);
 
     referenzPunkte = extrahiere(punkte, false);
     datenGemeinden = extrahiereGemeinden(gem);
@@ -373,6 +374,9 @@ async function ladeAlleGeoDaten() {
     meistereiMap.sm = smData || {};
 
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
+    // #region agent log
+    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:ladeAlleGeoDaten',message:'startup complete',data:{ms:Math.round(performance.now()-_loadT0),geoDatenBereit,datenBAB:datenBAB.length,referenzPunkte:referenzPunkte.length,fehler:fehler.length},timestamp:Date.now(),hypothesisId:'E',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
 
     let info = document.getElementById("gps-info");
     if (geoDatenBereit) {
@@ -747,7 +751,7 @@ function loadWacheSetting() {
     }
 }
  
-function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) {
+function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null, skipBerechnen = false) {
     aktuelleWache = wacheName;
    document.querySelectorAll('.wache-btn').forEach(btn => {
        if(btn.dataset.wache === wacheName) btn.classList.add('active-wache');
@@ -780,7 +784,10 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null) 
  
     manuellerFokus = null;
     updateUI();
-    berechnen(false); 
+    // #region agent log
+    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:wechsleWache',message:'wache switched',data:{wacheName,skipBerechnen,kmBefore:document.getElementById('km').value,gBefore:document.getElementById('g').innerText},timestamp:Date.now(),hypothesisId:'B',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
+    if (!skipBerechnen) berechnen(false);
     
     if(typeof updateWzUI === 'function') updateWzUI(); 
 }
@@ -1551,25 +1558,24 @@ async function verarbeiteGPS(lat, lon, acc){
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName);
             aktiveKM = bkm;
+            // #region agent log
+            fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:verarbeiteGPS',message:'bkm computed',data:{strName,bkm,referenzPunkte:referenzPunkte.length,aktuelleWache},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+            // #endregion
 
-            let selectedRichtung = document.getElementById("richtung").value;
-            if (bkm > 0) {
-                let gemeindeAchse = selectedRichtung || achse;
-                setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
-                letzteKontextMeta.rfApproximiert = false;
-            }
-            
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
             if (needsSwitch) {
                 let zielWache = findeWacheFuerAutobahnKm(strName, bkm, pt);
-                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName);
+                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName, true);
             }
             
             let isOnCurrentWache = Array.from(document.getElementById("autobahn").options).some(o=>o.value===strName);
+
+            if (bkm > 0) {
+                document.getElementById("km").value = bkm.toFixed(3).replace('.',',');
+            }
             
             if(isOnCurrentWache){
-                document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
                 if (document.getElementById("autobahn").value !== strName) {
                    document.getElementById("autobahn").value = strName;
                    updateUI();
@@ -1580,9 +1586,15 @@ async function verarbeiteGPS(lat, lon, acc){
                     document.getElementById("progress").style.width = Math.max(0, Math.min(100, percent)) + "%";
                 }
             } else {
-                document.getElementById("km").value = "";
                 document.getElementById("progress").style.width = "0%";
                 document.getElementById("liste").innerHTML = "";
+            }
+
+            let selectedRichtung = document.getElementById("richtung").value;
+            if (bkm > 0) {
+                let gemeindeAchse = selectedRichtung || achse;
+                setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
+                letzteKontextMeta.rfApproximiert = false;
             }
 
             manuellerFokus = strName;
@@ -1662,7 +1674,12 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         if(!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
     });
-    if (passende.length === 0) return 0;
+    if (passende.length === 0) {
+        // #region agent log
+        fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:berechneGoldgriffBKM',message:'no ref points',data:{strName,suchNummer,referenzPunkte:referenzPunkte.length},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+        // #endregion
+        return 0;
+    }
 
     let mitKm = referenzPunkteMitKm(passende);
     let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, null);
@@ -1906,11 +1923,15 @@ function closeMap() {
 function calculateMapResult() {
     let pos = map.getCenter(); 
     let ptPin = turf.point([pos.lng, pos.lat]);
-    let maxDist = 0.15;
-    let kandidaten = findeKandidatenFuerPin(ptPin, maxDist, false);
+    let maxDist = 0.25;
+    let priorisiereAutobahn = mapMode === 'KM';
+    let kandidaten = findeKandidatenFuerPin(ptPin, maxDist, priorisiereAutobahn);
     let sel = mapMode === 'NK'
         ? waehleKandidatMitFokus(ptPin, kandidaten, manuellerFokus, 0.03)
-        : (kandidaten.length > 0 ? kandidaten[0] : null);
+        : waehleKandidatMitFokus(ptPin, kandidaten, manuellerFokus, 0.12);
+    // #region agent log
+    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:calculateMapResult',message:'map capture',data:{mapMode,maxDist,kandidaten:kandidaten.map(k=>({name:k.name,dist:k.dist})),sel:sel?sel.name:null},timestamp:Date.now(),hypothesisId:'C',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
 
     let resDiv = document.getElementById('nk-map-result');
     if (mapLineLayer) map.removeLayer(mapLineLayer);
@@ -1962,9 +1983,12 @@ function calculateMapResult() {
             
             if (needsSwitch && bkm > 0) {
                 let zielWache = findeWacheFuerAutobahnKm(strName, bkm, ptPin);
-                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName);
+                if (zielWache && zielWache !== aktuelleWache) wechsleWache(zielWache, true, strName, true);
             }
             
+            let drop = document.getElementById("autobahn");
+            let isOnCurrentWache = strName.startsWith("A") && Array.from(drop.options).some(o=>o.value===strName);
+
             if (strName.startsWith("A") && bkm > 0) {
                 let selectedRichtung = document.getElementById("richtung").value;
                 let gemeindeAchse = selectedRichtung || achse;
@@ -1973,22 +1997,22 @@ function calculateMapResult() {
                 aktiveStrasse = strName;
                 aktiveAchse = gemeindeAchse;
                 aktiveKM = bkm;
+                document.getElementById("km").value = bkm.toFixed(3).replace('.',',');
                 let posPin = ermittleFahrbahnPosition(strName, bkm, gemeindeAchse);
                 if (posPin && posPin.coords) {
                     aktiveLat = posPin.coords[1];
                     aktiveLon = posPin.coords[0];
                 }
-            } else {
+            } else if (!strName.startsWith("A")) {
                 anwendenLbErgebnis(strName, sel.feature, ptPin);
                 manuellerFokus = strName;
+                closeMap();
+                return;
             }
             
-            let drop = document.getElementById("autobahn");
-            if (strName.startsWith("A") && Array.from(drop.options).some(o=>o.value===strName)) {
+            if (isOnCurrentWache) {
                 drop.value = strName;
-                document.getElementById("km").value = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "";
                 manuellerFokus = strName;
-                
                 let wachenGrenzenNeu = datenWachen[aktuelleWache].grenzen;
                 if(wachenGrenzenNeu[strName] && bkm > 0) {
                     let percent = ((bkm - wachenGrenzenNeu[strName][0]) / (wachenGrenzenNeu[strName][1] - wachenGrenzenNeu[strName][0])) * 100;
@@ -1996,7 +2020,12 @@ function calculateMapResult() {
                 } else {
                     document.getElementById("progress").style.width = "0%";
                 }
-                
+                updateUI();
+            } else if (strName.startsWith("A")) {
+                document.getElementById("progress").style.width = "0%";
+            }
+
+            if (strName.startsWith("A")) {
                 let dirText = "";
                 let rfListe = datenWachen[aktuelleWache].richtungen[strName]; 
                 if (achse === 'Hauptachse') dirText = rfListe ? rfListe[0] : "(+)";
@@ -2006,16 +2035,19 @@ function calculateMapResult() {
                 let bkmAnzeige = bkm > 0 ? bkm.toFixed(3).replace('.',',') : "-";
                 if (dirText) bkmAnzeige += ` | <strong>${dirText}</strong>`;
                 bkmAnzeige += holeRegionHint(strName, bkm, ptPin);
-                document.getElementById("erfasste-strasse").innerHTML = `<span style="color:green;font-weight:bold;">✅ ${strName}</span> | BKM: ${bkmAnzeige}`;
-                
-                updateUI();
-                letzteKontextMeta = { snapDistM: Math.round(sel.dist * 1000), gpsAccM: 0, rfApproximiert: false, manuell: false };
-                aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: ptPin, snapDistM: letzteKontextMeta.snapDistM, manuell: false });
+                let farbe = isOnCurrentWache ? 'green' : 'orange';
+                let icon = isOnCurrentWache ? '✅' : '⚠️';
+                document.getElementById("erfasste-strasse").innerHTML = `<span style="color:${farbe};font-weight:bold;">${icon} ${strName}</span> | BKM: ${bkmAnzeige}`;
+                manuellerFokus = strName;
+                if (bkm > 0) {
+                    letzteKontextMeta = { snapDistM: Math.round(sel.dist * 1000), gpsAccM: 0, rfApproximiert: false, manuell: false };
+                    aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: ptPin, snapDistM: letzteKontextMeta.snapDistM, manuell: false });
+                }
             }
             closeMap();
         }
     } else {
-       resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 150m Umkreis gefunden.</p>`;
+       resDiv.innerHTML = `<p style="color:red; margin:0;">Keine Straße im 250m Umkreis gefunden.</p>`;
        resDiv.style.display = 'block';
        setTimeout(() => { map.invalidateSize(); }, 20);
     }
