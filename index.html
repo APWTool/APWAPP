@@ -354,9 +354,6 @@ async function ladeStrassenNetz() {
 }
 
 async function ladeAlleGeoDaten() {
-    // #region agent log
-    const _loadT0 = performance.now();
-    // #endregion
     let fehler = [];
     const [strassen, punkte, gem, amData, smData] = await Promise.all([
         ladeStrassenNetz(),
@@ -374,9 +371,6 @@ async function ladeAlleGeoDaten() {
     meistereiMap.sm = smData || {};
 
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
-    // #region agent log
-    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:ladeAlleGeoDaten',message:'startup complete',data:{ms:Math.round(performance.now()-_loadT0),geoDatenBereit,datenBAB:datenBAB.length,referenzPunkte:referenzPunkte.length,fehler:fehler.length},timestamp:Date.now(),hypothesisId:'E',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
 
     let info = document.getElementById("gps-info");
     if (geoDatenBereit) {
@@ -784,9 +778,6 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null, 
  
     manuellerFokus = null;
     updateUI();
-    // #region agent log
-    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:wechsleWache',message:'wache switched',data:{wacheName,skipBerechnen,kmBefore:document.getElementById('km').value,gBefore:document.getElementById('g').innerText},timestamp:Date.now(),hypothesisId:'B',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
     if (!skipBerechnen) berechnen(false);
     
     if(typeof updateWzUI === 'function') updateWzUI(); 
@@ -829,9 +820,8 @@ function waehleReferenzCluster(mitKm, pt, strName, hintKm) {
     let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
 
     let scored = clusters.map(c => {
-        let mid = c[Math.floor(c.length / 2)];
-        let distGeo = turf.distance(anchorPt, turf.point(mid.coord), { units: "kilometers" });
-        let score = distGeo;
+        let minDistGeo = Math.min(...c.map(p => turf.distance(anchorPt, turf.point(p.coord), { units: "kilometers" })));
+        let score = minDistGeo;
         let cMin = c[0].km;
         let cMax = c[c.length - 1].km;
         if (hintKm !== undefined && !isNaN(hintKm) && hintKm >= cMin - 2 && hintKm <= cMax + 2) score -= 80;
@@ -1558,9 +1548,6 @@ async function verarbeiteGPS(lat, lon, acc){
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName);
             aktiveKM = bkm;
-            // #region agent log
-            fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:verarbeiteGPS',message:'bkm computed',data:{strName,bkm,referenzPunkte:referenzPunkte.length,aktuelleWache},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
 
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
@@ -1674,29 +1661,39 @@ function berechneGoldgriffBKM(meinPunkt, strName){
         if(!f.properties) return false;
         return String(f.properties.Bez) === suchNummer;
     });
-    if (passende.length === 0) {
-        // #region agent log
-        fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:berechneGoldgriffBKM',message:'no ref points',data:{strName,suchNummer,referenzPunkte:referenzPunkte.length},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-        // #endregion
-        return 0;
-    }
+    if (passende.length === 0) return 0;
 
     let mitKm = referenzPunkteMitKm(passende);
-    let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, null);
-    cluster.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord)); });
+    mitKm.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" }); });
+    let nearby = mitKm.filter(p => p.tempDist <= 8);
+    let clusterPool = nearby.length >= 2 ? nearby : mitKm.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, 12);
+    let cluster = waehleReferenzCluster(clusterPool, meinPunkt, strName, null);
+    cluster.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" }); });
     cluster.sort((a, b) => a.tempDist - b.tempDist);
 
-    if(cluster.length > 1){
-        let closest = cluster[0];
-        let secondClosest = cluster[1];
-        let refKM1 = closest.km;
-        let refKM2 = secondClosest.km;
-        if (refKM2 < refKM1) return refKM1 - closest.tempDist;
-        return refKM1 + closest.tempDist;
-    } else if (cluster.length === 1) {
-        return cluster[0].km + cluster[0].tempDist;
+    let ref1 = cluster[0];
+    let ref2 = null;
+    for (let i = 1; i < cluster.length; i++) {
+        if (Math.abs(cluster[i].km - ref1.km) > 0.01) {
+            ref2 = cluster[i];
+            break;
+        }
     }
-    return 0;
+
+    let bkm = ref1.km;
+    if (ref2) {
+        let d1 = ref1.tempDist;
+        let d2 = ref2.tempDist;
+        let sum = d1 + d2;
+        if (sum > 1e-9) {
+            bkm = ref1.km + (ref2.km - ref1.km) * (d1 / sum);
+        }
+        let lo = Math.min(ref1.km, ref2.km) - 0.5;
+        let hi = Math.max(ref1.km, ref2.km) + 0.5;
+        bkm = Math.max(lo, Math.min(hi, bkm));
+    }
+
+    return bkm > 0 ? bkm : 0;
 }
  
 function berechnenDebounced(isManual = false) {
@@ -1929,9 +1926,6 @@ function calculateMapResult() {
     let sel = mapMode === 'NK'
         ? waehleKandidatMitFokus(ptPin, kandidaten, manuellerFokus, 0.03)
         : waehleKandidatMitFokus(ptPin, kandidaten, manuellerFokus, 0.12);
-    // #region agent log
-    fetch('http://127.0.0.1:7933/ingest/03d983ef-0bb6-453f-9301-bdc8e519db9d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'421158'},body:JSON.stringify({sessionId:'421158',location:'index.html:calculateMapResult',message:'map capture',data:{mapMode,maxDist,kandidaten:kandidaten.map(k=>({name:k.name,dist:k.dist})),sel:sel?sel.name:null},timestamp:Date.now(),hypothesisId:'C',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
 
     let resDiv = document.getElementById('nk-map-result');
     if (mapLineLayer) map.removeLayer(mapLineLayer);
