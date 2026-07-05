@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool test</title>
+<title>Autobahn Tool v2.9</title>
  
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007BFF">
@@ -74,10 +74,17 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .map-footer { flex-shrink: 0; padding: 15px; background: var(--bg-card); box-shadow: 0 -2px 10px rgba(0,0,0,0.2); z-index: 10000; }
 #nk-map-result { display: none; margin-top: 10px; }
 .hilfs-box { font-size: 0.88em; line-height: 1.5; padding: 10px; background: var(--result-bg); border-radius: 6px; margin-top: 10px; }
-.hilfs-box-warn { border-left: 4px solid #dc3545; background: #fff5f5; }
-[data-theme="dark"] .hilfs-box-warn { background: #2a1a1a; }
-.hilfs-box-infra { border-left: 4px solid var(--accent); }
-.hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; }
+.hilfs-hinweis { font-size: 0.76em; color: var(--text-secondary); margin: 4px 0 0; padding: 0 2px; line-height: 1.45; opacity: 0.92; }
+.hilfs-hinweis-item { display: inline; }
+.hilfs-hinweis-item + .hilfs-hinweis-item::before { content: " · "; opacity: 0.6; }
+.hilfs-box-infra { border-left: 3px solid var(--accent); padding: 8px 10px; font-size: 0.82em; }
+.infra-kompakt { display: flex; flex-direction: column; gap: 4px; }
+.infra-zeile { display: flex; gap: 6px; align-items: baseline; line-height: 1.35; }
+.infra-dir { flex: 0 0 auto; font-size: 0.92em; color: var(--text-secondary); min-width: 1.2em; }
+.infra-wert { flex: 1; }
+.infra-typ { font-weight: bold; font-size: 0.95em; }
+.infra-abstand { color: var(--text-secondary); font-size: 0.92em; }
+.hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; font-size: 0.82em; }
  
 /* FUSSEILE */
 .footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
@@ -138,7 +145,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
  
-    <div id="grenzfall-warnungen" class="hilfs-box hilfs-box-warn" style="display:none;"></div>
+    <div id="grenzfall-warnungen" class="hilfs-hinweis" style="display:none;"></div>
 
     <div class="result">
        <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
@@ -355,10 +362,6 @@ async function ladeStrassenNetz() {
 }
 
 async function ladeAlleGeoDaten() {
-    // #region agent log
-    var _loadT0 = Date.now();
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:start',message:'Geo load started',data:{},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
     let fehler = [];
     const [strassen, punkte, gem, amData, smData, indexData] = await Promise.all([
         ladeStrassenNetz(),
@@ -368,9 +371,6 @@ async function ladeAlleGeoDaten() {
         ladeGeoJson("smDatenbank.json", true).catch(() => ({})),
         ladeGeoJson("StreckenIndex.json", true).catch(() => null)
     ]);
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:fetched',message:'All fetches done',data:{ms:Date.now()-_loadT0,babCount:datenBAB.length,refCount:referenzPunkte.length,gemCount:datenGemeinden.length,indexOk:!!(indexData&&indexData.autobahnen),fehler:fehler.length},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
     fehler = fehler.concat(strassen.fehler || []);
 
     referenzPunkte = extrahiere(punkte, false);
@@ -394,9 +394,6 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:done',message:'Geo load complete',data:{ms:Date.now()-_loadT0,geoDatenBereit:geoDatenBereit,streckenIndex:!!streckenIndex},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -894,7 +891,7 @@ function waehleKmCluster(mitKm, km, pt, strName) {
     let clusters = clustereReferenzPunkte(mitKm);
     if (clusters.length === 1) return clusters[0];
 
-    let passend = clusters.filter(c => km >= c[0].km - 1 && km <= c[c.length - 1].km + 1);
+    let passend = clusters.filter(c => km >= c[0].km - 2 && km <= c[c.length - 1].km + 2);
     if (passend.length === 1) return passend[0];
 
     let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
@@ -1340,10 +1337,18 @@ function naechsteInfrastruktur(strName, km) {
     return { vor: vor, hinter: hinter };
 }
 
-function formatiereInfraZeile(e, richtung) {
-    if (!e) return "–";
+function formatiereInfraZeile(e) {
+    if (!e) return '<span class="infra-abstand">–</span>';
     let diffStr = Math.abs(e.diff).toFixed(1).replace(".", ",");
-    return e.typ + " " + e.name + " (km " + e.kmText + ", " + diffStr + " km " + richtung + ")";
+    return '<span class="infra-typ">' + e.typ + '</span> ' + e.name +
+        ' <span class="infra-abstand">km ' + e.kmText + ' · ' + diffStr + ' km</span>';
+}
+
+function baueInfraKompaktHtml(ni, rfPlus, rfMinus) {
+    return '<div class="hilfs-box hilfs-box-infra"><div class="infra-kompakt">' +
+        '<div class="infra-zeile"><span class="infra-dir" title="' + rfPlus + '">▲</span><span class="infra-wert">' + formatiereInfraZeile(ni.vor) + '</span></div>' +
+        '<div class="infra-zeile"><span class="infra-dir" title="' + rfMinus + '">▼</span><span class="infra-wert">' + formatiereInfraZeile(ni.hinter) + '</span></div>' +
+        '</div></div>';
 }
 
 function ermittleGemeindeGrenzAbstand(strName, km, achse) {
@@ -1423,12 +1428,8 @@ function ermittleGrenzfallWarnungen(opts) {
         }
         let amW = naechsterAmWechsel(strName, km);
         if (amW.vor && amW.vor.dist < 1.5) {
-            warn.push("AM-Wechsel in " + amW.vor.dist.toFixed(1).replace(".", ",") + " km → " + amW.vor.am);
+            warn.push("AM-Wechsel " + amW.vor.dist.toFixed(1).replace(".", ",") + " km → " + amW.vor.am);
         }
-    }
-    if (opts.pt) {
-        let kreuz = findeKandidatenFuerPin(opts.pt, 0.5, false);
-        if (kreuz.length > 1) warn.push("Autobahnkreuz: mehrere Straßen < 500 m");
     }
     return warn;
 }
@@ -1482,10 +1483,7 @@ function aktualisiereKontextAnzeigen(opts) {
     let infraBox = document.getElementById("naechste-infra");
     if (infraBox) {
         let ni = naechsteInfrastruktur(strName, km);
-        infraBox.innerHTML = '<div class="hilfs-box hilfs-box-infra"><strong>📍 Nächste Infrastruktur</strong><br>' +
-            '<span style="color:var(--text-secondary);">▲ ' + rfPlus + ':</span> ' + formatiereInfraZeile(ni.vor, "voraus") + '<br>' +
-            '<span style="color:var(--text-secondary);">▼ ' + rfMinus + ':</span> ' + formatiereInfraZeile(ni.hinter, "zurück") +
-            '</div>';
+        infraBox.innerHTML = baueInfraKompaktHtml(ni, rfPlus, rfMinus);
         infraBox.style.display = "block";
     }
 
@@ -1509,7 +1507,7 @@ function aktualisiereKontextAnzeigen(opts) {
     if (warnBox) {
         let warn = ermittleGrenzfallWarnungen({ strName: strName, km: km, achse: achse, pt: pt });
         if (warn.length > 0) {
-            warnBox.innerHTML = '<strong>⚠️ Grenzfall-Hinweise</strong><br>' + warn.map(w => "• " + w).join("<br>");
+            warnBox.innerHTML = warn.map(w => '<span class="hilfs-hinweis-item">⚠ ' + w + '</span>').join('');
             warnBox.style.display = "block";
         } else {
             warnBox.style.display = "none";
@@ -1642,7 +1640,7 @@ async function verarbeiteGPS(lat, lon, acc){
         if (strName.startsWith("A")) {
             let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
-            bkm = berechneGoldgriffBKM(pt, strName);
+            bkm = berechneGoldgriffBKM(pt, strName, sel.feature);
             aktiveKM = bkm;
 
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
@@ -1714,7 +1712,7 @@ async function verarbeiteGPS(lat, lon, acc){
                 let btnText = "";
                 let distMeterCross = Math.round(k.dist * 1000);
                 if (k.name.startsWith("A")) {
-                   let k_bkm = berechneGoldgriffBKM(pt, k.name);
+                   let k_bkm = berechneGoldgriffBKM(pt, k.name, k.feature);
                    btnText = `🛣️ ${k.name} (KM ${k_bkm > 0 ? k_bkm.toFixed(1) : "-"}) [${distMeterCross}m]`;
                 } else {
                    let k_icon = (k.name.charAt(0) === "B") ? "🚙" : "🌲";
@@ -1750,7 +1748,7 @@ function wechsleFokus(zielName) {
     }
 }
  
-function berechneGoldgriffBKM(meinPunkt, strName){
+function berechneGoldgriffBKM(meinPunkt, strName, feature){
     if(referenzPunkte.length === 0) return 0;
     let suchNummer = autobahnSuchNummer(strName);
     let passende = referenzPunkte.filter(f => {
@@ -1760,10 +1758,34 @@ function berechneGoldgriffBKM(meinPunkt, strName){
     if (passende.length === 0) return 0;
 
     let mitKm = referenzPunkteMitKm(passende);
-    mitKm.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" }); });
-    let nearby = mitKm.filter(p => p.tempDist <= 8);
-    let clusterPool = nearby.length >= 2 ? nearby : mitKm.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, 12);
-    let cluster = waehleReferenzCluster(clusterPool, meinPunkt, strName, null);
+    let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, null);
+
+    if (feature) {
+        try {
+            let snapped = turf.nearestPointOnLine(feature, meinPunkt, { units: "kilometers" });
+            let along = snapped.properties.location || 0;
+            let refs = cluster.map(p => {
+                let sn = turf.nearestPointOnLine(feature, turf.point(p.coord), { units: "kilometers" });
+                return { km: p.km, along: sn.properties.location || 0 };
+            }).sort((a, b) => a.along - b.along);
+            let before = null, after = null;
+            refs.forEach(r => {
+                if (r.along <= along + 1e-6) before = r;
+                if (r.along >= along - 1e-6 && !after) after = r;
+            });
+            if (before && after && before !== after && Math.abs(after.along - before.along) > 1e-6) {
+                let t = (along - before.along) / (after.along - before.along);
+                t = Math.max(0, Math.min(1, t));
+                let bkm = before.km + t * (after.km - before.km);
+                let lo = Math.min(before.km, after.km) - 0.3;
+                let hi = Math.max(before.km, after.km) + 0.3;
+                return Math.max(lo, Math.min(hi, bkm));
+            }
+            if (before) return before.km;
+            if (after) return after.km;
+        } catch (e) {}
+    }
+
     cluster.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" }); });
     cluster.sort((a, b) => a.tempDist - b.tempDist);
 
@@ -2061,7 +2083,7 @@ function calculateMapResult() {
             let bkm = 0;
             
             if (strName.startsWith("A")) {
-                bkm = berechneGoldgriffBKM(ptPin, strName);
+                bkm = berechneGoldgriffBKM(ptPin, strName, sel.feature);
                 aktiveKM = bkm;
             } else {
                 aktiveKM = 0;
@@ -2272,31 +2294,6 @@ document.getElementById('gps-info').addEventListener('click', function(ev) {
     let btn = ev.target.closest('.gps-wechsel-btn');
     if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
 });
-</script>
-<script>
-// #region agent log
-(function(){
-    var gpsEl = document.getElementById('gps-info');
-    var payload = {
-        sessionId: '2a3a11',
-        runId: 'post-fix',
-        hypothesisId: 'H1',
-        location: 'index.html:diag',
-        message: 'Script health check after parse',
-        data: {
-            toggleGPS: typeof toggleGPS,
-            wechsleWache: typeof wechsleWache,
-            ladeAlleGeoDaten: typeof ladeAlleGeoDaten,
-            berechnen: typeof berechnen,
-            geoDatenBereit: typeof geoDatenBereit !== 'undefined' ? geoDatenBereit : 'undefined',
-            streckenIndexLoaded: typeof streckenIndex !== 'undefined' && streckenIndex !== null,
-            gpsInfoText: gpsEl ? gpsEl.innerText.substring(0, 120) : 'no-el'
-        },
-        timestamp: Date.now()
-    };
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify(payload)}).catch(function(){});
-})();
-// #endregion
 </script>
 </body>
 </html>
