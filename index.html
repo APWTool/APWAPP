@@ -355,6 +355,10 @@ async function ladeStrassenNetz() {
 }
 
 async function ladeAlleGeoDaten() {
+    // #region agent log
+    var _loadT0 = Date.now();
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:start',message:'Geo load started',data:{},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
     let fehler = [];
     const [strassen, punkte, gem, amData, smData, indexData] = await Promise.all([
         ladeStrassenNetz(),
@@ -364,6 +368,9 @@ async function ladeAlleGeoDaten() {
         ladeGeoJson("smDatenbank.json", true).catch(() => ({})),
         ladeGeoJson("StreckenIndex.json", true).catch(() => null)
     ]);
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:fetched',message:'All fetches done',data:{ms:Date.now()-_loadT0,babCount:datenBAB.length,refCount:referenzPunkte.length,gemCount:datenGemeinden.length,indexOk:!!(indexData&&indexData.autobahnen),fehler:fehler.length},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
     fehler = fehler.concat(strassen.fehler || []);
 
     referenzPunkte = extrahiere(punkte, false);
@@ -387,6 +394,9 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H2',location:'index.html:ladeAlleGeoDaten:done',message:'Geo load complete',data:{ms:Date.now()-_loadT0,geoDatenBereit:geoDatenBereit,streckenIndex:!!streckenIndex},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -1374,7 +1384,7 @@ function naechsterAmWechsel(strName, km) {
     }
     let schritt = 0.2;
     let scan = 20;
-    let startAm = ermittleMeistereiFuerKM(strName, km).name;
+    startAm = ermittleMeistereiFuerKM(strName, km).name;
     let vor = null, hinter = null;
     for (let k = km + schritt; k <= km + scan; k += schritt) {
         let am = ermittleMeistereiFuerKM(strName, k).name;
@@ -2262,6 +2272,31 @@ document.getElementById('gps-info').addEventListener('click', function(ev) {
     let btn = ev.target.closest('.gps-wechsel-btn');
     if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
 });
+</script>
+<script>
+// #region agent log
+(function(){
+    var gpsEl = document.getElementById('gps-info');
+    var payload = {
+        sessionId: '2a3a11',
+        runId: 'post-fix',
+        hypothesisId: 'H1',
+        location: 'index.html:diag',
+        message: 'Script health check after parse',
+        data: {
+            toggleGPS: typeof toggleGPS,
+            wechsleWache: typeof wechsleWache,
+            ladeAlleGeoDaten: typeof ladeAlleGeoDaten,
+            berechnen: typeof berechnen,
+            geoDatenBereit: typeof geoDatenBereit !== 'undefined' ? geoDatenBereit : 'undefined',
+            streckenIndexLoaded: typeof streckenIndex !== 'undefined' && streckenIndex !== null,
+            gpsInfoText: gpsEl ? gpsEl.innerText.substring(0, 120) : 'no-el'
+        },
+        timestamp: Date.now()
+    };
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify(payload)}).catch(function(){});
+})();
+// #endregion
 </script>
 </body>
 </html>
