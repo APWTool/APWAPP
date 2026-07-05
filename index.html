@@ -84,6 +84,94 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .footer-nav a { color: var(--text-secondary); text-decoration: none; font-weight: bold; cursor: pointer; }
 .footer-nav a:hover { text-decoration: underline; }
  
+/* INFOTEXTE */
+.info-text p { margin-bottom: 12px; }
+.info-text a { color: var(--accent); text-decoration: none; }
+.info-text a:hover { text-decoration: underline; }
+.info-text ul { padding-left: 20px; margin-top: 5px; }
+.info-text li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+ 
+<div id="map-overlay">
+    <div class="map-header">
+        <h3 id="map-title">📝 Netzknoten erfassen</h3>
+        <button onclick="closeMap()">Zurück</button>
+    </div>
+    <div id="map-container">
+        <div id="karte"></div>
+        <div class="center-pin">📍</div>
+    </div>
+    <div class="map-footer">
+        <p id="map-hint" style="margin: 0 0 10px 0; font-size: 0.9em; text-align: center;">Bewege die Karte exakt unter die Nadelspitze.</p>
+        <button id="map-action-btn" onclick="calculateMapResult()">Hier erfassen</button>
+        <div id="nk-map-result"></div>
+    </div>
+</div>
+ 
+<div class="card" id="page-main">
+    <div class="theme-switch" onclick="toggleTheme()">🌓</div>
+   <h2>Zuständigkeitsfinder</h2>
+    
+    <div class="wache-buttons" id="wache-container">
+        <button class="wache-btn" data-wache="Hilden" onclick="wechsleWache('Hilden', true)">Hilden</button>
+        <button class="wache-btn" data-wache="Mülheim" onclick="wechsleWache('Mülheim', true)">Mülheim</button>
+        <button class="wache-btn" data-wache="Hünxe" onclick="wechsleWache('Hünxe', true)">Hünxe</button>
+        <button class="wache-btn" data-wache="Moers" onclick="wechsleWache('Moers', true)">Moers</button>
+        <button class="wache-btn" data-wache="Gladbach" onclick="wechsleWache('Gladbach', true)">Gladbach</button>
+    </div>
+    
+    <select id="autobahn" onchange="manuellerFokus = this.value; updateUI(); berechnen(true);"></select>
+    <input id="km" placeholder="Kilometer manuell eingeben" inputmode="decimal" oninput="berechnenDebounced(false)" onchange="berechnen(true)">
+    
+    <select id="richtung" onchange="berechnen(true)">
+        <option value="">Richtungsfahrbahn wählen (optional)</option>
+    </select>
+ 
+    <button id="gpsBtn" onclick="toggleGPS()">📡 GPS Live-Erfassung starten</button>
+    <div id="gps-info">Lade NRW Geodaten... Bitte warten.</div>
+ 
+    <div style="display: flex; gap: 8px; width: 100%; margin-top: 8px;">
+        <button class="btn-action" style="margin-top: 0;" onclick="openMap('NK')">📝 NK erfassen</button>
+        <button class="btn-action" style="margin-top: 0;" onclick="openMap('KM')">📍 KM auf Karte erfassen</button>
+    </div>
+    <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
+ 
+    <div id="grenzfall-warnungen" class="hilfs-box hilfs-box-warn" style="display:none;"></div>
+
+    <div class="result">
+       <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
+       <p><strong>Gemeinde:</strong> <span id="g">-</span></p>
+       <div id="vertrauen-info" style="display:none;"></div>
+       <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
+       <p><strong>Adresse:</strong> <span id="m_address">-</span></p>
+       <p><strong>Telefon:</strong> <span id="m_phone">-</span></p>
+        <div class="bar" id="progress-container"><div id="progress" class="fill"></div></div>
+    </div>
+ 
+    <div id="bereich-info" style="text-align:center; font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; font-weight: bold; display: none;">
+        Bereich: <span id="b">-</span>
+    </div>
+
+    <div id="naechste-infra" style="display:none;"></div>
+    <div id="am-wechsel-info" style="display:none;"></div>
+
+    <div class="table-container">
+        <div id="dir-plus" class="direction-arrow"><span class="dir-text" id="dir-plus-text"></span><span class="arrow-icon">⬇</span></div>
+        <div class="table-wrapper">
+           <table>
+               <thead><tr><th>Typ</th><th>Anschlussstelle</th><th>Km</th></tr></thead>
+               <tbody id="liste"></tbody>
+           </table>
+        </div>
+        <div id="dir-minus" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text"></span></div>
+    </div>
+ 
+    <div style="text-align:center; font-size: 0.85em; margin-top: 15px;">
+       <label><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
+    </div>
+</div>
 
 <div class="card" id="page-wegzeit" style="display:none;">
     <h2>Live Weg-Zeit Tracker</h2>
