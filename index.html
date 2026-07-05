@@ -249,6 +249,7 @@ let aktuelleWache = "Hilden";
 let datenLand=[], datenAutobahn=[], datenBund=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
 let berechnenTimer = null;
 let gemeindeBereichCache = {};
+let streckenIndex = null;
 let meistereiMap = { am: {}, sm: {} }; 
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
@@ -355,12 +356,13 @@ async function ladeStrassenNetz() {
 
 async function ladeAlleGeoDaten() {
     let fehler = [];
-    const [strassen, punkte, gem, amData, smData] = await Promise.all([
+    const [strassen, punkte, gem, amData, smData, indexData] = await Promise.all([
         ladeStrassenNetz(),
         ladeGeoJson("BABKM.json").catch(e => { fehler.push(e.message); return {}; }),
         ladeGeoJson("Gemeinden.json").catch(e => { fehler.push(e.message); return {}; }),
         ladeGeoJson("amDatenbank.json", true).catch(() => ({})),
-        ladeGeoJson("smDatenbank.json", true).catch(() => ({}))
+        ladeGeoJson("smDatenbank.json", true).catch(() => ({})),
+        ladeGeoJson("StreckenIndex.json", true).catch(() => null)
     ]);
     fehler = fehler.concat(strassen.fehler || []);
 
@@ -369,12 +371,15 @@ async function ladeAlleGeoDaten() {
 
     meistereiMap.am = amData || {};
     meistereiMap.sm = smData || {};
+    streckenIndex = (indexData && indexData.autobahnen) ? indexData : null;
+    gemeindeBereichCache = {};
 
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
 
     let info = document.getElementById("gps-info");
     if (geoDatenBereit) {
-        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span>';
+        let idxHint = streckenIndex ? ' | Streckenindex ✓' : '';
+        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><span style="font-size:0.8em;color:var(--text-secondary);">' + idxHint + '</span>';
     } else if (fehler.length > 0) {
         info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
     } else {
@@ -694,6 +699,13 @@ function findeStrassenFeatureFuerPunkt(pt, strName, achse = "") {
 }
 
 function ermittleMeistereiFuerKM(strName, km) {
+    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let idx = lookupAmAusIndex(strName, km, pt);
+    if (idx && idx.name && idx.name !== "Nicht in DB") {
+        let kontakte = holeAdresseUndTelefon(idx.name);
+        return { name: idx.name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: idx.abs || "", distMeter: 0 };
+    }
+
     let pos = ermittleFahrbahnPosition(strName, km, "Bestandsachse");
     let feature = pos ? pos.feature : null;
     let props = pos ? pos.props : {};
@@ -872,7 +884,7 @@ function waehleKmCluster(mitKm, km, pt, strName) {
     let clusters = clustereReferenzPunkte(mitKm);
     if (clusters.length === 1) return clusters[0];
 
-    let passend = clusters.filter(c => km >= c[0].km - 2 && km <= c[c.length - 1].km + 2);
+    let passend = clusters.filter(c => km >= c[0].km - 1 && km <= c[c.length - 1].km + 1);
     if (passend.length === 1) return passend[0];
 
     let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
@@ -1153,8 +1165,63 @@ function gemeindeBeiKm(strName, km, achse) {
     return findeGemeindeFuerPunkt(pt, strName, km);
 }
 
+function waehleStreckenRegion(strName, km, pt) {
+    if (!streckenIndex || !streckenIndex.autobahnen) return null;
+    let entry = streckenIndex.autobahnen[strName];
+    if (!entry || !entry.regionen || !entry.regionen.length) return null;
+    let cand = entry.regionen.filter(r => km >= r.kmVon - 0.05 && km <= r.kmBis + 0.05);
+    if (cand.length === 0) {
+        cand = entry.regionen.slice().sort((a, b) => {
+            let da = km < a.kmVon ? a.kmVon - km : (km > a.kmBis ? km - a.kmBis : 0);
+            let db = km < b.kmVon ? b.kmVon - km : (km > b.kmBis ? km - b.kmBis : 0);
+            return da - db;
+        }).slice(0, 3);
+    }
+    if (cand.length === 1) return cand[0];
+    let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
+    let wGrenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
+    cand.sort((a, b) => {
+        let scoreA = turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" });
+        let scoreB = turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" });
+        if (wGrenzen) {
+            let midA = (a.kmVon + a.kmBis) / 2;
+            let midB = (b.kmVon + b.kmBis) / 2;
+            if (midA >= wGrenzen[0] - 1 && midA <= wGrenzen[1] + 1) scoreA -= 80;
+            if (midB >= wGrenzen[0] - 1 && midB <= wGrenzen[1] + 1) scoreB -= 80;
+        }
+        return scoreA - scoreB;
+    });
+    return cand[0];
+}
+
+function findeSegmentBeiKm(segments, km) {
+    if (!segments || !segments.length) return null;
+    for (let s of segments) {
+        if (km >= s.von - 0.05 && km <= s.bis + 0.05) return s;
+    }
+    return null;
+}
+
+function lookupGemeindeAusIndex(strName, km, achse, pt) {
+    let region = waehleStreckenRegion(strName, km, pt);
+    if (!region || !region.gemeinde) return null;
+    let achseKey = normalisiereAchse(achse) || "Bestandsachse";
+    let segs = region.gemeinde[achseKey] || region.gemeinde.Bestandsachse || [];
+    return findeSegmentBeiKm(segs, km);
+}
+
+function lookupAmAusIndex(strName, km, pt) {
+    let region = waehleStreckenRegion(strName, km, pt);
+    if (!region || !region.am) return null;
+    return findeSegmentBeiKm(region.am, km);
+}
+
 function findeGemeindeAnFahrbahn(strName, km, achse) {
     if (datenGemeinden.length === 0) return "-";
+    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let idx = lookupGemeindeAusIndex(strName, km, achse, pt);
+    if (idx && idx.name) return idx.name;
+
     let zielAchse = achse || "Bestandsachse";
     let deltas = [0, -0.05, 0.05, -0.1, 0.1];
     let gewichte = { "0": 3 };
@@ -1178,28 +1245,30 @@ function findeGemeindeAnFahrbahn(strName, km, achse) {
 
 function ermittleGemeindeKmBereich(strName, achse, gemeindeName, km) {
     let zielAchse = achse || "Bestandsachse";
-    let cacheKey = strName + "|" + zielAchse + "|" + gemeindeName + "|" + km.toFixed(2);
+    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let idx = lookupGemeindeAusIndex(strName, km, zielAchse, pt);
+    if (idx && idx.name === gemeindeName) {
+        return { von: idx.von, bis: idx.bis };
+    }
+
+    let cacheKey = strName + "|" + zielAchse + "|" + gemeindeName;
     if (gemeindeBereichCache[cacheKey]) return gemeindeBereichCache[cacheKey];
 
     let grenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
     let minScan = grenzen ? Math.min(...grenzen) : km - 15;
     let maxScan = grenzen ? Math.max(...grenzen) : km + 15;
-    let step = 0.12;
-    let minKm = km;
-    let maxKm = km;
-    let maxSteps = 100;
+    let step = 0.08;
+    let minKm = null;
+    let maxKm = null;
 
-    for (let i = 0, k = km - step; k >= minScan && i < maxSteps; k -= step, i++) {
+    for (let k = minScan; k <= maxScan; k += step) {
         let g = gemeindeBeiKm(strName, k, zielAchse);
-        if (g !== gemeindeName) break;
-        minKm = k;
+        if (g === gemeindeName) {
+            if (minKm === null) minKm = k;
+            maxKm = k;
+        }
     }
-    for (let i = 0, k = km + step; k <= maxScan && i < maxSteps; k += step, i++) {
-        let g = gemeindeBeiKm(strName, k, zielAchse);
-        if (g !== gemeindeName) break;
-        maxKm = k;
-    }
-    let result = { von: minKm, bis: maxKm };
+    let result = { von: minKm !== null ? minKm : km, bis: maxKm !== null ? maxKm : km };
     gemeindeBereichCache[cacheKey] = result;
     return result;
 }
@@ -1286,6 +1355,23 @@ function ermittleGemeindeGrenzAbstand(strName, km, achse) {
 }
 
 function naechsterAmWechsel(strName, km) {
+    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let region = waehleStreckenRegion(strName, km, pt);
+    let startAm = ermittleMeistereiFuerKM(strName, km).name;
+    if (region && region.am && region.am.length) {
+        let cur = findeSegmentBeiKm(region.am, km);
+        if (cur) startAm = cur.name;
+        let vor = null, hinter = null;
+        region.am.forEach(s => {
+            if (s.von > km + 0.05 && s.name !== startAm) {
+                if (!vor || s.von < vor.km) vor = { km: s.von, am: s.name, dist: s.von - km };
+            }
+            if (s.bis < km - 0.05 && s.name !== startAm) {
+                if (!hinter || s.bis > hinter.km) hinter = { km: s.bis, am: s.name, dist: km - s.bis };
+            }
+        });
+        return { vor: vor, hinter: hinter, aktuell: startAm };
+    }
     let schritt = 0.2;
     let scan = 20;
     let startAm = ermittleMeistereiFuerKM(strName, km).name;
