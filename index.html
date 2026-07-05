@@ -316,12 +316,14 @@ async function ladeGeoJson(url, optional = false) {
     try {
         res = await fetch(url, { cache: "default" });
     } catch (e) {
+        if (optional) return null;
         throw new Error(url + ": Netzwerkfehler (" + (e.message || e) + ")");
     }
 
     let text = await res.text();
 
     if (!res.ok) {
+        if (optional) return null;
         throw new Error(url + ": HTTP " + res.status);
     }
     if (istLfsPointer(text)) {
@@ -378,7 +380,12 @@ async function ladeAlleGeoDaten() {
 
     meistereiMap.am = amData || {};
     meistereiMap.sm = smData || {};
-    streckenIndex = (indexData && indexData.autobahnen) ? indexData : null;
+    try {
+        streckenIndex = (indexData && indexData.autobahnen && typeof indexData.autobahnen === "object") ? indexData : null;
+    } catch (e) {
+        streckenIndex = null;
+        fehler.push("StreckenIndex.json: " + (e.message || e));
+    }
     gemeindeBereichCache = {};
 
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
@@ -394,6 +401,9 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H1',location:'index.html:ladeAlleGeoDaten:done',message:'Load complete',data:{geoDatenBereit:geoDatenBereit,streckenIndex:!!streckenIndex,indexStrassen:streckenIndex?Object.keys(streckenIndex.autobahnen||{}).length:0,fehler:fehler.length},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -706,8 +716,8 @@ function findeStrassenFeatureFuerPunkt(pt, strName, achse = "") {
 }
 
 function ermittleMeistereiFuerKM(strName, km) {
-    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
-    let idx = lookupAmAusIndex(strName, km, pt);
+    let anchorPt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let idx = lookupAmAusIndex(strName, km, anchorPt);
     if (idx && idx.name && idx.name !== "Nicht in DB") {
         let kontakte = holeAdresseUndTelefon(idx.name);
         return { name: idx.name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: idx.abs || "", distMeter: 0 };
@@ -1173,32 +1183,36 @@ function gemeindeBeiKm(strName, km, achse) {
 }
 
 function waehleStreckenRegion(strName, km, pt) {
-    if (!streckenIndex || !streckenIndex.autobahnen) return null;
-    let entry = streckenIndex.autobahnen[strName];
-    if (!entry || !entry.regionen || !entry.regionen.length) return null;
-    let cand = entry.regionen.filter(r => km >= r.kmVon - 0.05 && km <= r.kmBis + 0.05);
-    if (cand.length === 0) {
-        cand = entry.regionen.slice().sort((a, b) => {
-            let da = km < a.kmVon ? a.kmVon - km : (km > a.kmBis ? km - a.kmBis : 0);
-            let db = km < b.kmVon ? b.kmVon - km : (km > b.kmBis ? km - b.kmBis : 0);
-            return da - db;
-        }).slice(0, 3);
-    }
-    if (cand.length === 1) return cand[0];
-    let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
-    let wGrenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
-    cand.sort((a, b) => {
-        let scoreA = turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" });
-        let scoreB = turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" });
-        if (wGrenzen) {
-            let midA = (a.kmVon + a.kmBis) / 2;
-            let midB = (b.kmVon + b.kmBis) / 2;
-            if (midA >= wGrenzen[0] - 1 && midA <= wGrenzen[1] + 1) scoreA -= 80;
-            if (midB >= wGrenzen[0] - 1 && midB <= wGrenzen[1] + 1) scoreB -= 80;
+    try {
+        if (!streckenIndex || !streckenIndex.autobahnen) return null;
+        let entry = streckenIndex.autobahnen[strName];
+        if (!entry || !entry.regionen || !entry.regionen.length) return null;
+        let cand = entry.regionen.filter(r => km >= r.kmVon - 0.05 && km <= r.kmBis + 0.05);
+        if (cand.length === 0) {
+            cand = entry.regionen.slice().sort((a, b) => {
+                let da = km < a.kmVon ? a.kmVon - km : (km > a.kmBis ? km - a.kmBis : 0);
+                let db = km < b.kmVon ? b.kmVon - km : (km > b.kmBis ? km - b.kmBis : 0);
+                return da - db;
+            }).slice(0, 3);
         }
-        return scoreA - scoreB;
-    });
-    return cand[0];
+        if (cand.length === 1) return cand[0];
+        let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
+        let wGrenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
+        cand.sort((a, b) => {
+            let scoreA = turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" });
+            let scoreB = turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" });
+            if (wGrenzen) {
+                let midA = (a.kmVon + a.kmBis) / 2;
+                let midB = (b.kmVon + b.kmBis) / 2;
+                if (midA >= wGrenzen[0] - 1 && midA <= wGrenzen[1] + 1) scoreA -= 80;
+                if (midB >= wGrenzen[0] - 1 && midB <= wGrenzen[1] + 1) scoreB -= 80;
+            }
+            return scoreA - scoreB;
+        });
+        return cand[0];
+    } catch (e) {
+        return null;
+    }
 }
 
 function findeSegmentBeiKm(segments, km) {
@@ -2294,6 +2308,13 @@ document.getElementById('gps-info').addEventListener('click', function(ev) {
     let btn = ev.target.closest('.gps-wechsel-btn');
     if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
 });
+</script>
+<script>
+// #region agent log
+(function(){
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H1',location:'index.html:health',message:'Script health',data:{toggleGPS:typeof toggleGPS,berechnen:typeof berechnen,ermittleMeistereiFuerKM:typeof ermittleMeistereiFuerKM,streckenIndex:typeof streckenIndex!=='undefined'?!!streckenIndex:'undef'},timestamp:Date.now()})}).catch(function(){});
+})();
+// #endregion
 </script>
 </body>
 </html>
