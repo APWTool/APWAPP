@@ -750,6 +750,16 @@ function ermittleMeistereiFuerKM(strName, km) {
     return { name: m_name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: rawAbs, distMeter: distMeter };
 }
 
+function setzeMeistereiAusAbschnitt(rawAbs, distMeter) {
+    if (!rawAbs) return null;
+    let m_name = ermittleAM(rawAbs, distMeter);
+    let kontakte = holeAdresseUndTelefon(m_name);
+    document.getElementById("m").innerText = m_name;
+    document.getElementById("m_address").innerText = kontakte.addr;
+    document.getElementById("m_phone").innerText = kontakte.phone;
+    return m_name;
+}
+
 function setzeMeistereiAnzeige(strName, km) {
     let m = ermittleMeistereiFuerKM(strName, km);
     document.getElementById("m").innerText = m.name;
@@ -1655,7 +1665,11 @@ async function verarbeiteGPS(lat, lon, acc){
             let needsSwitch = true;
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName, sel.feature);
+            if (bkm <= 0) bkm = berechneGoldgriffBKM(pt, strName, null);
             aktiveKM = bkm;
+            // #region agent log
+            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'bkm-fix',hypothesisId:'H4',location:'index.html:verarbeiteGPS',message:'GPS A road',data:{strName:strName,bkm:bkm,rawAbs:rawAbs,distMeter:distMeter,gemeinde:aktuelleGemeinde,wache:aktuelleWache},timestamp:Date.now()})}).catch(function(){});
+            // #endregion
 
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
@@ -1715,6 +1729,8 @@ async function verarbeiteGPS(lat, lon, acc){
 
         if (strName.startsWith("A") && bkm > 0) {
             setzeMeistereiAnzeige(strName, bkm);
+        } else if (strName.startsWith("A") && rawAbs) {
+            setzeMeistereiAusAbschnitt(rawAbs, distMeter);
         }
  
         let htmlOutput = techInfo;
@@ -1762,52 +1778,64 @@ function wechsleFokus(zielName) {
     }
 }
  
-function berechneGoldgriffBKM(meinPunkt, strName, feature){
-    if(referenzPunkte.length === 0) return 0;
+function berechneGoldgriffBKM(meinPunkt, strName, feature) {
+    if (referenzPunkte.length === 0) return 0;
     let suchNummer = autobahnSuchNummer(strName);
-    let passende = referenzPunkte.filter(f => {
-        if(!f.properties) return false;
-        return String(f.properties.Bez) === suchNummer;
-    });
+    let passende = referenzPunkte.filter(f => f.properties && String(f.properties.Bez) === suchNummer);
     if (passende.length === 0) return 0;
 
     let mitKm = referenzPunkteMitKm(passende);
-    let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, null);
+    mitKm.forEach(p => {
+        p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" });
+    });
+    let nearby = mitKm.filter(p => p.tempDist <= 18);
+    let pool = nearby.length >= 2 ? nearby : mitKm.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, 16);
+    let hintKm = pool.length > 0 ? pool[0].km : null;
+    let cluster = waehleReferenzCluster(pool, meinPunkt, strName, hintKm);
 
     if (feature) {
         try {
             let snapped = turf.nearestPointOnLine(feature, meinPunkt, { units: "kilometers" });
             let along = snapped.properties.location || 0;
-            let refs = cluster.map(p => {
-                let sn = turf.nearestPointOnLine(feature, turf.point(p.coord), { units: "kilometers" });
-                return { km: p.km, along: sn.properties.location || 0 };
-            }).sort((a, b) => a.along - b.along);
-            let before = null, after = null;
-            refs.forEach(r => {
-                if (r.along <= along + 1e-6) before = r;
-                if (r.along >= along - 1e-6 && !after) after = r;
-            });
-            if (before && after && before !== after && Math.abs(after.along - before.along) > 1e-6) {
-                let t = (along - before.along) / (after.along - before.along);
-                t = Math.max(0, Math.min(1, t));
-                let bkm = before.km + t * (after.km - before.km);
-                let lo = Math.min(before.km, after.km) - 0.3;
-                let hi = Math.max(before.km, after.km) + 0.3;
-                return Math.max(lo, Math.min(hi, bkm));
+            let refs = cluster
+                .map(p => {
+                    let refPt = turf.point(p.coord);
+                    let lineDist = turf.pointToLineDistance(refPt, feature, { units: "kilometers" });
+                    if (lineDist > 2.5) return null;
+                    let sn = turf.nearestPointOnLine(feature, refPt, { units: "kilometers" });
+                    return { km: p.km, along: sn.properties.location || 0, geo: p.tempDist };
+                })
+                .filter(Boolean)
+                .sort((a, b) => a.along - b.along);
+
+            if (refs.length >= 2) {
+                let before = null, after = null;
+                refs.forEach(r => {
+                    if (r.along <= along + 1e-4) before = r;
+                    if (r.along >= along - 1e-4 && !after) after = r;
+                });
+                if (before && after && before !== after && Math.abs(after.along - before.along) > 1e-6) {
+                    let t = (along - before.along) / (after.along - before.along);
+                    t = Math.max(0, Math.min(1, t));
+                    let bkm = before.km + t * (after.km - before.km);
+                    if (isFinite(bkm) && bkm > 0) return bkm;
+                }
             }
-            if (before) return before.km;
-            if (after) return after.km;
+            if (refs.length >= 1) {
+                let best = refs.slice().sort((a, b) => Math.abs(a.along - along) - Math.abs(b.along - along))[0];
+                if (best && isFinite(best.km) && best.km > 0) return best.km;
+            }
         } catch (e) {}
     }
 
-    cluster.forEach(p => { p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" }); });
-    cluster.sort((a, b) => a.tempDist - b.tempDist);
+    let close = cluster.filter(p => p.tempDist <= 20);
+    if (close.length < 2) close = cluster.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, Math.min(8, cluster.length));
 
-    let ref1 = cluster[0];
+    let ref1 = close[0];
     let ref2 = null;
-    for (let i = 1; i < cluster.length; i++) {
-        if (Math.abs(cluster[i].km - ref1.km) > 0.01) {
-            ref2 = cluster[i];
+    for (let i = 1; i < close.length; i++) {
+        if (Math.abs(close[i].km - ref1.km) > 0.01) {
+            ref2 = close[i];
             break;
         }
     }
@@ -1825,7 +1853,13 @@ function berechneGoldgriffBKM(meinPunkt, strName, feature){
         bkm = Math.max(lo, Math.min(hi, bkm));
     }
 
-    return bkm > 0 ? bkm : 0;
+    let result = (isFinite(bkm) && bkm > 0) ? bkm : 0;
+    // #region agent log
+    if (strName === "A46" || result === 0) {
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'bkm-fix',hypothesisId:'H2',location:'index.html:berechneGoldgriffBKM',message:'BKM result',data:{strName:strName,result:result,hintKm:hintKm,poolSize:pool.length,clusterSize:cluster.length,hasFeature:!!feature,ref1Km:ref1?ref1.km:null,ref1Dist:ref1?ref1.tempDist:null,ref2Km:ref2?ref2.km:null},timestamp:Date.now()})}).catch(function(){});
+    }
+    // #endregion
+    return result;
 }
  
 function berechnenDebounced(isManual = false) {
