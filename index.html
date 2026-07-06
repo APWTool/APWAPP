@@ -254,7 +254,12 @@ const wachenAnker={"Hilden":[6.935,51.168],"Mülheim":[6.881,51.424],"Hünxe":[6
 
 let aktuelleWache = "Hilden"; 
 let datenLand=[], datenAutobahn=[], datenBund=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
+let referenzByBez = {};
+let strassenSpatialIndex = null;
+let gemeindeBboxIndex = null;
 let berechnenTimer = null;
+let gpsDebounceTimer = null;
+let gpsLastProcessed = null;
 let gemeindeBereichCache = {};
 let streckenIndex = null;
 let meistereiMap = { am: {}, sm: {} }; 
@@ -388,6 +393,8 @@ async function ladeAlleGeoDaten() {
     }
     gemeindeBereichCache = {};
 
+    baueLookupIndizes();
+
     geoDatenBereit = datenBAB.length > 0 && referenzPunkte.length > 0 && datenGemeinden.length > 0;
 
     let info = document.getElementById("gps-info");
@@ -401,9 +408,6 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H1',location:'index.html:ladeAlleGeoDaten:done',message:'Load complete',data:{geoDatenBereit:geoDatenBereit,streckenIndex:!!streckenIndex,indexStrassen:streckenIndex?Object.keys(streckenIndex.autobahnen||{}).length:0,fehler:fehler.length},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -945,11 +949,7 @@ function autobahnSuchNummer(strName) {
 
 function holeKoordinateFuerKM(autobahn, km, pt) {
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
-    let suchNummer = autobahnSuchNummer(autobahn);
-    let passende = referenzPunkte.filter(f => {
-        if (!f.properties) return false;
-        return String(f.properties.Bez) === suchNummer;
-    });
+    let passende = holeReferenzFuerStrasse(autobahn);
     if (passende.length === 0) return null;
 
     let mitKm = referenzPunkteMitKm(passende);
@@ -1097,7 +1097,12 @@ function ermittleGemeindePunkt(strName, km) {
 
 function findeGemeindeTreffer(pt) {
     let treffer = [];
-    for (let f of datenGemeinden) {
+    let lon = pt.geometry.coordinates[0];
+    let lat = pt.geometry.coordinates[1];
+    let kandidaten = gemeindeBboxIndex && gemeindeBboxIndex.length > 0
+        ? gemeindeBboxIndex.filter(e => bboxNahePunkt(e.bb, lon, lat, 0.02)).map(e => e.feature)
+        : datenGemeinden;
+    for (let f of kandidaten) {
         try {
             if (turf.booleanPointInPolygon(pt, f)) treffer.push(f);
         } catch (e) {}
@@ -1563,12 +1568,103 @@ function toggleGPS(){
        if(!navigator.geolocation) return info.innerText="GPS nicht unterstützt";
        btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); info.innerHTML="⏳ Suche Signal...";
         watchId = navigator.geolocation.watchPosition(pos => {
-           verarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+           queueVerarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
         }, err => { info.innerHTML = "❌ GPS-Fehler: " + err.message; }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 27000 });
     }
 }
  
-function findeKandidaten(liste, pt, filter, maxDist){
+function baueLookupIndizes() {
+    referenzByBez = {};
+    referenzPunkte.forEach(f => {
+        let bez = String((f.properties || {}).Bez || "");
+        if (!bez) return;
+        if (!referenzByBez[bez]) referenzByBez[bez] = [];
+        referenzByBez[bez].push(f);
+    });
+
+    strassenSpatialIndex = { autobahn: [], bund: [], land: [] };
+    function indexStrassen(liste, key) {
+        liste.forEach(f => {
+            try {
+                let bb = turf.bbox(f);
+                let props = f.properties || {};
+                let name = String(props.STRBEZ || "").toUpperCase().replace(/\s/g, "");
+                if (!name) return;
+                strassenSpatialIndex[key].push({ bb: bb, feature: f, name: name, props: props });
+            } catch (e) {}
+        });
+    }
+    indexStrassen(datenAutobahn, "autobahn");
+    indexStrassen(datenBund, "bund");
+    indexStrassen(datenLand, "land");
+
+    gemeindeBboxIndex = [];
+    datenGemeinden.forEach(f => {
+        try {
+            gemeindeBboxIndex.push({ bb: turf.bbox(f), feature: f });
+        } catch (e) {}
+    });
+}
+
+function bboxNahePunkt(bb, lon, lat, padDeg) {
+    return lon >= bb[0] - padDeg && lon <= bb[2] + padDeg && lat >= bb[1] - padDeg && lat <= bb[3] + padDeg;
+}
+
+function holeReferenzFuerStrasse(strName) {
+    return referenzByBez[autobahnSuchNummer(strName)] || [];
+}
+
+function validiereBkmPlausibilitaet(pt, strName, bkm) {
+    if (!(bkm > 0) || !pt) return bkm;
+    try {
+        let kmCoord = holeKoordinateFuerKM(strName, bkm, pt);
+        if (kmCoord) {
+            let abweichM = turf.distance(pt, turf.point(kmCoord), { units: "kilometers" }) * 1000;
+            if (abweichM > 1200) return 0;
+        }
+    } catch (e) {}
+    return bkm;
+}
+
+function findeKandidaten(liste, pt, filter, maxDist) {
+    if (strassenSpatialIndex) {
+        return findeKandidatenIndex(pt, filter, maxDist);
+    }
+    return findeKandidatenLinear(liste, pt, filter, maxDist);
+}
+
+function findeKandidatenIndex(pt, filter, maxDist) {
+    let hits = {};
+    let lon = pt.geometry.coordinates[0];
+    let lat = pt.geometry.coordinates[1];
+    let pad = maxDist / 85;
+
+    function scan(arr) {
+        arr.forEach(entry => {
+            if (!bboxNahePunkt(entry.bb, lon, lat, pad)) return;
+            let name = entry.name;
+            let strKl = name.charAt(0);
+            if (filter) {
+                if (Array.isArray(filter) && !filter.includes(name)) return;
+                if (filter === "BUND" && strKl !== "B") return;
+                if (filter === "LAND" && (strKl === "A" || strKl === "B" || name.startsWith("A"))) return;
+            }
+            try {
+                let d = turf.pointToLineDistance(pt, entry.feature, { units: "kilometers" });
+                if (d <= maxDist && (!hits[name] || d < hits[name].dist)) {
+                    hits[name] = { feature: entry.feature, dist: d, name: name, props: entry.props };
+                }
+            } catch (e) {}
+        });
+    }
+
+    scan(strassenSpatialIndex.autobahn);
+    scan(strassenSpatialIndex.bund);
+    scan(strassenSpatialIndex.land);
+    return Object.values(hits).sort((a, b) => a.dist - b.dist);
+}
+
+function findeKandidatenLinear(liste, pt, filter, maxDist) {
     let hits = {};
     liste.forEach(f=>{
         try { 
@@ -1614,6 +1710,26 @@ function holeAdresseUndTelefon(m_name) {
     });
     if (matchKey) return { addr: meistereiAdressen[matchKey] || "-", phone: meistereiTelefon[matchKey] || "-" };
     return { addr: "-", phone: "-" };
+}
+
+function queueVerarbeiteGPS(lat, lon, acc) {
+    letzteLat = lat;
+    letzteLon = lon;
+    letzteAcc = acc;
+    if (gpsDebounceTimer) return;
+    gpsDebounceTimer = setTimeout(() => {
+        gpsDebounceTimer = null;
+        if (gpsLastProcessed) {
+            let d = turf.distance(
+                turf.point([gpsLastProcessed.lon, gpsLastProcessed.lat]),
+                turf.point([letzteLon, letzteLat]),
+                { units: "kilometers" }
+            ) * 1000;
+            if (d < 10 && Math.abs(gpsLastProcessed.acc - letzteAcc) < 15) return;
+        }
+        gpsLastProcessed = { lat: letzteLat, lon: letzteLon, acc: letzteAcc };
+        verarbeiteGPS(letzteLat, letzteLon, letzteAcc);
+    }, 350);
 }
  
 async function verarbeiteGPS(lat, lon, acc){
@@ -1666,10 +1782,8 @@ async function verarbeiteGPS(lat, lon, acc){
             let currentGrenzen = datenWachen[aktuelleWache].grenzen[strName];
             bkm = berechneGoldgriffBKM(pt, strName, sel.feature);
             if (bkm <= 0) bkm = berechneGoldgriffBKM(pt, strName, null);
+            bkm = validiereBkmPlausibilitaet(pt, strName, bkm);
             aktiveKM = bkm;
-            // #region agent log
-            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'bkm-fix',hypothesisId:'H4',location:'index.html:verarbeiteGPS',message:'GPS A road',data:{strName:strName,bkm:bkm,rawAbs:rawAbs,distMeter:distMeter,gemeinde:aktuelleGemeinde,wache:aktuelleWache},timestamp:Date.now()})}).catch(function(){});
-            // #endregion
 
             if (currentGrenzen && bkm >= Math.min(...currentGrenzen) && bkm <= Math.max(...currentGrenzen)) needsSwitch = false; 
             
@@ -1734,7 +1848,7 @@ async function verarbeiteGPS(lat, lon, acc){
         }
  
         let htmlOutput = techInfo;
-        let andereImKreuz = findeKandidatenFuerPin(pt, 1.2, false).filter(k => k.name !== sel.name);
+        let andereImKreuz = sortKandidaten.filter(k => k.name !== sel.name && k.dist <= 1.2);
         if (andereImKreuz.length > 0) {
             htmlOutput += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--input-border); text-align: left;">`;
             htmlOutput += `<span style="font-size:0.8em; color:var(--text-secondary);">📍 Mehrere Straßen im Umkreis. Wechsle zu:</span><br>`;
@@ -1780,18 +1894,16 @@ function wechsleFokus(zielName) {
  
 function berechneGoldgriffBKM(meinPunkt, strName, feature) {
     if (referenzPunkte.length === 0) return 0;
-    let suchNummer = autobahnSuchNummer(strName);
-    let passende = referenzPunkte.filter(f => f.properties && String(f.properties.Bez) === suchNummer);
+    let passende = holeReferenzFuerStrasse(strName);
     if (passende.length === 0) return 0;
 
     let mitKm = referenzPunkteMitKm(passende);
     mitKm.forEach(p => {
         p.tempDist = turf.distance(meinPunkt, turf.point(p.coord), { units: "kilometers" });
     });
-    let nearby = mitKm.filter(p => p.tempDist <= 18);
-    let pool = nearby.length >= 2 ? nearby : mitKm.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, 16);
-    let hintKm = pool.length > 0 ? pool[0].km : null;
-    let cluster = waehleReferenzCluster(pool, meinPunkt, strName, hintKm);
+    mitKm.sort((a, b) => a.tempDist - b.tempDist);
+    let hintKm = mitKm.length > 0 ? mitKm[0].km : null;
+    let cluster = waehleReferenzCluster(mitKm, meinPunkt, strName, hintKm);
 
     if (feature) {
         try {
@@ -1828,16 +1940,18 @@ function berechneGoldgriffBKM(meinPunkt, strName, feature) {
         } catch (e) {}
     }
 
-    let close = cluster.filter(p => p.tempDist <= 20);
+    let close = cluster.filter(p => p.tempDist <= 12);
     if (close.length < 2) close = cluster.slice().sort((a, b) => a.tempDist - b.tempDist).slice(0, Math.min(8, cluster.length));
 
     let ref1 = close[0];
     let ref2 = null;
     for (let i = 1; i < close.length; i++) {
-        if (Math.abs(close[i].km - ref1.km) > 0.01) {
-            ref2 = close[i];
-            break;
-        }
+        if (Math.abs(close[i].km - ref1.km) <= 0.01) continue;
+        let refGeo = turf.distance(turf.point(ref1.coord), turf.point(close[i].coord), { units: "kilometers" });
+        let kmDelta = Math.abs(close[i].km - ref1.km);
+        if (refGeo > kmDelta * 2.5 + 1.5) continue;
+        ref2 = close[i];
+        break;
     }
 
     let bkm = ref1.km;
@@ -1853,13 +1967,7 @@ function berechneGoldgriffBKM(meinPunkt, strName, feature) {
         bkm = Math.max(lo, Math.min(hi, bkm));
     }
 
-    let result = (isFinite(bkm) && bkm > 0) ? bkm : 0;
-    // #region agent log
-    if (strName === "A46" || result === 0) {
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'bkm-fix',hypothesisId:'H2',location:'index.html:berechneGoldgriffBKM',message:'BKM result',data:{strName:strName,result:result,hintKm:hintKm,poolSize:pool.length,clusterSize:cluster.length,hasFeature:!!feature,ref1Km:ref1?ref1.km:null,ref1Dist:ref1?ref1.tempDist:null,ref2Km:ref2?ref2.km:null},timestamp:Date.now()})}).catch(function(){});
-    }
-    // #endregion
-    return result;
+    return (isFinite(bkm) && bkm > 0) ? bkm : 0;
 }
  
 function berechnenDebounced(isManual = false) {
@@ -2342,13 +2450,6 @@ document.getElementById('gps-info').addEventListener('click', function(ev) {
     let btn = ev.target.closest('.gps-wechsel-btn');
     if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
 });
-</script>
-<script>
-// #region agent log
-(function(){
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',hypothesisId:'H1',location:'index.html:health',message:'Script health',data:{toggleGPS:typeof toggleGPS,berechnen:typeof berechnen,ermittleMeistereiFuerKM:typeof ermittleMeistereiFuerKM,streckenIndex:typeof streckenIndex!=='undefined'?!!streckenIndex:'undef'},timestamp:Date.now()})}).catch(function(){});
-})();
-// #endregion
 </script>
 </body>
 </html>
