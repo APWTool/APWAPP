@@ -85,6 +85,38 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .infra-typ { font-weight: bold; font-size: 0.95em; }
 .infra-abstand { color: var(--text-secondary); font-size: 0.92em; }
 .hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; font-size: 0.82em; }
+
+/* POSITION PRÜFEN KARTE */
+.pruef-gemeinde-label, .pruef-bab-label, .pruef-am-label, .pruef-gem-grenz-label, .pruef-grenz-km {
+    background: none !important; border: none !important;
+}
+.pruef-gemeinde-label span {
+    display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;
+    color: #1a365d; background: rgba(255,255,255,0.88); border: 1px solid #2b6cb0; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.pruef-bab-label span {
+    display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;
+    color: #fff; background: rgba(40,167,69,0.92); border: 1px solid #1e7e34; white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.pruef-am-label span {
+    display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;
+    color: #fff; background: rgba(220,53,69,0.92); border: 1px solid #a71d2a; max-width: 140px;
+    white-space: normal; line-height: 1.2; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.pruef-gem-grenz-label span {
+    display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;
+    color: #1a365d; background: rgba(255,255,255,0.9); border: 1px dashed #2b6cb0; white-space: nowrap;
+}
+.pruef-grenz-km span {
+    display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: bold;
+    color: #333; background: rgba(255,255,255,0.85); border: 1px solid #dc3545;
+}
+.pruef-ref-tooltip {
+    background: rgba(255,193,7,0.95) !important; color: #333 !important; font-weight: bold; font-size: 10px;
+    border: 1px solid #d39e00 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
  
 /* FUSSEILE */
 .footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
@@ -174,6 +206,8 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         </div>
         <div id="dir-minus" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text"></span></div>
     </div>
+
+    <button type="button" class="btn-secondary" style="margin-top: 12px;" onclick="openPositionPruefen()">🗺️ Position prüfen</button>
  
     <div style="text-align:center; font-size: 0.85em; margin-top: 15px;">
        <label><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
@@ -271,7 +305,8 @@ let aktiveStrasse = "";
 let aktiveAchse = "";
 let letzteKontextMeta = { snapDistM: null, gpsAccM: 0, rfApproximiert: false, manuell: false };
 let map = null;
-let mapLineLayer = null; 
+let mapLineLayer = null;
+let pruefMapLayer = null;
 let mapMode = 'NK';
 let wzInterval = null;
 let wzStartTime = 0;
@@ -2214,6 +2249,9 @@ function openMap(mode = 'NK') {
     document.getElementById('map-overlay').style.display = 'flex';
     document.getElementById('nk-map-result').style.display = 'none';
     document.getElementById('map-hint').style.display = 'block';
+    document.getElementById('map-action-btn').style.display = 'block';
+    document.querySelector('.center-pin').style.display = '';
+    if (pruefMapLayer && map) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
     if (mode === 'NK') {
         document.getElementById('map-title').innerText = '📝 Netzknoten erfassen';
         document.getElementById('map-action-btn').innerText = 'Hier erfassen';
@@ -2243,6 +2281,258 @@ function openMap(mode = 'NK') {
 function closeMap() {
     document.getElementById('map-overlay').style.display = 'none';
     if (mapLineLayer) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
+    if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
+    document.getElementById('map-action-btn').style.display = 'block';
+    document.querySelector('.center-pin').style.display = '';
+    mapMode = 'NK';
+}
+
+function holeAktuellePruefPosition() {
+    let strName = aktiveStrasse || document.getElementById("autobahn").value;
+    let km = aktiveKM;
+    if (!(km > 0)) {
+        let raw = document.getElementById("km").value.replace(",", ".");
+        km = parseFloat(raw);
+    }
+    let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
+    let pt = null;
+    if (km > 0 && strName) {
+        let pos = ermittleFahrbahnPosition(strName, km, achse);
+        if (pos && pos.coords) pt = turf.point(pos.coords);
+    }
+    if (!pt && aktiveLat !== 0) pt = turf.point([aktiveLon, aktiveLat]);
+    if (!pt && letzteLat !== 0) pt = turf.point([letzteLon, letzteLat]);
+    return { strName: strName, km: km, achse: achse, pt: pt };
+}
+
+function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm) {
+    halbeLaengeKm = halbeLaengeKm || 0.45;
+    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    if (!pos || !pos.coords) return null;
+    let bearing = berechneFahrtBearing(strName, km);
+    let center = turf.point(pos.coords);
+    let links = turf.destination(center, halbeLaengeKm, bearing - 90, { units: "kilometers" });
+    let rechts = turf.destination(center, halbeLaengeKm, bearing + 90, { units: "kilometers" });
+    return {
+        bearing: bearing,
+        center: pos.coords,
+        linksCoord: turf.getCoord(links),
+        rechtsCoord: turf.getCoord(rechts)
+    };
+}
+
+function amNameAnKm(strName, km, pt) {
+    let hit = lookupAmAusIndex(strName, km, pt);
+    if (hit && hit.name && hit.name !== "Nicht in DB") return hit.name;
+    return ermittleMeistereiFuerKM(strName, km).name;
+}
+
+function sammleAmGrenzKm(segments, kmVon, kmBis) {
+    if (!segments || !segments.length) return [];
+    let grenzen = [];
+    for (let i = 0; i < segments.length; i++) {
+        let s = segments[i];
+        if (s.bis < kmVon - 0.05 || s.von > kmBis + 0.05) continue;
+        if (i > 0 && segments[i - 1].name !== s.name && s.von >= kmVon && s.von <= kmBis) {
+            grenzen.push(s.von);
+        }
+        if (i < segments.length - 1 && segments[i + 1].name !== s.name && s.bis >= kmVon && s.bis <= kmBis) {
+            grenzen.push(s.bis);
+        }
+    }
+    return [...new Set(grenzen.map(k => Math.round(k * 1000) / 1000))].sort((a, b) => a - b);
+}
+
+function sammleGemeindeGrenzen(segments, kmVon, kmBis) {
+    if (!segments || !segments.length) return [];
+    let grenzen = [];
+    for (let i = 0; i < segments.length; i++) {
+        let s = segments[i];
+        if (s.bis < kmVon - 0.05 || s.von > kmBis + 0.05) continue;
+        if (i > 0 && segments[i - 1].name !== s.name && s.von >= kmVon && s.von <= kmBis) {
+            grenzen.push({ km: s.von, links: segments[i - 1].name, rechts: s.name });
+        }
+        if (i < segments.length - 1 && segments[i + 1].name !== s.name && s.bis >= kmVon && s.bis <= kmBis) {
+            grenzen.push({ km: s.bis, links: s.name, rechts: segments[i + 1].name });
+        }
+    }
+    return grenzen;
+}
+
+function findeGemeindenImUmkreis(pt, radiusKm) {
+    if (!pt || datenGemeinden.length === 0) return [];
+    let lon = pt.geometry.coordinates[0];
+    let lat = pt.geometry.coordinates[1];
+    let pad = radiusKm / 85;
+    let bboxPoly = turf.buffer(pt, radiusKm, { units: "kilometers" });
+    let kandidaten = gemeindeBboxIndex && gemeindeBboxIndex.length > 0
+        ? gemeindeBboxIndex.filter(e => bboxNahePunkt(e.bb, lon, lat, pad)).map(e => e.feature)
+        : datenGemeinden;
+    return kandidaten.filter(f => {
+        try { return turf.booleanIntersects(bboxPoly, f); } catch (e) { return false; }
+    });
+}
+
+function zeichnePruefMarker(lat, lon, className, html) {
+    L.marker([lat, lon], {
+        icon: L.divIcon({ className: className, html: "<span>" + html + "</span>", iconSize: null })
+    }).addTo(pruefMapLayer);
+}
+
+function zeichnePositionsPruefung(strName, km, achse, pt) {
+    if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
+    pruefMapLayer = L.layerGroup().addTo(map);
+
+    let radiusKm = 3.5;
+    let kmSpan = 4;
+    let kmVon = Math.max(0, (km || 0) - kmSpan);
+    let kmBis = (km || 0) + kmSpan;
+
+    findeGemeindenImUmkreis(pt, radiusKm).forEach(f => {
+        let name = gemeindeNameAusFeature(f);
+        L.geoJSON(f, {
+            style: { color: "#2b6cb0", weight: 2, fillColor: "#63b3ed", fillOpacity: 0.12, opacity: 0.85 }
+        }).addTo(pruefMapLayer);
+        try {
+            let c = turf.centroid(f);
+            let cc = turf.getCoord(c);
+            zeichnePruefMarker(cc[1], cc[0], "pruef-gemeinde-label", name);
+        } catch (e) {}
+    });
+
+    let babFeatures = findeKandidatenFuerPin(pt, radiusKm, false).filter(k => k.name.startsWith("A"));
+    babFeatures.forEach(k => {
+        L.geoJSON(k.feature, {
+            style: {
+                color: k.name === strName ? "#28a745" : "#666",
+                weight: k.name === strName ? 4 : 2,
+                opacity: k.name === strName ? 0.95 : 0.55
+            }
+        }).addTo(pruefMapLayer);
+        try {
+            let snapped = turf.nearestPointOnLine(k.feature, pt, { units: "kilometers" });
+            let loc = snapped.properties.location || 0;
+            let labelPt = turf.along(k.feature, Math.max(0.01, loc), { units: "kilometers" });
+            let lc = turf.getCoord(labelPt);
+            zeichnePruefMarker(lc[1], lc[0], "pruef-bab-label", k.name);
+        } catch (e) {}
+    });
+
+    let region = waehleStreckenRegion(strName, km || 0, pt);
+    if (region && region.am) {
+        let amSegs = bereinigeAmSegmente(region.am);
+        sammleAmGrenzKm(amSegs, kmVon, kmBis).forEach(gKm => {
+            let ql = baueQuerLinieKoordinaten(strName, gKm, achse, 0.5);
+            if (!ql) return;
+            L.polyline([[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]], {
+                color: "#dc3545", weight: 3, opacity: 0.95
+            }).addTo(pruefMapLayer);
+            let amLinks = amNameAnKm(strName, gKm - 0.05, pt);
+            let amRechts = amNameAnKm(strName, gKm + 0.05, pt);
+            zeichnePruefMarker(ql.linksCoord[1], ql.linksCoord[0], "pruef-am-label", "◀ " + amLinks);
+            zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-am-label", amRechts + " ▶");
+            zeichnePruefMarker(ql.center[1], ql.center[0], "pruef-grenz-km", "km " + gKm.toFixed(1).replace(".", ","));
+        });
+    }
+
+    if (region && region.gemeinde) {
+        let achseKey = normalisiereAchse(achse) || "Bestandsachse";
+        let gSegs = region.gemeinde[achseKey] || region.gemeinde.Bestandsachse || [];
+        sammleGemeindeGrenzen(gSegs, kmVon, kmBis).forEach(g => {
+            let ql = baueQuerLinieKoordinaten(strName, g.km, achse, 0.38);
+            if (!ql) return;
+            L.polyline([[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]], {
+                color: "#2b6cb0", weight: 2, dashArray: "6 4", opacity: 0.9
+            }).addTo(pruefMapLayer);
+            if (g.links) zeichnePruefMarker(ql.linksCoord[1], ql.linksCoord[0], "pruef-gem-grenz-label", g.links);
+            if (g.rechts) zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-gem-grenz-label", g.rechts);
+        });
+    }
+
+    let babNamen = [...new Set(babFeatures.map(k => k.name))];
+    if (strName && strName.startsWith("A") && babNamen.indexOf(strName) < 0) babNamen.push(strName);
+    babNamen.forEach(bab => {
+        referenzPunkteMitKm(holeReferenzFuerStrasse(bab)).forEach(r => {
+            try {
+                if (turf.distance(pt, turf.point(r.coord), { units: "kilometers" }) > radiusKm + 0.5) return;
+                if (bab === strName && km > 0 && (r.km < kmVon - 1.5 || r.km > kmBis + 1.5)) return;
+                let kmStr = r.km.toFixed(1).replace(".", ",");
+                L.circleMarker([r.coord[1], r.coord[0]], {
+                    radius: 5, color: "#d39e00", fillColor: "#ffc107", fillOpacity: 1, weight: 2
+                }).bindTooltip(bab + " km " + kmStr, { permanent: true, direction: "top", className: "pruef-ref-tooltip" })
+                    .addTo(pruefMapLayer);
+            } catch (e) {}
+        });
+    });
+
+    if (pt) {
+        let pc = pt.geometry.coordinates;
+        L.circleMarker([pc[1], pc[0]], {
+            radius: 8, color: "#fff", fillColor: "#007bff", fillOpacity: 1, weight: 3
+        }).addTo(pruefMapLayer);
+    }
+
+    try {
+        let bounds = pruefMapLayer.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds.pad(0.12));
+    } catch (e) {}
+}
+
+function openPositionPruefen() {
+    if (!geoDatenBereit) {
+        alert("Kartendaten werden noch geladen. Bitte kurz warten.");
+        return;
+    }
+    let ctx = holeAktuellePruefPosition();
+    if (!ctx.strName) {
+        alert("Bitte zuerst eine Autobahn auswählen.");
+        return;
+    }
+    if (!ctx.pt && !(ctx.km > 0)) {
+        alert("Bitte Kilometer eingeben oder GPS-Position erfassen.");
+        return;
+    }
+    if (!(ctx.km > 0) && ctx.pt) {
+        let hit = findeStrassenFeatureFuerPunkt(ctx.pt, ctx.strName, ctx.achse);
+        if (hit) {
+            let bkm = berechneGoldgriffBKM(ctx.pt, ctx.strName, hit.feature);
+            if (bkm > 0) ctx.km = bkm;
+        }
+    }
+    if (!ctx.pt && ctx.km > 0) {
+        let pos = ermittleFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
+        if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
+    }
+    if (!ctx.pt) {
+        alert("Position konnte nicht ermittelt werden.");
+        return;
+    }
+
+    mapMode = "PRUEFEN";
+    document.getElementById("map-overlay").style.display = "flex";
+    let kmText = ctx.km > 0 ? " km " + ctx.km.toFixed(3).replace(".", ",") : "";
+    document.getElementById("map-title").innerText = "🗺️ Position prüfen – " + ctx.strName + kmText;
+    document.getElementById("map-hint").innerText = "Gemeindegrenzen (blau), AM-Grenzen (rot, quer zur Fahrbahn), BKM-Referenzpunkte (gelb)";
+    document.getElementById("map-hint").style.display = "block";
+    document.getElementById("map-action-btn").style.display = "none";
+    document.getElementById("nk-map-result").style.display = "none";
+    document.querySelector(".center-pin").style.display = "none";
+    if (mapLineLayer && map) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
+
+    let c = ctx.pt.geometry.coordinates;
+    if (!map) {
+        map = L.map("karte", { zoomControl: false }).setView([c[1], c[0]], 15);
+        let osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxNativeZoom: 19, maxZoom: 22 });
+        let satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxNativeZoom: 19, maxZoom: 22 });
+        osmLayer.addTo(map);
+        L.control.layers({ "Standard Karte": osmLayer, "Satellit": satLayer }).addTo(map);
+    } else {
+        map.setView([c[1], c[0]], 15);
+    }
+    setTimeout(() => {
+        map.invalidateSize();
+        zeichnePositionsPruefung(ctx.strName, ctx.km || 0, ctx.achse, ctx.pt);
+    }, 200);
 }
 
 function calculateMapResult() {
