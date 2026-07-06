@@ -1202,20 +1202,34 @@ function waehleStreckenRegion(strName, km, pt) {
         if (!streckenIndex || !streckenIndex.autobahnen) return null;
         let entry = streckenIndex.autobahnen[strName];
         if (!entry || !entry.regionen || !entry.regionen.length) return null;
-        let cand = entry.regionen.filter(r => km >= r.kmVon - 0.05 && km <= r.kmBis + 0.05);
+        let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+        let pool = entry.regionen.slice();
+        if (anchor) {
+            let near = pool.filter(r => turf.distance(anchor, turf.point(r.mid || [0, 0]), { units: "kilometers" }) <= 40);
+            if (near.length > 0) pool = near;
+        }
+        let cand = pool.filter(r => km >= r.kmVon && km <= r.kmBis);
         if (cand.length === 0) {
-            cand = entry.regionen.slice().sort((a, b) => {
+            cand = pool.filter(r => km >= r.kmVon - 0.15 && km <= r.kmBis + 0.15);
+        }
+        if (cand.length === 0) {
+            cand = pool.slice().sort((a, b) => {
                 let da = km < a.kmVon ? a.kmVon - km : (km > a.kmBis ? km - a.kmBis : 0);
                 let db = km < b.kmVon ? b.kmVon - km : (km > b.kmBis ? km - b.kmBis : 0);
                 return da - db;
-            }).slice(0, 3);
+            }).slice(0, 5);
         }
         if (cand.length === 1) return cand[0];
-        let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
         let wGrenzen = datenWachen[aktuelleWache]?.grenzen?.[strName];
         cand.sort((a, b) => {
-            let scoreA = turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" });
-            let scoreB = turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" });
+            let strictA = (km >= a.kmVon && km <= a.kmBis) ? 0 : 1;
+            let strictB = (km >= b.kmVon && km <= b.kmBis) ? 0 : 1;
+            if (strictA !== strictB) return strictA - strictB;
+            let spanA = a.kmBis - a.kmVon;
+            let spanB = b.kmBis - b.kmVon;
+            if (Math.abs(spanA - spanB) > 0.2) return spanB - spanA;
+            let scoreA = anchor ? turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" }) : 0;
+            let scoreB = anchor ? turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" }) : 0;
             if (wGrenzen) {
                 let midA = (a.kmVon + a.kmBis) / 2;
                 let midB = (b.kmVon + b.kmBis) / 2;
@@ -1230,26 +1244,110 @@ function waehleStreckenRegion(strName, km, pt) {
     }
 }
 
-function findeSegmentBeiKm(segments, km) {
+function findeSegmentBeiKm(segments, km, nurStrikt) {
     if (!segments || !segments.length) return null;
+    for (let s of segments) {
+        if (km >= s.von && km <= s.bis) return s;
+    }
+    if (nurStrikt) return null;
     for (let s of segments) {
         if (km >= s.von - 0.05 && km <= s.bis + 0.05) return s;
     }
     return null;
 }
 
-function lookupGemeindeAusIndex(strName, km, achse, pt) {
-    let region = waehleStreckenRegion(strName, km, pt);
-    if (!region || !region.gemeinde) return null;
+function bereinigeGemeindeSegmente(segments) {
+    if (!segments || !segments.length) return [];
+    let sorted = segments.filter(s => s.name && s.name !== "-" && s.name !== "Außerhalb NRW")
+        .slice().sort((a, b) => a.von - b.von || a.bis - b.bis);
+    let merged = [];
+    sorted.forEach(s => {
+        let last = merged[merged.length - 1];
+        if (last && last.name === s.name && s.von <= last.bis + 0.2) {
+            last.bis = Math.max(last.bis, s.bis);
+        } else {
+            merged.push({ von: s.von, bis: s.bis, name: s.name });
+        }
+    });
+    return merged;
+}
+
+function sammleGemeindeSegmenteAusIndex(strName, achse, pt, gemeindeName) {
+    if (!streckenIndex?.autobahnen?.[strName]) return [];
     let achseKey = normalisiereAchse(achse) || "Bestandsachse";
-    let segs = region.gemeinde[achseKey] || region.gemeinde.Bestandsachse || [];
-    return findeSegmentBeiKm(segs, km);
+    let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    let roh = [];
+    streckenIndex.autobahnen[strName].regionen.forEach(r => {
+        if (anchor) {
+            let d = turf.distance(anchor, turf.point(r.mid || [0, 0]), { units: "kilometers" });
+            if (d > 40) return;
+        }
+        let list = r.gemeinde?.[achseKey] || r.gemeinde?.Bestandsachse || [];
+        list.forEach(s => {
+            if (s.name === gemeindeName) roh.push(s);
+        });
+    });
+    return bereinigeGemeindeSegmente(roh);
+}
+
+function gemeindeBereichAusIndex(strName, km, achse, gemeindeName, pt) {
+    let segs = sammleGemeindeSegmenteAusIndex(strName, achse, pt, gemeindeName);
+    if (!segs.length) return null;
+    let host = findeSegmentBeiKm(segs, km, true) || findeSegmentBeiKm(segs, km, false);
+    if (!host) return null;
+    let von = host.von, bis = host.bis;
+    segs.forEach(s => {
+        if (s.von <= bis + 1.2 && s.bis >= von - 1.2) {
+            von = Math.min(von, s.von);
+            bis = Math.max(bis, s.bis);
+        }
+    });
+    if (bis - von < 0.25) return null;
+    if (km < von - 0.15 || km > bis + 0.15) return null;
+    return { von: von, bis: bis };
+}
+
+function bereinigeAmSegmente(segments) {
+    if (!segments || !segments.length) return [];
+    let cleaned = segments.filter(s => s.name && s.name !== "Nicht in DB");
+    let merged = [];
+    cleaned.forEach(s => {
+        let last = merged[merged.length - 1];
+        if (last && last.name === s.name && s.von <= last.bis + 0.2) {
+            last.bis = Math.max(last.bis, s.bis);
+            if (!last.abs && s.abs) last.abs = s.abs;
+        } else {
+            merged.push({ von: s.von, bis: s.bis, name: s.name, abs: s.abs || "" });
+        }
+    });
+    return merged;
+}
+
+function lookupGemeindeAusIndex(strName, km, achse, pt) {
+    let achseKey = normalisiereAchse(achse) || "Bestandsachse";
+    let region = waehleStreckenRegion(strName, km, pt);
+    if (region && region.gemeinde) {
+        let segs = bereinigeGemeindeSegmente(region.gemeinde[achseKey] || region.gemeinde.Bestandsachse || []);
+        let hit = findeSegmentBeiKm(segs, km, true) || findeSegmentBeiKm(segs, km, false);
+        if (hit) return hit;
+    }
+    let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    if (!anchor || !streckenIndex?.autobahnen?.[strName]) return null;
+    let best = null;
+    streckenIndex.autobahnen[strName].regionen.forEach(r => {
+        if (turf.distance(anchor, turf.point(r.mid || [0, 0]), { units: "kilometers" }) > 40) return;
+        let segs = bereinigeGemeindeSegmente(r.gemeinde?.[achseKey] || r.gemeinde?.Bestandsachse || []);
+        let hit = findeSegmentBeiKm(segs, km, true) || findeSegmentBeiKm(segs, km, false);
+        if (!hit) return;
+        if (!best || (hit.bis - hit.von) > (best.bis - best.von)) best = hit;
+    });
+    return best;
 }
 
 function lookupAmAusIndex(strName, km, pt) {
     let region = waehleStreckenRegion(strName, km, pt);
     if (!region || !region.am) return null;
-    return findeSegmentBeiKm(region.am, km);
+    return findeSegmentBeiKm(bereinigeAmSegmente(region.am), km);
 }
 
 function findeGemeindeAnFahrbahn(strName, km, achse) {
@@ -1282,10 +1380,8 @@ function findeGemeindeAnFahrbahn(strName, km, achse) {
 function ermittleGemeindeKmBereich(strName, achse, gemeindeName, km) {
     let zielAchse = achse || "Bestandsachse";
     let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
-    let idx = lookupGemeindeAusIndex(strName, km, zielAchse, pt);
-    if (idx && idx.name === gemeindeName) {
-        return { von: idx.von, bis: idx.bis };
-    }
+    let idxBereich = gemeindeBereichAusIndex(strName, km, zielAchse, gemeindeName, pt);
+    if (idxBereich) return idxBereich;
 
     let cacheKey = strName + "|" + zielAchse + "|" + gemeindeName;
     if (gemeindeBereichCache[cacheKey]) return gemeindeBereichCache[cacheKey];
@@ -1314,8 +1410,11 @@ function formatiereGemeindeKm(km) {
     return (Math.abs(r % 1) < 0.001 ? r.toFixed(0) : r.toFixed(1)).replace('.', ',');
 }
 
-function formatiereGemeindeAnzeige(name, bereich) {
+function formatiereGemeindeAnzeige(name, bereich, km) {
     if (!bereich) return name;
+    let span = bereich.bis - bereich.von;
+    if (span < 0.25) return name;
+    if (km > 0 && (km < bereich.von - 0.15 || km > bereich.bis + 0.15)) return name;
     return name + ' (von ' + formatiereGemeindeKm(bereich.von) + '–' + formatiereGemeindeKm(bereich.bis) + ')';
 }
 
@@ -1328,7 +1427,7 @@ function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
     let text = gemeinde;
     if (strName && km > 0 && gemeinde !== "Außerhalb NRW") {
         let bereich = ermittleGemeindeKmBereich(strName, achse, gemeinde, km);
-        text = formatiereGemeindeAnzeige(gemeinde, bereich);
+        text = formatiereGemeindeAnzeige(gemeinde, bereich, km);
     }
     if (opts.approximiert && datenBAB.length === 0) text += " (≈ ohne BAB-Geometrie)";
     document.getElementById("g").innerText = text;
@@ -1403,10 +1502,11 @@ function naechsterAmWechsel(strName, km) {
     let region = waehleStreckenRegion(strName, km, pt);
     let startAm = ermittleMeistereiFuerKM(strName, km).name;
     if (region && region.am && region.am.length) {
-        let cur = findeSegmentBeiKm(region.am, km);
-        if (cur) startAm = cur.name;
+        let amListe = bereinigeAmSegmente(region.am);
+        let cur = findeSegmentBeiKm(amListe, km);
+        if (cur && cur.name) startAm = cur.name;
         let vor = null, hinter = null;
-        region.am.forEach(s => {
+        amListe.forEach(s => {
             if (s.von > km + 0.05 && s.name !== startAm) {
                 if (!vor || s.von < vor.km) vor = { km: s.von, am: s.name, dist: s.von - km };
             }
