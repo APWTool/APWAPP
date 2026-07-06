@@ -2310,11 +2310,21 @@ function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm) {
     let pos = ermittleFahrbahnPosition(strName, km, achse);
     if (!pos || !pos.coords) return null;
     let bearing = berechneFahrtBearing(strName, km);
+    let bearingFeature = null;
+    let posVor = ermittleFahrbahnPosition(strName, km - 0.25, achse);
+    let posNach = ermittleFahrbahnPosition(strName, km + 0.25, achse);
+    if (posVor && posNach && posVor.coords && posNach.coords) {
+        bearingFeature = turf.bearing(turf.point(posVor.coords), turf.point(posNach.coords));
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:baueQuerLinieKoordinaten',message:'bearing compare',data:{km:km,achse:achse,bearingRef:bearing,bearingFeature:bearingFeature,delta:bearingFeature!==null?Math.abs(bearing-bearingFeature):null,hasFeature:!!pos.feature,halbeLaengeKm:halbeLaengeKm},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     let center = turf.point(pos.coords);
     let links = turf.destination(center, halbeLaengeKm, bearing - 90, { units: "kilometers" });
     let rechts = turf.destination(center, halbeLaengeKm, bearing + 90, { units: "kilometers" });
     return {
         bearing: bearing,
+        bearingFeature: bearingFeature,
         center: pos.coords,
         linksCoord: turf.getCoord(links),
         rechtsCoord: turf.getCoord(rechts)
@@ -2388,7 +2398,12 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     let kmVon = Math.max(0, (km || 0) - kmSpan);
     let kmBis = (km || 0) + kmSpan;
 
-    findeGemeindenImUmkreis(pt, radiusKm).forEach(f => {
+    let gemeindenUmkreis = findeGemeindenImUmkreis(pt, radiusKm);
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:zeichnePositionsPruefung:start',message:'pruef start',data:{strName:strName,km:km,achse:achse,radiusKm:radiusKm,gemeindenCount:gemeindenUmkreis.length,gemeindenNamen:gemeindenUmkreis.slice(0,12).map(gemeindeNameAusFeature)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+
+    gemeindenUmkreis.forEach(f => {
         let name = gemeindeNameAusFeature(f);
         L.geoJSON(f, {
             style: { color: "#2b6cb0", weight: 2, fillColor: "#63b3ed", fillOpacity: 0.12, opacity: 0.85 }
@@ -2419,9 +2434,13 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     });
 
     let region = waehleStreckenRegion(strName, km || 0, pt);
+    let amGrenzCount = 0;
+    let gemGrenzCount = 0;
     if (region && region.am) {
         let amSegs = bereinigeAmSegmente(region.am);
-        sammleAmGrenzKm(amSegs, kmVon, kmBis).forEach(gKm => {
+        let amGrenzKm = sammleAmGrenzKm(amSegs, kmVon, kmBis);
+        amGrenzCount = amGrenzKm.length;
+        amGrenzKm.forEach(gKm => {
             let ql = baueQuerLinieKoordinaten(strName, gKm, achse, 0.5);
             if (!ql) return;
             L.polyline([[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]], {
@@ -2438,7 +2457,9 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     if (region && region.gemeinde) {
         let achseKey = normalisiereAchse(achse) || "Bestandsachse";
         let gSegs = region.gemeinde[achseKey] || region.gemeinde.Bestandsachse || [];
-        sammleGemeindeGrenzen(gSegs, kmVon, kmBis).forEach(g => {
+        let gemGrenzen = sammleGemeindeGrenzen(gSegs, kmVon, kmBis);
+        gemGrenzCount = gemGrenzen.length;
+        gemGrenzen.forEach(g => {
             let ql = baueQuerLinieKoordinaten(strName, g.km, achse, 0.38);
             if (!ql) return;
             L.polyline([[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]], {
@@ -2448,6 +2469,10 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
             if (g.rechts) zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-gem-grenz-label", g.rechts);
         });
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:zeichnePositionsPruefung:grenzen',message:'grenz layers drawn',data:{amGrenzCount:amGrenzCount,gemGrenzCount:gemGrenzCount,hasRegion:!!region,kmVon:kmVon,kmBis:kmBis},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     let babNamen = [...new Set(babFeatures.map(k => k.name))];
     if (strName && strName.startsWith("A") && babNamen.indexOf(strName) < 0) babNamen.push(strName);
