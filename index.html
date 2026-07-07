@@ -26,11 +26,12 @@ if ('serviceWorker' in navigator) {
  
 body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; box-sizing: border-box; }
 .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
-h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; }
-.theme-switch { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; user-select: none; }
+h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; padding: 0 44px; box-sizing: border-box; }
+.theme-switch { position: absolute; top: 10px; right: 8px; z-index: 2; cursor: pointer; font-size: 20px; user-select: none; }
 .home-switch {
-    position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 26px; user-select: none;
+    position: absolute; top: 10px; right: 4px; z-index: 2; cursor: pointer; font-size: 26px; user-select: none;
     color: #dc3545; font-weight: bold; background: none; border: none; padding: 0; line-height: 1;
+    transform: scaleX(-1);
 }
 .home-switch:hover { opacity: 0.8; }
 .menu-switch {
@@ -49,6 +50,9 @@ h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bot
 .wache-grenze-row td { background: var(--bg-body) !important; text-align: center; padding: 10px 6px !important; font-size: 0.82em; }
 .wache-grenze-link { color: var(--accent); font-weight: bold; text-decoration: none; }
 .wache-grenze-link:hover { text-decoration: underline; }
+.wache-grenze-ende { color: var(--text-secondary); font-style: italic; font-weight: normal; }
+.wache-grenze-km { font-family: monospace; font-weight: bold; }
+#bereich-info, #bereich-info-duessel { display: none !important; }
 .aml-label { font-size: 0.88em; font-weight: bold; color: var(--text-secondary); margin: 12px 0 4px; text-align: left; }
  
 select, input, button { width: 100%; margin-top: 10px; padding: 12px; border-radius: 6px; border: 1px solid var(--input-border); box-sizing: border-box; font-size: 16px; background: var(--input-bg); color: var(--text-main); font-family: inherit; }
@@ -215,7 +219,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; font-size: 0.82em; }
 
 /* POSITION PRÜFEN KARTE */
-.pruef-gemeinde-label, .pruef-bab-label, .pruef-am-label, .pruef-gem-grenz-label, .pruef-grenz-km {
+.pruef-gemeinde-label, .pruef-bab-label, .pruef-am-label, .pruef-wach-label, .pruef-gem-grenz-label, .pruef-grenz-km, .pruef-grenz-km-wach {
     background: none !important; border: none !important;
 }
 .pruef-gemeinde-label span {
@@ -233,6 +237,11 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     color: #fff; background: rgba(220,53,69,0.92); border: 1px solid #a71d2a; max-width: 140px;
     white-space: normal; line-height: 1.2; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
+.pruef-wach-label span {
+    display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;
+    color: #fff; background: rgba(13,110,253,0.92); border: 1px solid #0a58ca; max-width: 140px;
+    white-space: normal; line-height: 1.2; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
 .pruef-gem-grenz-label span {
     display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;
     color: #1a365d; background: rgba(255,255,255,0.9); border: 1px dashed #2b6cb0; white-space: nowrap;
@@ -240,6 +249,10 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .pruef-grenz-km span {
     display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: bold;
     color: #333; background: rgba(255,255,255,0.85); border: 1px solid #dc3545;
+}
+.pruef-grenz-km-wach span {
+    display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: bold;
+    color: #333; background: rgba(255,255,255,0.85); border: 1px solid #0d6efd;
 }
 .pruef-ref-tooltip {
     background: rgba(255,193,7,0.95) !important; color: #333 !important; font-weight: bold; font-size: 10px;
@@ -1525,36 +1538,69 @@ function holeAlleAutobahnen() {
 }
 
 function findeNachbarWachenAnStreckenende(strName, wacheName) {
+    let b = holeWachbereichAnStrecke(strName, wacheName);
+    if (!b) return { unten: null, oben: null };
+    return { unten: b.unten, oben: b.oben };
+}
+
+function holeWachbereichAnStrecke(strName, wacheName) {
     let grenzen = datenWachen[wacheName]?.grenzen?.[strName];
-    if (!grenzen) return { unten: null, oben: null };
-    let minKm = grenzen[0];
-    let maxKm = grenzen[1];
+    if (!grenzen || grenzen.length < 2) return null;
+    let minKm = Math.min(...grenzen);
+    let maxKm = Math.max(...grenzen);
     let tol = 0.65;
-    let unten = null, oben = null;
+    let unten = null;
+    let oben = null;
+    let bestUnten = Infinity;
+    let bestOben = Infinity;
     for (let wache in datenWachen) {
         if (wache === wacheName) continue;
-        let g = datenWachen[wache].grenzen[strName];
+        let g = datenWachen[wache].grenzen?.[strName];
         if (!g) continue;
         let gMin = Math.min(...g);
         let gMax = Math.max(...g);
-        if (Math.abs(gMax - minKm) <= tol) unten = wache;
-        if (Math.abs(gMin - maxKm) <= tol) oben = wache;
+        let dUnten = Math.abs(gMax - minKm);
+        if (dUnten <= tol && dUnten < bestUnten) {
+            unten = wache;
+            bestUnten = dUnten;
+        }
+        let dOben = Math.abs(gMin - maxKm);
+        if (dOben <= tol && dOben < bestOben) {
+            oben = wache;
+            bestOben = dOben;
+        }
     }
-    return { unten, oben };
+    return { minKm: minKm, maxKm: maxKm, unten: unten, oben: oben };
 }
 
-function fuegeWacheGrenzZeile(tbody, wacheName, richtung) {
+function fuegeWacheGrenzZeile(tbody, opts) {
     let tr = document.createElement("tr");
     tr.className = "wache-grenze-row";
-    let pfeil = richtung === "unten" ? "▼" : "▲";
-    tr.innerHTML = '<td colspan="3" class="wache-grenze-zelle">' + pfeil + ' Nachbarwache: <a href="#" class="wache-grenze-link" onclick="wechsleWacheNachGrenze(\'' + wacheName + '\'); return false;">' + wacheName + '</a></td>';
-    tbody.appendChild(tr);
+    let pfeil = opts.richtung === "unten" ? "▼" : "▲";
+    let kmStr = Number(opts.km).toFixed(3).replace(".", ",");
+    let wacheHtml;
+    if (opts.wacheName) {
+        let fn = opts.onWacheClick || "wechsleWacheNachGrenze";
+        wacheHtml = 'Nachbarwache: <a href="#" class="wache-grenze-link" onclick="' + fn + "('" + opts.wacheName + '\'); return false;">' + opts.wacheName + '</a>';
+    } else {
+        wacheHtml = '<span class="wache-grenze-ende">Streckenende</span>';
+    }
+    tr.innerHTML = '<td colspan="3" class="wache-grenze-zelle">' + pfeil + ' <span class="wache-grenze-km">km ' + kmStr + '</span> · ' + wacheHtml + '</td>';
+    if (opts.einfuegen === "first") tbody.insertBefore(tr, tbody.firstChild);
+    else tbody.appendChild(tr);
 }
 
 function wechsleWacheNachGrenze(wacheName) {
     if (!datenWachen[wacheName]) return;
     let strName = document.getElementById("autobahn").value;
     wechsleWache(wacheName, true, strName || null);
+}
+
+function wechsleWacheNachGrenzeDuessel(wacheName) {
+    if (!datenWachen[wacheName]) return;
+    duesselKontextWache = wacheName;
+    updateDusselUI();
+    berechnenDuessel(true);
 }
 
 function ermittleWacheFuerDuessel(strName, km) {
@@ -1582,8 +1628,19 @@ function fuelleInfraTabelle(cfg) {
         return;
     }
 
-    let nachbarn = findeNachbarWachenAnStreckenende(strName, wacheName);
-    if (nachbarn.unten) fuegeWacheGrenzZeile(tbody, nachbarn.unten, "unten");
+    let bereich = holeWachbereichAnStrecke(strName, wacheName);
+    if (!bereich) {
+        tbody.innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
+        return;
+    }
+
+    fuegeWacheGrenzZeile(tbody, {
+        richtung: "unten",
+        km: bereich.minKm,
+        wacheName: bereich.unten,
+        onWacheClick: cfg.onWacheClick,
+        einfuegen: "append"
+    });
 
     wachenListen.forEach(e => {
         let typ = e[0], name = e[1], kmRaw = e[2], rf = e[3];
@@ -1614,7 +1671,13 @@ function fuelleInfraTabelle(cfg) {
         tbody.appendChild(tr);
     });
 
-    if (nachbarn.oben) fuegeWacheGrenzZeile(tbody, nachbarn.oben, "oben");
+    fuegeWacheGrenzZeile(tbody, {
+        richtung: "oben",
+        km: bereich.maxKm,
+        wacheName: bereich.oben,
+        onWacheClick: cfg.onWacheClick,
+        einfuegen: "append"
+    });
 }
 
 function oeffneDuessel() {
@@ -1675,7 +1738,6 @@ function updateDusselUI() {
     }
 
     document.getElementById("b-duessel").innerText = wachenGrenzen[a][0].toFixed(3).replace(".", ",") + " - " + wachenGrenzen[a][1].toFixed(3).replace(".", ",");
-    bereichDiv.style.display = "block";
 
     if (wachenRichtungen[a] && leftArrow && rightArrow) {
         document.getElementById("dir-plus-text-duessel").innerText = wachenRichtungen[a][0] || "";
@@ -1695,7 +1757,8 @@ function updateDusselUI() {
         strName: a,
         wacheName: duesselKontextWache,
         onKmClick: "uebernehmeKmAusListeDuessel",
-        onRfClick: "uebernehmeRichtungAusListeDuessel"
+        onRfClick: "uebernehmeRichtungAusListeDuessel",
+        onWacheClick: "wechsleWacheNachGrenzeDuessel"
     });
 }
 
@@ -1871,7 +1934,6 @@ function updateUI() {
     }
  
    document.getElementById("b").innerText = wachenGrenzen[a][0].toFixed(3).replace('.',',') + " - " + wachenGrenzen[a][1].toFixed(3).replace('.',',');
-   bereichDiv.style.display = "block";
  
    if(wachenRichtungen[a]) {
        document.getElementById("dir-plus-text").innerText = wachenRichtungen[a][0] || "";
@@ -1895,7 +1957,8 @@ function updateUI() {
         strName: a,
         wacheName: aktuelleWache,
         onKmClick: "uebernehmeKmAusListe",
-        onRfClick: "uebernehmeRichtungAusListe"
+        onRfClick: "uebernehmeRichtungAusListe",
+        onWacheClick: "wechsleWacheNachGrenze"
     });
 }
  
@@ -3347,6 +3410,62 @@ function zeichneAmGrenzLinie(strName, gKm, amSegs, pt) {
     return true;
 }
 
+function holeWachenSegmente(strName) {
+    let segs = [];
+    for (let wache in datenWachen) {
+        let g = datenWachen[wache].grenzen?.[strName];
+        if (!g || g.length < 2) continue;
+        segs.push({ name: wache, von: Math.min(...g), bis: Math.max(...g) });
+    }
+    return segs.sort((a, b) => a.von - b.von);
+}
+
+function sammleWachGrenzenFuerKarte(strName, kmVon, kmBis) {
+    let segs = holeWachenSegmente(strName);
+    if (!segs.length) return [];
+    let tol = 0.65;
+    let grenzMap = new Map();
+
+    function mergeGrenze(km, links, rechts) {
+        if (km < kmVon - 0.05 || km > kmBis + 0.05) return;
+        let key = Math.round(km * 1000) / 1000;
+        let entry = grenzMap.get(key);
+        if (!entry) {
+            grenzMap.set(key, { km: key, links: links, rechts: rechts });
+            return;
+        }
+        if (links && links !== "Ende") entry.links = links;
+        if (rechts && rechts !== "Ende") entry.rechts = rechts;
+    }
+
+    segs.forEach(s => {
+        let nachbarUnten = null;
+        let nachbarOben = null;
+        for (let other of segs) {
+            if (other.name === s.name) continue;
+            if (Math.abs(other.bis - s.von) <= tol) nachbarUnten = other.name;
+            if (Math.abs(other.von - s.bis) <= tol) nachbarOben = other.name;
+        }
+        mergeGrenze(s.von, nachbarUnten || "Ende", s.name);
+        mergeGrenze(s.bis, s.name, nachbarOben || "Ende");
+    });
+
+    return [...grenzMap.values()].sort((a, b) => a.km - b.km);
+}
+
+function zeichneWachGrenzLinie(strName, grenze) {
+    let ql = baueQuerLinieKoordinaten(strName, grenze.km, "Bestandsachse", 0.06);
+    if (!ql) return false;
+    L.polyline(
+        [[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]],
+        { color: "#0d6efd", weight: 6, opacity: 1, lineCap: "round" }
+    ).addTo(pruefMapLayer);
+    zeichnePruefMarker(ql.linksCoord[1], ql.linksCoord[0], "pruef-wach-label", "◀ " + grenze.links);
+    zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-wach-label", grenze.rechts + " ▶");
+    zeichnePruefMarker(ql.center[1], ql.center[0], "pruef-grenz-km-wach", "km " + grenze.km.toFixed(1).replace(".", ","));
+    return true;
+}
+
 function sammleGemeindeGrenzen(segments, kmVon, kmBis) {
     if (!segments || !segments.length) return [];
     let grenzen = [];
@@ -3464,6 +3583,8 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
 
     let amDaten = sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt);
     amDaten.grenzKm.forEach(gKm => zeichneAmGrenzLinie(strName, gKm, amDaten.amSegs, pt));
+
+    sammleWachGrenzenFuerKarte(strName, kmVon, kmBis).forEach(g => zeichneWachGrenzLinie(strName, g));
 
     babNamen.forEach(bab => {
         dedupliziereRefsNachKm(referenzPunkteMitKm(holeReferenzFuerStrasse(bab))).forEach(r => {
