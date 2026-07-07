@@ -28,6 +28,11 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--
 .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; }
 .theme-switch { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; user-select: none; }
+.home-switch {
+    position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 26px; user-select: none;
+    color: #dc3545; font-weight: bold; background: none; border: none; padding: 0; line-height: 1;
+}
+.home-switch:hover { opacity: 0.8; }
 .menu-switch {
     position: absolute; top: 10px; left: 10px; z-index: 2; width: auto; margin: 0; padding: 6px 10px;
     font-size: 20px; line-height: 1; background: transparent; color: var(--text-main);
@@ -126,7 +131,8 @@ html.schrift-gross input,
 html.schrift-gross button { font-size: 18px; font-weight: 600; }
 html.schrift-gross h2 { font-size: 1.55em; font-weight: 700; }
 html.schrift-gross .menu-switch,
-html.schrift-gross .theme-switch { font-size: 22px; }
+html.schrift-gross .theme-switch,
+html.schrift-gross .home-switch { font-size: 22px; }
 html.schrift-gross table { font-size: 0.95em; }
 html.schrift-gross th,
 html.schrift-gross td { padding: 10px 6px; font-weight: 600; }
@@ -290,7 +296,8 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
  
 <div class="card" id="page-main">
     <button type="button" class="menu-switch" id="menu-switch" onclick="toggleSidebar()" title="Menü ein-/ausklappen">☰</button>
-    <div class="theme-switch" onclick="toggleTheme()">🌓</div>
+    <div class="theme-switch" id="theme-switch" onclick="toggleTheme()" title="Hell/Dunkel umschalten">🌓</div>
+    <button type="button" class="home-switch" id="home-switch" onclick="showPage('page-main')" title="Zurück zur Startseite" style="display:none;">⬅</button>
    <h2>Zuständigkeitsfinder</h2>
     
     <div class="wache-buttons" id="wache-container">
@@ -629,14 +636,33 @@ function showPage(pageId) {
    setzeMenuSichtbarkeit(true);
     
    document.getElementById(pageId).style.display = 'block';
-   hefteMenuAnAktiveSeite(pageId);
+   hefteNavigationAnSeite(pageId);
+}
+
+function hefteNavigationAnSeite(pageId) {
+    let menu = document.getElementById('menu-switch');
+    let theme = document.getElementById('theme-switch');
+    let home = document.getElementById('home-switch');
+    let page = document.getElementById(pageId);
+    if (!page) return;
+    if (menu) page.insertBefore(menu, page.firstChild);
+    let aufStart = pageId === 'page-main';
+    if (theme) {
+        if (aufStart) {
+            page.insertBefore(theme, menu ? menu.nextSibling : page.firstChild);
+            theme.style.display = '';
+        } else {
+            theme.style.display = 'none';
+        }
+    }
+    if (home) {
+        if (!aufStart) page.insertBefore(home, menu ? menu.nextSibling : page.firstChild);
+        home.style.display = aufStart ? 'none' : '';
+    }
 }
 
 function hefteMenuAnAktiveSeite(pageId) {
-    let menu = document.getElementById('menu-switch');
-    let page = document.getElementById(pageId);
-    if (!menu || !page) return;
-    page.insertBefore(menu, page.firstChild);
+    hefteNavigationAnSeite(pageId);
 }
 
 function setzeMenuSichtbarkeit(sichtbar) {
@@ -3143,21 +3169,36 @@ function berechneAlongFuerKm(strName, km, feature) {
 }
 
 function punktUndBearingAufFahrbahn(strName, km) {
-    let pos = ermittleFahrbahnPosition(strName, km, "Bestandsachse");
-    if (!pos || !pos.coords) return null;
-    let feature = pos.feature;
+    let basis = holeKoordinateFuerKM(strName, km);
+    if (!basis) return null;
+    let features = holeStrassenFeatures(strName, "Bestandsachse", false);
+    if (!features.length) features = holeStrassenFeatures(strName, "", false);
+    let feature = null;
+    let minDist = Infinity;
+    features.forEach(f => {
+        try {
+            let d = turf.pointToLineDistance(turf.point(basis), f, { units: "kilometers" });
+            if (d < minDist) { minDist = d; feature = f; }
+        } catch (e) {}
+    });
     if (!feature) {
-        let hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "Bestandsachse");
-        if (!hit) hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "");
-        if (hit) feature = hit.feature;
+        let pos = ermittleFahrbahnPosition(strName, km, "Bestandsachse");
+        if (!pos || !pos.coords) return null;
+        feature = pos.feature;
+        if (!feature) {
+            let hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "Bestandsachse");
+            if (!hit) hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "");
+            if (hit) feature = hit.feature;
+        }
+        basis = pos.coords;
     }
-    let coords = pos.coords;
+    let coords = basis;
     let bearing = berechneFahrtBearing(strName, km);
     if (!feature) return { coords: coords, bearing: bearing };
     try {
         let alongKm = berechneAlongFuerKm(strName, km, feature);
         if (alongKm === null) {
-            let sn = turf.nearestPointOnLine(feature, turf.point(coords), { units: "kilometers" });
+            let sn = turf.nearestPointOnLine(feature, turf.point(basis), { units: "kilometers" });
             alongKm = sn.properties.location || 0;
             coords = turf.getCoord(sn);
         } else {
@@ -3246,6 +3287,64 @@ function sammleAmGrenzKm(segments, kmVon, kmBis) {
         }
     }
     return [...new Set(grenzen.map(k => Math.round(k * 1000) / 1000))].sort((a, b) => a - b);
+}
+
+function sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt) {
+    let mid = (kmVon + kmBis) / 2;
+    let region = waehleStreckenRegion(strName, mid, pt);
+    let amSegs = (region && region.am && region.am.length) ? bereinigeAmSegmente(region.am) : [];
+    if (amSegs.length) {
+        return { grenzKm: sammleAmGrenzKm(amSegs, kmVon, kmBis), amSegs: amSegs };
+    }
+    let schritt = 0.15;
+    let gescannt = [];
+    let grenzKm = [];
+    let cur = null;
+    for (let k = kmVon; k <= kmBis + 0.001; k = Math.round((k + schritt) * 1000) / 1000) {
+        let am = ermittleMeistereiFuerKM(strName, k).name;
+        if (!am || am === "Nicht in DB") continue;
+        if (!cur) {
+            cur = { von: k, bis: k, name: am };
+        } else if (am === cur.name) {
+            cur.bis = k;
+        } else {
+            let grenze = Math.round(((cur.bis + k) / 2) * 1000) / 1000;
+            gescannt.push(cur);
+            grenzKm.push(grenze);
+            cur = { von: grenze, bis: k, name: am };
+        }
+    }
+    if (cur) gescannt.push(cur);
+    return { grenzKm: [...new Set(grenzKm)].sort((a, b) => a - b), amSegs: bereinigeAmSegmente(gescannt) };
+}
+
+function amNamenAnGrenzeKm(amSegs, gKm, strName, pt) {
+    for (let i = 1; i < amSegs.length; i++) {
+        if (Math.abs(amSegs[i].von - gKm) < 0.12) {
+            return { links: amSegs[i - 1].name, rechts: amSegs[i].name };
+        }
+        if (Math.abs(amSegs[i - 1].bis - gKm) < 0.12) {
+            return { links: amSegs[i - 1].name, rechts: amSegs[i].name };
+        }
+    }
+    return {
+        links: amNameAnKm(strName, gKm - 0.05, pt),
+        rechts: amNameAnKm(strName, gKm + 0.05, pt)
+    };
+}
+
+function zeichneAmGrenzLinie(strName, gKm, amSegs, pt) {
+    let ql = baueQuerLinieKoordinaten(strName, gKm, "Bestandsachse", 0.06);
+    if (!ql) return false;
+    L.polyline(
+        [[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]],
+        { color: "#dc3545", weight: 6, opacity: 1, lineCap: "round" }
+    ).addTo(pruefMapLayer);
+    let namen = amNamenAnGrenzeKm(amSegs, gKm, strName, pt);
+    zeichnePruefMarker(ql.linksCoord[1], ql.linksCoord[0], "pruef-am-label", "◀ " + namen.links);
+    zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-am-label", namen.rechts + " ▶");
+    zeichnePruefMarker(ql.center[1], ql.center[0], "pruef-grenz-km", "km " + gKm.toFixed(1).replace(".", ","));
+    return true;
 }
 
 function sammleGemeindeGrenzen(segments, kmVon, kmBis) {
@@ -3337,21 +3436,20 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
 
     gemeindenUmkreis.forEach(f => {
         let name = gemeindeNameAusFeature(f);
-        if (!aktuelleGemeinde || name !== aktuelleGemeinde) return;
+        let isAktiv = aktuelleGemeinde && name === aktuelleGemeinde;
         L.geoJSON(f, {
             style: {
-                color: "#e67700",
-                weight: 4,
+                color: isAktiv ? "#e67700" : "#2b6cb0",
+                weight: isAktiv ? 4 : 2,
                 fillOpacity: 0,
-                opacity: 0.95
+                opacity: isAktiv ? 0.95 : 0.75
             }
         }).addTo(pruefMapLayer);
     });
     if (aktuelleGemeinde && pt) {
         let gezeichnet = gemeindenUmkreis.some(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
         if (!gezeichnet) {
-            let treffer = findeGemeindeTreffer(pt).filter(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
-            treffer.forEach(f => {
+            findeGemeindeTreffer(pt).filter(f => gemeindeNameAusFeature(f) === aktuelleGemeinde).forEach(f => {
                 L.geoJSON(f, {
                     style: { color: "#e67700", weight: 4, fillOpacity: 0, opacity: 0.95 }
                 }).addTo(pruefMapLayer);
@@ -3364,25 +3462,8 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     findeKandidatenFuerPin(pt, radiusKm, false).filter(k => k.name.startsWith("A")).forEach(k => babNamenSet.add(k.name));
     let babNamen = [...babNamenSet];
 
-    let region = waehleStreckenRegion(strName, km || 0, pt);
-    let amGrenzCount = 0;
-    if (region && region.am) {
-        let amSegs = bereinigeAmSegmente(region.am);
-        let amGrenzKm = sammleAmGrenzKm(amSegs, kmVon, kmBis);
-        amGrenzCount = amGrenzKm.length;
-        amGrenzKm.forEach(gKm => {
-            let ql = baueQuerLinieKoordinaten(strName, gKm, achse, 0.035);
-            if (!ql) return;
-            L.polyline([[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]], {
-                color: "#dc3545", weight: 4, opacity: 0.95
-            }).addTo(pruefMapLayer);
-            let amLinks = amNameAnKm(strName, gKm - 0.05, pt);
-            let amRechts = amNameAnKm(strName, gKm + 0.05, pt);
-            zeichnePruefMarker(ql.linksCoord[1], ql.linksCoord[0], "pruef-am-label", "◀ " + amLinks);
-            zeichnePruefMarker(ql.rechtsCoord[1], ql.rechtsCoord[0], "pruef-am-label", amRechts + " ▶");
-            zeichnePruefMarker(ql.center[1], ql.center[0], "pruef-grenz-km", "km " + gKm.toFixed(1).replace(".", ","));
-        });
-    }
+    let amDaten = sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt);
+    amDaten.grenzKm.forEach(gKm => zeichneAmGrenzLinie(strName, gKm, amDaten.amSegs, pt));
 
     babNamen.forEach(bab => {
         dedupliziereRefsNachKm(referenzPunkteMitKm(holeReferenzFuerStrasse(bab))).forEach(r => {
