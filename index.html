@@ -3115,26 +3115,115 @@ function holeAktuellePruefPosition() {
     return { strName: strName, km: km, achse: achse, pt: pt };
 }
 
+function berechneAlongFuerKm(strName, km, feature) {
+    let passende = holeReferenzFuerStrasse(strName);
+    if (!passende.length || !feature) return null;
+    let refs = referenzPunkteMitKm(passende).map(p => {
+        try {
+            let refPt = turf.point(p.coord);
+            if (turf.pointToLineDistance(refPt, feature, { units: "kilometers" }) > 2.5) return null;
+            let sn = turf.nearestPointOnLine(feature, refPt, { units: "kilometers" });
+            return { km: p.km, along: sn.properties.location || 0 };
+        } catch (e) { return null; }
+    }).filter(Boolean).sort((a, b) => a.km - b.km);
+    if (refs.length < 1) return null;
+    let before = null;
+    let after = null;
+    refs.forEach(r => {
+        if (r.km <= km) before = r;
+        if (r.km >= km && !after) after = r;
+    });
+    if (before && after && before !== after && Math.abs(after.km - before.km) > 1e-6) {
+        let t = (km - before.km) / (after.km - before.km);
+        return before.along + t * (after.along - before.along);
+    }
+    if (before) return before.along;
+    if (after) return after.along;
+    return null;
+}
+
+function punktUndBearingAufFahrbahn(strName, km) {
+    let pos = ermittleFahrbahnPosition(strName, km, "Bestandsachse");
+    if (!pos || !pos.coords) return null;
+    let feature = pos.feature;
+    if (!feature) {
+        let hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "Bestandsachse");
+        if (!hit) hit = findeNaechsteStrassenFeature(turf.point(pos.coords), strName, "");
+        if (hit) feature = hit.feature;
+    }
+    let coords = pos.coords;
+    let bearing = berechneFahrtBearing(strName, km);
+    if (!feature) return { coords: coords, bearing: bearing };
+    try {
+        let alongKm = berechneAlongFuerKm(strName, km, feature);
+        if (alongKm === null) {
+            let sn = turf.nearestPointOnLine(feature, turf.point(coords), { units: "kilometers" });
+            alongKm = sn.properties.location || 0;
+            coords = turf.getCoord(sn);
+        } else {
+            coords = turf.getCoord(turf.along(feature, alongKm, { units: "kilometers" }));
+        }
+        let lineLen = turf.length(feature, { units: "kilometers" });
+        let delta = 0.08;
+        let ptVor = turf.along(feature, Math.max(0, alongKm - delta), { units: "kilometers" });
+        let ptNach = turf.along(feature, Math.min(lineLen, alongKm + delta), { units: "kilometers" });
+        bearing = turf.bearing(ptVor, ptNach);
+    } catch (e) {}
+    return { coords: coords, bearing: bearing };
+}
+
 function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm) {
     halbeLaengeKm = halbeLaengeKm || 0.035;
-    let pos = ermittleFahrbahnPosition(strName, km, achse);
-    if (!pos || !pos.coords) return null;
-    let bearingRef = berechneFahrtBearing(strName, km);
-    let bearing = bearingRef;
-    let posVor = ermittleFahrbahnPosition(strName, km - 0.15, achse);
-    let posNach = ermittleFahrbahnPosition(strName, km + 0.15, achse);
-    if (posVor && posNach && posVor.coords && posNach.coords) {
-        bearing = turf.bearing(turf.point(posVor.coords), turf.point(posNach.coords));
-    }
-    let center = turf.point(pos.coords);
-    let links = turf.destination(center, halbeLaengeKm, bearing - 90, { units: "kilometers" });
-    let rechts = turf.destination(center, halbeLaengeKm, bearing + 90, { units: "kilometers" });
+    let auf = punktUndBearingAufFahrbahn(strName, km);
+    if (!auf) return null;
+    let center = turf.point(auf.coords);
+    let links = turf.destination(center, halbeLaengeKm, auf.bearing - 90, { units: "kilometers" });
+    let rechts = turf.destination(center, halbeLaengeKm, auf.bearing + 90, { units: "kilometers" });
     return {
-        bearing: bearing,
-        center: pos.coords,
+        bearing: auf.bearing,
+        center: auf.coords,
         linksCoord: turf.getCoord(links),
         rechtsCoord: turf.getCoord(rechts)
     };
+}
+
+function holeLinienEndpunkte(feature) {
+    try {
+        let geom = feature.geometry;
+        if (geom.type === "LineString") {
+            let c = geom.coordinates;
+            return [c[0], c[c.length - 1]];
+        }
+        if (geom.type === "MultiLineString") {
+            let lines = geom.coordinates;
+            return [lines[0][0], lines[lines.length - 1][lines[lines.length - 1].length - 1]];
+        }
+    } catch (e) {}
+    return [];
+}
+
+function findeAngrenzendeNetzabschnitte(absRaw, aktuellesFeature) {
+    let nk = parseAbschnittNk(absRaw);
+    if (!nk || nk.knotenA === "-") return [];
+    let knotenSet = new Set([nk.knotenA, nk.knotenB]);
+    let ends = holeLinienEndpunkte(aktuellesFeature);
+    if (!ends.length) return [];
+    let liste = datenAutobahn.length ? datenAutobahn : datenBAB;
+    let treffer = [];
+    liste.forEach(f => {
+        if (f === aktuellesFeature) return;
+        let other = parseAbschnittNk(holeAbsNetzKey(f.properties));
+        if (!other || other.knotenA === "-") return;
+        if (!knotenSet.has(other.knotenA) && !knotenSet.has(other.knotenB)) return;
+        try {
+            let otherEnds = holeLinienEndpunkte(f);
+            let nah = ends.some(e => otherEnds.some(oe =>
+                turf.distance(turf.point(e), turf.point(oe), { units: "kilometers" }) <= 0.2
+            ));
+            if (nah) treffer.push(f);
+        } catch (e) {}
+    });
+    return treffer;
 }
 
 function amNameAnKm(strName, km, pt) {
@@ -3248,40 +3337,32 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
 
     gemeindenUmkreis.forEach(f => {
         let name = gemeindeNameAusFeature(f);
-        let isAktiv = aktuelleGemeinde && name === aktuelleGemeinde;
+        if (!aktuelleGemeinde || name !== aktuelleGemeinde) return;
         L.geoJSON(f, {
             style: {
-                color: isAktiv ? "#e67700" : "#2b6cb0",
-                weight: isAktiv ? 4 : 2,
-                fillColor: isAktiv ? "#ffd666" : "#63b3ed",
-                fillOpacity: isAktiv ? 0.38 : 0.12,
-                opacity: 0.9
+                color: "#e67700",
+                weight: 4,
+                fillOpacity: 0,
+                opacity: 0.95
             }
         }).addTo(pruefMapLayer);
-        try {
-            let c = turf.centroid(f);
-            let cc = turf.getCoord(c);
-            zeichnePruefMarker(cc[1], cc[0], "pruef-gemeinde-label", name);
-        } catch (e) {}
     });
+    if (aktuelleGemeinde && pt) {
+        let gezeichnet = gemeindenUmkreis.some(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
+        if (!gezeichnet) {
+            let treffer = findeGemeindeTreffer(pt).filter(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
+            treffer.forEach(f => {
+                L.geoJSON(f, {
+                    style: { color: "#e67700", weight: 4, fillOpacity: 0, opacity: 0.95 }
+                }).addTo(pruefMapLayer);
+            });
+        }
+    }
 
-    let babFeatures = findeKandidatenFuerPin(pt, radiusKm, false).filter(k => k.name.startsWith("A"));
-    babFeatures.forEach(k => {
-        L.geoJSON(k.feature, {
-            style: {
-                color: k.name === strName ? "#28a745" : "#666",
-                weight: k.name === strName ? 4 : 2,
-                opacity: k.name === strName ? 0.95 : 0.55
-            }
-        }).addTo(pruefMapLayer);
-        try {
-            let snapped = turf.nearestPointOnLine(k.feature, pt, { units: "kilometers" });
-            let loc = snapped.properties.location || 0;
-            let labelPt = turf.along(k.feature, Math.max(0.01, loc), { units: "kilometers" });
-            let lc = turf.getCoord(labelPt);
-            zeichnePruefMarker(lc[1], lc[0], "pruef-bab-label", k.name);
-        } catch (e) {}
-    });
+    let babNamenSet = new Set();
+    if (strName && strName.startsWith("A")) babNamenSet.add(strName);
+    findeKandidatenFuerPin(pt, radiusKm, false).filter(k => k.name.startsWith("A")).forEach(k => babNamenSet.add(k.name));
+    let babNamen = [...babNamenSet];
 
     let region = waehleStreckenRegion(strName, km || 0, pt);
     let amGrenzCount = 0;
@@ -3303,8 +3384,6 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
         });
     }
 
-    let babNamen = [...new Set(babFeatures.map(k => k.name))];
-    if (strName && strName.startsWith("A") && babNamen.indexOf(strName) < 0) babNamen.push(strName);
     babNamen.forEach(bab => {
         dedupliziereRefsNachKm(referenzPunkteMitKm(holeReferenzFuerStrasse(bab))).forEach(r => {
             try {
@@ -3368,8 +3447,7 @@ function openPositionPruefen() {
     document.getElementById("map-overlay").style.display = "flex";
     let kmText = ctx.km > 0 ? " km " + ctx.km.toFixed(3).replace(".", ",") : "";
     document.getElementById("map-title").innerText = "🗺️ Position prüfen – " + ctx.strName + kmText;
-    document.getElementById("map-hint").innerText = "Gemeindegrenzen (Fläche), AM-Grenzen (rot, quer zur Fahrbahn), BKM-Referenzpunkte (gelb)";
-    document.getElementById("map-hint").style.display = "block";
+    document.getElementById("map-hint").style.display = "none";
     document.getElementById("map-action-btn").style.display = "none";
     document.getElementById("nk-map-result").style.display = "none";
     document.querySelector(".center-pin").style.display = "none";
@@ -3408,8 +3486,6 @@ function calculateMapResult() {
         let props = sel.feature.properties || {};
         let strName = sel.name;
         let achse = normalisiereAchse(props.Sk_Achse);
-        let alleImUmkreis = findeSegmenteFuerKarte(ptPin, maxDist);
-        
         let rDrop = document.getElementById("richtung");
         if (rDrop && Array.from(rDrop.options).some(o => o.value === achse)) {
             rDrop.value = achse;
@@ -3424,8 +3500,11 @@ function calculateMapResult() {
             aktiveLon = snappedCoord[0];
             
             mapLineLayer = L.layerGroup().addTo(map);
-           alleImUmkreis.forEach(feat => { if(feat !== sel.feature) L.geoJSON(feat, { style: { color: '#dc3545', weight: 2.5, opacity: 0.6 } }).addTo(mapLineLayer); });
-           L.geoJSON(sel.feature, { style: { color: '#28a745', weight: 3.5, opacity: 0.9 } }).addTo(mapLineLayer);
+            let rawAbs = holeAbsNetzKey(props);
+            findeAngrenzendeNetzabschnitte(rawAbs, sel.feature).forEach(feat => {
+                L.geoJSON(feat, { style: { color: "#dc3545", weight: 3, opacity: 0.85 } }).addTo(mapLineLayer);
+            });
+            L.geoJSON(sel.feature, { style: { color: "#28a745", weight: 3.5, opacity: 0.9 } }).addTo(mapLineLayer);
             
             let htmlZettel = holeNKHtml(props, distAufLinieMeter, strName); 
            resDiv.innerHTML = `<div class="nk-box" style="margin-top:0; padding:8px;">${htmlZettel}</div>`;
