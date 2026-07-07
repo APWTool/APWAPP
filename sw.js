@@ -1,4 +1,4 @@
-const CACHE_NAME = 'autobahn-tool-v24';
+const CACHE_NAME = 'autobahn-tool-v25';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -19,7 +19,7 @@ self.addEventListener('fetch', (event) => {
         fetch(event.request)
             .then((response) => {
                 const url = event.request.url || '';
-                const isJson = url.includes('.json');
+                const isJson = url.includes('.json') || url.includes('.geojson');
                 if (!response.ok || !isJson) return response;
 
                 const clone = response.clone();
