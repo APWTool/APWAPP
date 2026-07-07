@@ -1,4 +1,4 @@
-const CACHE_NAME = 'autobahn-tool-v28';
+const CACHE_NAME = 'autobahn-tool-v29';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
