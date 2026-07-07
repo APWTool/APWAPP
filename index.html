@@ -52,6 +52,8 @@ h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bot
 .wache-grenze-link:hover { text-decoration: underline; }
 .wache-grenze-ende { color: var(--text-secondary); font-style: italic; font-weight: normal; }
 .wache-grenze-km { font-family: monospace; font-weight: bold; }
+.wache-grenze-autobahn { color: var(--accent); font-weight: bold; text-decoration: none; }
+.wache-grenze-autobahn:hover { text-decoration: underline; }
 #bereich-info, #bereich-info-duessel { display: none !important; }
 .aml-label { font-size: 0.88em; font-weight: bold; color: var(--text-secondary); margin: 12px 0 4px; text-align: left; }
  
@@ -162,6 +164,7 @@ html.schrift-gross .map-header h3 { font-size: 1.2em; font-weight: 700; }
 html.schrift-gross .map-header button,
 html.schrift-gross .map-footer button { font-size: 0.95em; }
 html.schrift-gross .pruef-gemeinde-label span { font-size: 13px; }
+html.schrift-gross .pruef-gemeinde-nachbar-label span { font-size: 13px; }
 html.schrift-gross .pruef-bab-label span { font-size: 14px; }
 html.schrift-gross .pruef-am-label span { font-size: 12px; }
 html.schrift-gross .pruef-gem-grenz-label span { font-size: 12px; }
@@ -219,10 +222,15 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .hilfs-box-am { border: 1px solid var(--input-border); background: var(--bg-body); padding: 8px 10px; font-size: 0.82em; }
 
 /* POSITION PRÜFEN KARTE */
-.pruef-gemeinde-label, .pruef-bab-label, .pruef-am-label, .pruef-wach-label, .pruef-gem-grenz-label, .pruef-grenz-km, .pruef-grenz-km-wach {
+.pruef-gemeinde-label, .pruef-gemeinde-nachbar-label, .pruef-bab-label, .pruef-am-label, .pruef-wach-label, .pruef-gem-grenz-label, .pruef-grenz-km, .pruef-grenz-km-wach {
     background: none !important; border: none !important;
 }
 .pruef-gemeinde-label span {
+    display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;
+    color: #7c2d12; background: rgba(255,255,255,0.92); border: 2px solid #e67700; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.pruef-gemeinde-nachbar-label span {
     display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;
     color: #1a365d; background: rgba(255,255,255,0.88); border: 1px solid #2b6cb0; white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0,0,0,0.25);
@@ -1537,6 +1545,64 @@ function holeAlleAutobahnen() {
     return [...set].sort();
 }
 
+const autobahnUebergaenge = {
+    "A1": { unten: { label: "AK W-Nord", autobahn: "A46" } },
+    "A46": {
+        unten: { label: "AK Neuss-Süd", autobahn: "A57" },
+        oben: { label: "AK W-Nord", autobahn: "A1" }
+    },
+    "A59": {
+        unten: { label: "AK Düsseldorf-Süd", autobahn: "A46" },
+        oben: { label: "AK Monheim-Süd", autobahn: "A542" }
+    },
+    "A542": { oben: { label: "AK Langenfeld", autobahn: "A3" } },
+    "A535": {
+        unten: { label: "AD Velbert-Nord", autobahn: "A44" },
+        oben: { label: "AS Wuppertal-Dornap", autobahn: "A46" }
+    }
+};
+
+const autobahnUebergaengeAusnahmen = {
+    "Gladbach": { "A46": { unten: null, oben: null } }
+};
+
+function holeAutobahnUebergang(strName, richtung, wacheName) {
+    let ausnahme = autobahnUebergaengeAusnahmen[wacheName]?.[strName];
+    if (ausnahme && Object.prototype.hasOwnProperty.call(ausnahme, richtung)) {
+        return ausnahme[richtung];
+    }
+    let eintraege = autobahnUebergaenge[strName];
+    if (!eintraege) return null;
+    return eintraege[richtung] || null;
+}
+
+function wechsleAutobahnAusGrenze(strName) {
+    let drop = document.getElementById("autobahn");
+    if (!drop || !Array.from(drop.options).some(o => o.value === strName)) return;
+    drop.value = strName;
+    onAutobahnWechsel();
+}
+
+function wechsleAutobahnAusGrenzeDuessel(strName) {
+    let drop = document.getElementById("autobahn-duessel");
+    if (!drop || !Array.from(drop.options).some(o => o.value === strName)) return;
+    drop.value = strName;
+    onAutobahnWechselDuessel();
+}
+
+function baueGrenzEndeHtml(opts, strName, richtung) {
+    if (opts.wacheName) {
+        let fn = opts.onWacheClick || "wechsleWacheNachGrenze";
+        return 'Nachbarwache: <a href="#" class="wache-grenze-link" onclick="' + fn + "('" + opts.wacheName + '\'); return false;">' + opts.wacheName + '</a>';
+    }
+    let uebergang = holeAutobahnUebergang(strName, richtung, opts.wacheBereich || "");
+    if (uebergang) {
+        let fn = opts.onAutobahnClick || "wechsleAutobahnAusGrenze";
+        return '<a href="#" class="wache-grenze-autobahn" onclick="' + fn + "('" + uebergang.autobahn + '\'); return false;">' + uebergang.label + ' → ' + uebergang.autobahn + '</a>';
+    }
+    return '<span class="wache-grenze-ende">Streckenende</span>';
+}
+
 function findeNachbarWachenAnStreckenende(strName, wacheName) {
     let b = holeWachbereichAnStrecke(strName, wacheName);
     if (!b) return { unten: null, oben: null };
@@ -1578,14 +1644,8 @@ function fuegeWacheGrenzZeile(tbody, opts) {
     tr.className = "wache-grenze-row";
     let pfeil = opts.richtung === "unten" ? "▼" : "▲";
     let kmStr = Number(opts.km).toFixed(3).replace(".", ",");
-    let wacheHtml;
-    if (opts.wacheName) {
-        let fn = opts.onWacheClick || "wechsleWacheNachGrenze";
-        wacheHtml = 'Nachbarwache: <a href="#" class="wache-grenze-link" onclick="' + fn + "('" + opts.wacheName + '\'); return false;">' + opts.wacheName + '</a>';
-    } else {
-        wacheHtml = '<span class="wache-grenze-ende">Streckenende</span>';
-    }
-    tr.innerHTML = '<td colspan="3" class="wache-grenze-zelle">' + pfeil + ' <span class="wache-grenze-km">km ' + kmStr + '</span> · ' + wacheHtml + '</td>';
+    let endeHtml = baueGrenzEndeHtml(opts, opts.strName, opts.richtung);
+    tr.innerHTML = '<td colspan="3" class="wache-grenze-zelle">' + pfeil + ' <span class="wache-grenze-km">km ' + kmStr + '</span> · ' + endeHtml + '</td>';
     if (opts.einfuegen === "first") tbody.insertBefore(tr, tbody.firstChild);
     else tbody.appendChild(tr);
 }
@@ -1638,7 +1698,10 @@ function fuelleInfraTabelle(cfg) {
         richtung: "unten",
         km: bereich.minKm,
         wacheName: bereich.unten,
+        wacheBereich: wacheName,
+        strName: strName,
         onWacheClick: cfg.onWacheClick,
+        onAutobahnClick: cfg.onAutobahnClick,
         einfuegen: "append"
     });
 
@@ -1675,7 +1738,10 @@ function fuelleInfraTabelle(cfg) {
         richtung: "oben",
         km: bereich.maxKm,
         wacheName: bereich.oben,
+        wacheBereich: wacheName,
+        strName: strName,
         onWacheClick: cfg.onWacheClick,
+        onAutobahnClick: cfg.onAutobahnClick,
         einfuegen: "append"
     });
 }
@@ -1758,7 +1824,8 @@ function updateDusselUI() {
         wacheName: duesselKontextWache,
         onKmClick: "uebernehmeKmAusListeDuessel",
         onRfClick: "uebernehmeRichtungAusListeDuessel",
-        onWacheClick: "wechsleWacheNachGrenzeDuessel"
+        onWacheClick: "wechsleWacheNachGrenzeDuessel",
+        onAutobahnClick: "wechsleAutobahnAusGrenzeDuessel"
     });
 }
 
@@ -1958,7 +2025,8 @@ function updateUI() {
         wacheName: aktuelleWache,
         onKmClick: "uebernehmeKmAusListe",
         onRfClick: "uebernehmeRichtungAusListe",
-        onWacheClick: "wechsleWacheNachGrenze"
+        onWacheClick: "wechsleWacheNachGrenze",
+        onAutobahnClick: "wechsleAutobahnAusGrenze"
     });
 }
  
@@ -3541,6 +3609,16 @@ function zeichnePruefMarker(lat, lon, className, html) {
     }).addTo(pruefMapLayer);
 }
 
+function zeichneGemeindeLabel(f, isAktiv) {
+    try {
+        let name = gemeindeNameAusFeature(f);
+        let c = turf.centroid(f);
+        let cc = turf.getCoord(c);
+        let className = isAktiv ? "pruef-gemeinde-label" : "pruef-gemeinde-nachbar-label";
+        zeichnePruefMarker(cc[1], cc[0], className, name);
+    } catch (e) {}
+}
+
 function zeichnePositionsPruefung(strName, km, achse, pt) {
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
     pruefMapLayer = L.layerGroup().addTo(map);
@@ -3564,6 +3642,7 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
                 opacity: isAktiv ? 0.95 : 0.75
             }
         }).addTo(pruefMapLayer);
+        zeichneGemeindeLabel(f, isAktiv);
     });
     if (aktuelleGemeinde && pt) {
         let gezeichnet = gemeindenUmkreis.some(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
@@ -3572,6 +3651,7 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
                 L.geoJSON(f, {
                     style: { color: "#e67700", weight: 4, fillOpacity: 0, opacity: 0.95 }
                 }).addTo(pruefMapLayer);
+                zeichneGemeindeLabel(f, true);
             });
         }
     }
