@@ -40,6 +40,11 @@ h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bot
 .wache-btn { flex: 1 1 calc(33% - 6px); padding: 10px 4px; background: var(--input-bg); color: var(--text-main); border: 2px solid var(--input-border); border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em; transition: 0.2s; text-align: center; }
 .wache-btn:hover { border-color: var(--accent); }
 .wache-btn.active-wache { background: var(--accent) !important; color: white; border-color: var(--accent); }
+.wache-btn--duessel { flex: 1 1 calc(33% - 6px); background: var(--result-bg); border-style: dashed; }
+.wache-grenze-row td { background: var(--bg-body) !important; text-align: center; padding: 10px 6px !important; font-size: 0.82em; }
+.wache-grenze-link { color: var(--accent); font-weight: bold; text-decoration: none; }
+.wache-grenze-link:hover { text-decoration: underline; }
+.aml-label { font-size: 0.88em; font-weight: bold; color: var(--text-secondary); margin: 12px 0 4px; text-align: left; }
  
 select, input, button { width: 100%; margin-top: 10px; padding: 12px; border-radius: 6px; border: 1px solid var(--input-border); box-sizing: border-box; font-size: 16px; background: var(--input-bg); color: var(--text-main); font-family: inherit; }
 button { background: var(--accent); color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
@@ -294,6 +299,7 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
         <button class="wache-btn" data-wache="Hünxe" onclick="wechsleWache('Hünxe', true)">Hünxe</button>
         <button class="wache-btn" data-wache="Moers" onclick="wechsleWache('Moers', true)">Moers</button>
         <button class="wache-btn" data-wache="Gladbach" onclick="wechsleWache('Gladbach', true)">Gladbach</button>
+        <button type="button" class="wache-btn wache-btn--duessel" onclick="oeffneDuessel()">Düssel</button>
     </div>
     
     <select id="autobahn" onchange="onAutobahnWechsel()"></select>
@@ -335,6 +341,43 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
         </div>
         <div id="dir-minus" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text"></span></div>
     </div>
+</div>
+
+<div class="card" id="page-duessel" style="display:none;">
+    <h2>Düssel</h2>
+    <select id="autobahn-duessel" onchange="onAutobahnWechselDuessel()"></select>
+    <input id="km-duessel" placeholder="Kilometer manuell eingeben" inputmode="decimal" oninput="berechnenDuesselDebounced(false)" onchange="berechnenDuessel(true)">
+    <select id="richtung-duessel" onchange="berechnenDuessel(true)">
+        <option value="">Richtungsfahrbahn wählen (optional)</option>
+    </select>
+    <div class="aml-label">AML</div>
+    <input id="aml-koordinaten" placeholder="51.2157, 6.7670" inputmode="decimal" onkeydown="if(event.key==='Enter')bestaetigeAmlKoordinaten()">
+    <button type="button" class="btn-secondary" style="margin-top: 8px;" onclick="bestaetigeAmlKoordinaten()">Koordinaten übernehmen</button>
+    <button type="button" class="btn-secondary" style="margin-top: 8px;" onclick="openPositionPruefen()">🗺️ Position prüfen</button>
+    <div id="grenzfall-warnungen-duessel" class="hilfs-hinweis" style="display:none;"></div>
+    <div class="result">
+       <p><strong>Position:</strong> <span id="erfasste-strasse-duessel">-</span></p>
+       <p><strong>Gemeinde:</strong> <span id="g-duessel">-</span></p>
+       <p><strong>Zuständigkeit:</strong> <span id="m-duessel">-</span></p>
+       <p><strong>Adresse:</strong> <span id="m_address-duessel">-</span></p>
+       <p><strong>Telefon:</strong> <span id="m_phone-duessel">-</span></p>
+        <div class="bar"><div id="progress-duessel" class="fill"></div></div>
+    </div>
+    <div id="bereich-info-duessel" style="text-align:center; font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; font-weight: bold; display: none;">
+        Bereich: <span id="b-duessel">-</span>
+    </div>
+    <div id="naechste-infra-duessel" style="display:none;"></div>
+    <div class="table-container">
+        <div id="dir-plus-duessel" class="direction-arrow"><span class="dir-text" id="dir-plus-text-duessel"></span><span class="arrow-icon">⬇</span></div>
+        <div class="table-wrapper">
+           <table>
+               <thead><tr><th>Typ</th><th>Anschlussstelle</th><th>Km</th></tr></thead>
+               <tbody id="liste-duessel"></tbody>
+           </table>
+        </div>
+        <div id="dir-minus-duessel" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text-duessel"></span></div>
+    </div>
+    <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
 </div>
 
 <div class="card" id="page-wegzeit" style="display:none;">
@@ -456,6 +499,8 @@ let mapLineLayer = null;
 let pruefMapLayer = null;
 let mapMode = 'NK';
 let wzInterval = null;
+let duesselKontextWache = "Hilden";
+let berechnenDuesselTimer = null;
 let wzStartTime = 0;
 let wzStartKm = 0;
 let wzSpeed = 0;
@@ -574,6 +619,7 @@ function toggleTheme() {
 function showPage(pageId) {
    schliesseSidebar();
    document.getElementById('page-main').style.display = 'none';
+   document.getElementById('page-duessel').style.display = 'none';
    document.getElementById('page-wegzeit').style.display = 'none';
    document.getElementById('page-zustaendigkeiten').style.display = 'none';
    document.getElementById('page-einstellungen').style.display = 'none';
@@ -1423,9 +1469,10 @@ function uebernehmeKmAusListe(kmWert) {
     berechnen(true);
 }
 
-function rfTextZuAchse(rfText, autobahn) {
+function rfTextZuAchse(rfText, autobahn, wacheName) {
     if (!rfText) return "";
-    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[autobahn];
+    wacheName = wacheName || aktuelleWache;
+    let rfListe = (datenWachen[wacheName].richtungen || {})[autobahn];
     if (!rfListe) return "";
     let t = rfText.trim().toLowerCase();
     let kern = t.replace(/^rf\s*/i, '').trim();
@@ -1438,6 +1485,342 @@ function rfTextZuAchse(rfText, autobahn) {
     return "";
 }
 
+function istDuesselAktiv() {
+    let p = document.getElementById('page-duessel');
+    return !!(p && p.style.display === 'block');
+}
+
+function holeAlleAutobahnen() {
+    let set = new Set();
+    for (let w in datenWachen) {
+        Object.keys(datenWachen[w].grenzen || {}).forEach(a => set.add(a));
+    }
+    return [...set].sort();
+}
+
+function findeNachbarWachenAnStreckenende(strName, wacheName) {
+    let grenzen = datenWachen[wacheName]?.grenzen?.[strName];
+    if (!grenzen) return { unten: null, oben: null };
+    let minKm = grenzen[0];
+    let maxKm = grenzen[1];
+    let tol = 0.65;
+    let unten = null, oben = null;
+    for (let wache in datenWachen) {
+        if (wache === wacheName) continue;
+        let g = datenWachen[wache].grenzen[strName];
+        if (!g) continue;
+        let gMin = Math.min(...g);
+        let gMax = Math.max(...g);
+        if (Math.abs(gMax - minKm) <= tol) unten = wache;
+        if (Math.abs(gMin - maxKm) <= tol) oben = wache;
+    }
+    return { unten, oben };
+}
+
+function fuegeWacheGrenzZeile(tbody, wacheName, richtung) {
+    let tr = document.createElement("tr");
+    tr.className = "wache-grenze-row";
+    let pfeil = richtung === "unten" ? "▼" : "▲";
+    tr.innerHTML = '<td colspan="3" class="wache-grenze-zelle">' + pfeil + ' Nachbarwache: <a href="#" class="wache-grenze-link" onclick="wechsleWacheNachGrenze(\'' + wacheName + '\'); return false;">' + wacheName + '</a></td>';
+    tbody.appendChild(tr);
+}
+
+function wechsleWacheNachGrenze(wacheName) {
+    if (!datenWachen[wacheName]) return;
+    let strName = document.getElementById("autobahn").value;
+    wechsleWache(wacheName, true, strName || null);
+}
+
+function ermittleWacheFuerDuessel(strName, km) {
+    if (km > 0) {
+        let pt = (letzteLat !== 0) ? turf.point([letzteLon, letzteLat]) : null;
+        let w = findeWacheFuerAutobahnKm(strName, km, pt);
+        if (w) return w;
+    }
+    for (let wache in datenWachen) {
+        if (datenWachen[wache].grenzen[strName]) return wache;
+    }
+    return "Hilden";
+}
+
+function fuelleInfraTabelle(cfg) {
+    let tbody = document.getElementById(cfg.listeId);
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    let strName = cfg.strName;
+    let wacheName = cfg.wacheName;
+    let wachenListen = (datenWachen[wacheName].listen || {})[strName];
+
+    if (!wachenListen || !wachenListen.length) {
+        tbody.innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
+        return;
+    }
+
+    let nachbarn = findeNachbarWachenAnStreckenende(strName, wacheName);
+    if (nachbarn.unten) fuegeWacheGrenzZeile(tbody, nachbarn.unten, "unten");
+
+    wachenListen.forEach(e => {
+        let typ = e[0], name = e[1], kmRaw = e[2], rf = e[3];
+        let baseKm = parseFloat(kmRaw.split("-")[0].replace(",", "."));
+        let nameHtml = name;
+        if (!isNaN(baseKm)) {
+            let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
+            let coords = holeKoordinateFuerKM(strName, baseKm, anchor);
+            if (coords) {
+                let mapLink = "https://www.google.com/maps/search/?api=1&query=" + coords[1] + "," + coords[0];
+                nameHtml = '<a href="' + mapLink + '" target="_blank">' + name + "</a>";
+            }
+        }
+        if (rf) {
+            let achseRf = rfTextZuAchse(rf, strName, wacheName);
+            if (achseRf && cfg.onRfClick) {
+                nameHtml += '<br><a href="#" onclick="' + cfg.onRfClick + "('" + achseRf + "'); return false;\" title=\"Richtungsfahrbahn wählen\" style=\"font-size:0.85em; color:var(--text-secondary); font-weight:normal;\">" + rf + "</a>";
+            } else {
+                nameHtml += '<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">' + rf + "</span>";
+            }
+        }
+        let kmHtml = kmRaw;
+        if (!isNaN(baseKm) && cfg.onKmClick) {
+            kmHtml = '<a href="#" onclick="' + cfg.onKmClick + "(" + baseKm + '); return false;" title="KM übernehmen">' + kmRaw + "</a>";
+        }
+        let tr = document.createElement("tr");
+        tr.innerHTML = "<td>" + typ + "</td><td>" + nameHtml + "</td><td>" + kmHtml + "</td>";
+        tbody.appendChild(tr);
+    });
+
+    if (nachbarn.oben) fuegeWacheGrenzZeile(tbody, nachbarn.oben, "oben");
+}
+
+function oeffneDuessel() {
+    showPage("page-duessel");
+    initDuesselDropdown();
+    updateDusselUI();
+    berechnenDuessel(false);
+}
+
+function initDuesselDropdown() {
+    let drop = document.getElementById("autobahn-duessel");
+    if (!drop) return;
+    let saved = drop.value;
+    drop.innerHTML = "";
+    holeAlleAutobahnen().forEach(a => drop.add(new Option(a, a)));
+    if (saved && Array.from(drop.options).some(o => o.value === saved)) drop.value = saved;
+    else if (drop.options.length) drop.selectedIndex = 0;
+}
+
+function onAutobahnWechselDuessel() {
+    updateDusselUI();
+    berechnenDuessel(false);
+}
+
+function updateRichtungDropdownFuerWache(dropId, strName, wacheName) {
+    let rDrop = document.getElementById(dropId);
+    if (!rDrop) return;
+    let saved = rDrop.value;
+    rDrop.innerHTML = "";
+    rDrop.add(new Option("Richtungsfahrbahn wählen (optional)", ""));
+    let rfListe = (datenWachen[wacheName].richtungen || {})[strName];
+    if (rfListe && rfListe[0]) rDrop.add(new Option(rfListe[0], "Hauptachse"));
+    if (rfListe && rfListe[1]) rDrop.add(new Option(rfListe[1], "Nebenachse"));
+    rDrop.add(new Option("Bestandsachse (Ungetrennt)", "Bestandsachse"));
+    if (Array.from(rDrop.options).some(o => o.value === saved)) rDrop.value = saved;
+}
+
+function updateDusselUI() {
+    let a = document.getElementById("autobahn-duessel").value;
+    let kmRaw = document.getElementById("km-duessel").value.replace(",", ".");
+    let km = parseFloat(kmRaw);
+    duesselKontextWache = ermittleWacheFuerDuessel(a, isNaN(km) ? 0 : km);
+
+    let wachenGrenzen = datenWachen[duesselKontextWache].grenzen;
+    let wachenRichtungen = datenWachen[duesselKontextWache].richtungen;
+    let leftArrow = document.getElementById("dir-plus-duessel");
+    let rightArrow = document.getElementById("dir-minus-duessel");
+    let bereichDiv = document.getElementById("bereich-info-duessel");
+
+    if (!wachenGrenzen[a]) {
+        document.getElementById("b-duessel").innerText = "-";
+        bereichDiv.style.display = "none";
+        if (leftArrow) leftArrow.style.display = "none";
+        if (rightArrow) rightArrow.style.display = "none";
+        document.getElementById("liste-duessel").innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
+        updateRichtungDropdownFuerWache("richtung-duessel", a, duesselKontextWache);
+        return;
+    }
+
+    document.getElementById("b-duessel").innerText = wachenGrenzen[a][0].toFixed(3).replace(".", ",") + " - " + wachenGrenzen[a][1].toFixed(3).replace(".", ",");
+    bereichDiv.style.display = "block";
+
+    if (wachenRichtungen[a] && leftArrow && rightArrow) {
+        document.getElementById("dir-plus-text-duessel").innerText = wachenRichtungen[a][0] || "";
+        document.getElementById("dir-minus-text-duessel").innerText = wachenRichtungen[a][1] || "";
+        leftArrow.style.display = "flex";
+        rightArrow.style.display = "flex";
+        leftArrow.onclick = () => uebernehmeRichtungAusListeDuessel("Hauptachse");
+        rightArrow.onclick = () => uebernehmeRichtungAusListeDuessel("Nebenachse");
+    } else if (leftArrow && rightArrow) {
+        leftArrow.style.display = "none";
+        rightArrow.style.display = "none";
+    }
+
+    updateRichtungDropdownFuerWache("richtung-duessel", a, duesselKontextWache);
+    fuelleInfraTabelle({
+        listeId: "liste-duessel",
+        strName: a,
+        wacheName: duesselKontextWache,
+        onKmClick: "uebernehmeKmAusListeDuessel",
+        onRfClick: "uebernehmeRichtungAusListeDuessel"
+    });
+}
+
+function uebernehmeKmAusListeDuessel(kmWert) {
+    document.getElementById("km-duessel").value = Number(kmWert).toFixed(3).replace(".", ",");
+    berechnenDuessel(true);
+}
+
+function uebernehmeRichtungAusListeDuessel(achse) {
+    document.getElementById("richtung-duessel").value = achse;
+    berechnenDuessel(true);
+}
+
+function parseKoordinatenEingabe(raw) {
+    let s = String(raw || "").trim();
+    if (!s) return null;
+    s = s.replace(/[()]/g, " ");
+    s = s.replace(/lat(itude)?|lon(gitude)?|breite|länge|laenge|lng|coord|gps|aml|position/gi, " ");
+    let nums = s.match(/-?\d+[.,]\d+/g);
+    if (!nums || nums.length < 2) nums = s.match(/-?\d+(?:[.,]\d+)?/g);
+    if (!nums || nums.length < 2) return null;
+    let a = parseFloat(nums[0].replace(",", "."));
+    let b = parseFloat(nums[1].replace(",", "."));
+    let lat, lon;
+    if (a >= 40 && a <= 55 && b >= 5 && b <= 15) { lat = a; lon = b; }
+    else if (b >= 40 && b <= 55 && a >= 5 && a <= 15) { lat = b; lon = a; }
+    else { lat = a; lon = b; }
+    if (lat < 40 || lat > 55 || lon < 5 || lon > 15) return null;
+    return { lat: lat, lon: lon };
+}
+
+function bestaetigeAmlKoordinaten() {
+    let parsed = parseKoordinatenEingabe(document.getElementById("aml-koordinaten").value);
+    if (!parsed) {
+        alert("Koordinaten konnten nicht erkannt werden.\nBeispiel: 51.2157, 6.7670");
+        return;
+    }
+    verarbeiteAmlKoordinaten(parsed.lat, parsed.lon);
+}
+
+function verarbeiteAmlKoordinaten(lat, lon) {
+    letzteLat = lat;
+    letzteLon = lon;
+    letzteAcc = 0;
+    let pt = turf.point([lon, lat]);
+    let sortKandidaten = findeKandidatenFuerPin(pt, 2.5, true);
+    if (!sortKandidaten.length) {
+        alert("Keine Straße in der Nähe der Koordinaten gefunden.");
+        return;
+    }
+    let sel = sortKandidaten[0];
+    let strName = sel.name;
+    let achse = normalisiereAchse((sel.feature.properties || {}).Sk_Achse);
+    document.getElementById("autobahn-duessel").value = strName;
+
+    let bkm = 0;
+    if (strName.startsWith("A")) {
+        bkm = berechneGoldgriffBKM(pt, strName, sel.feature);
+        if (bkm <= 0) bkm = berechneGoldgriffBKM(pt, strName, null);
+        bkm = validiereBkmPlausibilitaet(pt, strName, bkm);
+    }
+
+    if (bkm > 0) document.getElementById("km-duessel").value = bkm.toFixed(3).replace(".", ",");
+    let rDrop = document.getElementById("richtung-duessel");
+    if (rDrop && Array.from(rDrop.options).some(o => o.value === achse)) rDrop.value = achse;
+
+    let snapped = turf.nearestPointOnLine(sel.feature, pt, { units: "kilometers" });
+    let snappedCoord = turf.getCoord(snapped);
+    aktiveLat = snappedCoord[1];
+    aktiveLon = snappedCoord[0];
+    aktiveStrasse = strName;
+    aktiveKM = bkm;
+    aktiveAchse = achse;
+
+    duesselKontextWache = ermittleWacheFuerDuessel(strName, bkm);
+    updateDusselUI();
+    berechnenDuessel(true);
+}
+
+function berechnenDuesselDebounced(isManual) {
+    clearTimeout(berechnenDuesselTimer);
+    berechnenDuesselTimer = setTimeout(() => berechnenDuessel(isManual), isManual ? 0 : 200);
+}
+
+function berechnenDuessel(isManual) {
+    let kmRaw = document.getElementById("km-duessel").value.replace(",", ".");
+    let km = parseFloat(kmRaw);
+    let a = document.getElementById("autobahn-duessel").value;
+
+    if (isNaN(km)) {
+        document.getElementById("g-duessel").innerText = "-";
+        document.getElementById("progress-duessel").style.width = "0%";
+        document.getElementById("m-duessel").innerText = "-";
+        document.getElementById("m_address-duessel").innerText = "-";
+        document.getElementById("m_phone-duessel").innerText = "-";
+        document.getElementById("erfasste-strasse-duessel").innerHTML = "-";
+        updateDusselUI();
+        return;
+    }
+
+    duesselKontextWache = ermittleWacheFuerDuessel(a, km);
+    let selectedRichtung = document.getElementById("richtung-duessel").value;
+    let gemeindeAchse = selectedRichtung || "Bestandsachse";
+    let fahrbahnPosition = ermittleFahrbahnPosition(a, km, gemeindeAchse);
+
+    if (fahrbahnPosition && fahrbahnPosition.point) {
+        document.getElementById("g-duessel").innerText = ermittleGemeindePraezise(a, km, gemeindeAchse);
+        if (fahrbahnPosition.coords) {
+            aktiveLat = fahrbahnPosition.coords[1];
+            aktiveLon = fahrbahnPosition.coords[0];
+            aktiveKM = km;
+            aktiveStrasse = a;
+            aktiveAchse = gemeindeAchse;
+        }
+    } else {
+        document.getElementById("g-duessel").innerText = datenGemeinden.length === 0 ? "-" : "Außerhalb NRW";
+    }
+
+    let wG = datenWachen[duesselKontextWache].grenzen[a];
+    if (wG) {
+        let percent = ((km - wG[0]) / (wG[1] - wG[0])) * 100;
+        document.getElementById("progress-duessel").style.width = Math.max(0, Math.min(100, percent)) + "%";
+    }
+
+    if (!istLandesOderBundesstrasse(a)) {
+        let m = ermittleMeistereiFuerKM(a, km);
+        document.getElementById("m-duessel").innerText = m.name;
+        document.getElementById("m_address-duessel").innerText = m.addr;
+        document.getElementById("m_phone-duessel").innerText = m.phone;
+    }
+
+    if (isManual || istDuesselAktiv()) {
+        let displayDir = "";
+        let rfListe = (datenWachen[duesselKontextWache].richtungen || {})[a];
+        if (selectedRichtung === "Hauptachse") displayDir = rfListe ? " | <strong>" + rfListe[0] + "</strong>" : "";
+        else if (selectedRichtung === "Nebenachse") displayDir = rfListe ? " | <strong>" + rfListe[1] + "</strong>" : "";
+        else if (selectedRichtung === "Bestandsachse") displayDir = " | <strong>Bestandsachse</strong>";
+        document.getElementById("erfasste-strasse-duessel").innerHTML = '<span style="color:var(--text-secondary);">⌨️ ' + a + " | BKM: " + km.toFixed(3).replace(".", ",") + "</span>" + displayDir;
+    }
+
+    updateDusselUI();
+
+    let rfListe2 = (datenWachen[duesselKontextWache].richtungen || {})[a] || [];
+    let infraBox = document.getElementById("naechste-infra-duessel");
+    if (infraBox && a && km > 0) {
+        let ni = naechsteInfrastruktur(a, km);
+        infraBox.innerHTML = baueInfraKompaktHtml(ni, rfListe2[0] || "Fahrtrichtung +", rfListe2[1] || "Fahrtrichtung -", gemeindeAchse);
+        infraBox.style.display = "block";
+    }
+}
+
 function uebernehmeRichtungAusListe(achse) {
     document.getElementById("richtung").value = achse;
     berechnen(true);
@@ -1447,19 +1830,17 @@ function updateUI() {
     let a = document.getElementById("autobahn").value;
     let wachenGrenzen = datenWachen[aktuelleWache].grenzen;
     let wachenRichtungen = datenWachen[aktuelleWache].richtungen;
-    let wachenListen = datenWachen[aktuelleWache].listen || {};
     
     let leftArrow = document.getElementById("dir-plus");
     let rightArrow = document.getElementById("dir-minus");
     let bereichDiv = document.getElementById("bereich-info");
-    let tbody = document.getElementById("liste");
-    tbody.innerHTML = "";
  
    if(!wachenGrenzen[a]) {
        document.getElementById("b").innerText = "-";
        bereichDiv.style.display = "none";
        leftArrow.style.display = "none"; rightArrow.style.display = "none";
        updateRichtungDropdown(a);
+       document.getElementById("liste").innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
         return;
     }
  
@@ -1483,40 +1864,13 @@ function updateUI() {
     }
 
     updateRichtungDropdown(a);
- 
-   if(wachenListen[a]) {
-       wachenListen[a].forEach(e => {
-            let typ = e[0]; let name = e[1]; let kmRaw = e[2]; let rf = e[3]; 
-            let baseKm = parseFloat(kmRaw.split('-')[0].replace(',', '.'));
-            let nameHtml = name;
- 
-            if (!isNaN(baseKm)) {
-                let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
-                let coords = holeKoordinateFuerKM(a, baseKm, anchor);
-                if (coords) {
-                   let mapLink = `https://www.google.com/maps/search/?api=1&query=${coords[1]},${coords[0]}`;
-                   nameHtml = `<a href="${mapLink}" target="_blank">${name}</a>`;
-                }
-            }
-            if (rf) {
-                let achseRf = rfTextZuAchse(rf, a);
-                if (achseRf) {
-                    nameHtml += `<br><a href="#" onclick="uebernehmeRichtungAusListe('${achseRf}'); return false;" title="Richtungsfahrbahn wählen" style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</a>`;
-                } else {
-                    nameHtml += `<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">${rf}</span>`;
-                }
-            }
-            let kmHtml = kmRaw;
-            if (!isNaN(baseKm)) {
-                kmHtml = `<a href="#" onclick="uebernehmeKmAusListe(${baseKm}); return false;" title="KM übernehmen">${kmRaw}</a>`;
-            }
-            let tr = document.createElement("tr");
-           tr.innerHTML = `<td>${typ}</td><td>${nameHtml}</td><td>${kmHtml}</td>`;
-           tbody.appendChild(tr);
-        });
-    } else {
-       tbody.innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
-    }
+    fuelleInfraTabelle({
+        listeId: "liste",
+        strName: a,
+        wacheName: aktuelleWache,
+        onKmClick: "uebernehmeKmAusListe",
+        onRfClick: "uebernehmeRichtungAusListe"
+    });
 }
  
 function ermittleGemeindePunkt(strName, km) {
@@ -2743,13 +3097,14 @@ function closeMap() {
 }
 
 function holeAktuellePruefPosition() {
-    let strName = aktiveStrasse || document.getElementById("autobahn").value;
+    let aufDuessel = istDuesselAktiv();
+    let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
     let km = aktiveKM;
     if (!(km > 0)) {
-        let raw = document.getElementById("km").value.replace(",", ".");
+        let raw = document.getElementById(aufDuessel ? "km-duessel" : "km").value.replace(",", ".");
         km = parseFloat(raw);
     }
-    let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
+    let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
     let pt = null;
     if (km > 0 && strName) {
         let pos = ermittleFahrbahnPosition(strName, km, achse);
