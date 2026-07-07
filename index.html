@@ -61,6 +61,8 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .result { margin-top: 15px; padding: 12px; background: var(--result-bg); border-radius: 6px; border-left: 4px solid var(--accent); font-size: 0.9em; }
 .result p { margin: 5px 0; }
 #gps-info { font-size: 0.85em; background: var(--bg-card); padding: 10px; border: 1px solid var(--input-border); border-radius: 6px; margin-top: 10px; text-align: center; line-height: 1.4; }
+#gps-info.gps-info--laden { font-size: 0.76em; opacity: 0.55; padding: 5px 8px; border-style: dashed; color: var(--text-secondary); }
+#gps-info.gps-info--versteckt { display: none; }
 .nk-box { margin-top: 8px; padding: 10px; background: var(--bg-body); border: 1px solid var(--accent); border-radius: 6px; font-size: 0.9em; line-height: 1.5; text-align: left; }
  
 /* MAP OVERLAY */
@@ -169,7 +171,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </select>
  
     <button id="gpsBtn" onclick="toggleGPS()">📡 GPS Live-Erfassung starten</button>
-    <div id="gps-info">Lade NRW Geodaten... Bitte warten.</div>
+    <div id="gps-info" class="gps-info--laden">Geodaten werden geladen …</div>
  
     <div style="display: flex; gap: 8px; width: 100%; margin-top: 8px;">
         <button class="btn-action" style="margin-top: 0;" onclick="openMap('NK')">📝 NK erfassen</button>
@@ -334,9 +336,6 @@ function onAutobahnWechsel() {
         document.getElementById("m_phone").innerText = "-";
         document.getElementById("erfasste-strasse").innerHTML = "-";
         leereKontextAnzeigen();
-        // #region agent log
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix-v2',location:'index.html:onAutobahnWechsel',message:'km reset on autobahn change',data:{von:letzteAutobahnDropdown,nach:a},timestamp:Date.now(),hypothesisId:'H'})}).catch(()=>{});
-        // #endregion
     }
     manuellerFokus = a;
     letzteAutobahnDropdown = a;
@@ -418,9 +417,6 @@ function ermittleGemeindePraezise(strName, km, achse) {
         quelle = "index-fallback";
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix-v3',location:'index.html:ermittleGemeindePraezise',message:'gemeinde precision',data:{strName:strName,km:km,achse:zielAchse,gemeinde:ergebnis,quelle:quelle,idxGemeinde:idxHit?idxHit.name:null,coords:pos?pos.coords:null,approximiert:!!(pos&&pos.approximiert)},timestamp:Date.now(),hypothesisId:'P'})}).catch(()=>{});
-    // #endregion
     return ergebnis;
 }
 
@@ -514,7 +510,7 @@ async function ladeAlleGeoDaten() {
     const [strassen, punkte, gem, amData, smData, indexData] = await Promise.all([
         ladeStrassenNetz(),
         ladeGeoJson("BABKM.json").catch(e => { fehler.push(e.message); return {}; }),
-        ladeGeoJson("Gemeinden.json").catch(e => { fehler.push(e.message); return {}; }),
+        ladeGeoJson("NRW_Justiz_Gemeinden.geojson").catch(e => { fehler.push(e.message); return {}; }),
         ladeGeoJson("amDatenbank.json", true).catch(() => ({})),
         ladeGeoJson("smDatenbank.json", true).catch(() => ({})),
         ladeGeoJson("StreckenIndex.json", true).catch(() => null)
@@ -540,11 +536,13 @@ async function ladeAlleGeoDaten() {
 
     let info = document.getElementById("gps-info");
     if (geoDatenBereit) {
-        let idxHint = streckenIndex ? (' | Streckenindex v' + (streckenIndex.version || 1) + (streckenIndex.precisionKm ? ' · ' + streckenIndex.precisionKm + ' km' : '') + ' ✓') : '';
-        info.innerHTML = '<span style="color:green; font-weight:bold;">✅ Geo-Datenbank geladen</span><span style="font-size:0.8em;color:var(--text-secondary);">' + idxHint + '</span>';
+        info.className = "gps-info--versteckt";
+        info.innerHTML = "";
     } else if (fehler.length > 0) {
+        info.className = "";
         info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten unvollständig</span><br><span style="font-size:0.8em; color:#900;">' + fehler.join("<br>") + '</span>';
     } else {
+        info.className = "";
         info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span>';
     }
 
@@ -552,8 +550,16 @@ async function ladeAlleGeoDaten() {
 }
 
 ladeAlleGeoDaten().catch(e => {
-    document.getElementById("gps-info").innerHTML = '<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien: ' + (e.message || e) + '</span>';
+    let info = document.getElementById("gps-info");
+    info.className = "";
+    info.innerHTML = '<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien: ' + (e.message || e) + '</span>';
 });
+
+function zeigeGpsInfo(html) {
+    let info = document.getElementById("gps-info");
+    info.classList.remove("gps-info--versteckt", "gps-info--laden");
+    info.innerHTML = html;
+}
  
 function extrahiere(json, erwarteLinien){
     let list=[];
@@ -1256,7 +1262,21 @@ function findeGemeindeTreffer(pt) {
 }
 
 function gemeindeNameAusFeature(f) {
-    return (f.properties || {}).GN || (f.properties || {}).GEN || (f.properties || {}).NAME || "Unbekannt";
+    let p = f.properties || {};
+    return p.GN || p.GEN || p.NAME || p.gemeinde || "Unbekannt";
+}
+
+function gemeindeJustizAusFeature(f) {
+    let p = f.properties || {};
+    return {
+        name: gemeindeNameAusFeature(f),
+        kn: p.KN || null,
+        justizschluessel: p.Justizschluessel || null,
+        oberlandesgericht: p.Oberlandesgericht || null,
+        landgericht: p.Landgericht || null,
+        amtsgericht: p.Amtsgericht || null,
+        staatsanwaltschaft: p.Staatsanwaltschaft || null
+    };
 }
 
 function findeGemeindeFuerPunktInner(pt) {
@@ -1767,13 +1787,14 @@ function toggleGPS(){
     if(watchId){
        navigator.geolocation.clearWatch(watchId); watchId=null;
        btn.innerHTML="📡 GPS Live-Erfassung starten"; btn.classList.remove("active");
-       info.innerHTML="GPS pausiert.";
+       if (geoDatenBereit) { info.className = "gps-info--versteckt"; info.innerHTML = ""; }
+       else info.innerHTML="GPS pausiert.";
     } else {
-       if(!navigator.geolocation) return info.innerText="GPS nicht unterstützt";
-       btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); info.innerHTML="⏳ Suche Signal...";
+       if(!navigator.geolocation) return zeigeGpsInfo("GPS nicht unterstützt");
+       btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); zeigeGpsInfo("⏳ Suche Signal...");
         watchId = navigator.geolocation.watchPosition(pos => {
            queueVerarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-        }, err => { info.innerHTML = "❌ GPS-Fehler: " + err.message; }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 27000 });
+        }, err => { zeigeGpsInfo("❌ GPS-Fehler: " + err.message); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 27000 });
     }
 }
  
@@ -2070,13 +2091,13 @@ async function verarbeiteGPS(lat, lon, acc){
             });
             htmlOutput += `</div>`;
         }
-        document.getElementById("gps-info").innerHTML = htmlOutput;
+        zeigeGpsInfo(htmlOutput);
         if (strName.startsWith("A") && bkm > 0) {
             aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: pt, snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc });
         }
  
     } else {
-        document.getElementById("gps-info").innerHTML = `❓ Keine Straße im Umkreis gefunden.`;
+        zeigeGpsInfo(`❓ Keine Straße im Umkreis gefunden.`);
         leereKontextAnzeigen();
     }
 }
@@ -2431,9 +2452,6 @@ function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm) {
     if (posVor && posNach && posVor.coords && posNach.coords) {
         bearing = turf.bearing(turf.point(posVor.coords), turf.point(posNach.coords));
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',location:'index.html:baueQuerLinieKoordinaten',message:'bearing compare',data:{km:km,achse:achse,bearingRef:bearingRef,bearingFeature:bearing,delta:Math.abs(bearingRef-bearing),halbeLaengeKm:halbeLaengeKm},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     let center = turf.point(pos.coords);
     let links = turf.destination(center, halbeLaengeKm, bearing - 90, { units: "kilometers" });
     let rechts = turf.destination(center, halbeLaengeKm, bearing + 90, { units: "kilometers" });
@@ -2553,9 +2571,6 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
 
     let gemeindenUmkreis = findeAngrenzendeGemeinden(strName, km || 0, achse, pt, radiusKm, kmSpan);
     let aktuelleGemeinde = (km > 0 && strName) ? ermittleGemeindePraezise(strName, km, achse) : null;
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix-v3',location:'index.html:zeichnePositionsPruefung:start',message:'pruef start',data:{strName:strName,km:km,achse:achse,gemeindenCount:gemeindenUmkreis.length,aktuelleGemeinde:aktuelleGemeinde,gemeindenNamen:gemeindenUmkreis.map(gemeindeNameAusFeature)},timestamp:Date.now(),hypothesisId:'P'})}).catch(()=>{});
-    // #endregion
 
     gemeindenUmkreis.forEach(f => {
         let name = gemeindeNameAusFeature(f);
@@ -2613,10 +2628,6 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
             zeichnePruefMarker(ql.center[1], ql.center[0], "pruef-grenz-km", "km " + gKm.toFixed(1).replace(".", ","));
         });
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',runId:'post-fix',location:'index.html:zeichnePositionsPruefung:grenzen',message:'grenz layers drawn',data:{amGrenzCount:amGrenzCount,gemGrenzCount:0,hasRegion:!!region,kmVon:kmVon,kmBis:kmBis},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     let babNamen = [...new Set(babFeatures.map(k => k.name))];
     if (strName && strName.startsWith("A") && babNamen.indexOf(strName) < 0) babNamen.push(strName);
