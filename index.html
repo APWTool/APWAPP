@@ -24,7 +24,7 @@ if ('serviceWorker' in navigator) {
 :root { --bg-body: #f4f6f8; --bg-card: white; --text-main: #333; --text-secondary: #00529b; --input-bg: white; --input-border: #ccc; --table-head: #eee; --result-bg: #f0f4f8; --accent: #007BFF; }
 [data-theme="dark"] { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --text-secondary: #4dabff; --input-bg: #2d2d2d; --input-border: #444; --table-head: #333; --result-bg: #2a2d31; }
  
-body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: var(--bg-body); display: flex; flex-direction: column; align-items: center; gap: 15px; color: var(--text-main); transition: background 0.3s, color 0.3s; box-sizing: border-box; }
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; box-sizing: border-box; }
 .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; }
 .theme-switch { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; user-select: none; }
@@ -41,6 +41,52 @@ button.active { background: #dc3545; }
  
 .btn-action { background: #6c757d; margin-top: 8px; }
 .btn-action:hover { filter: brightness(1.1); }
+.btn-secondary { background: #5a6268; }
+.btn-secondary:hover { filter: brightness(1.1); }
+
+/* SIDEBAR */
+.app-sidebar {
+    position: fixed; left: 0; top: 0; height: 100dvh; width: 52px; z-index: 500;
+    background: var(--bg-card); border-right: 1px solid var(--input-border);
+    box-shadow: 2px 0 12px rgba(0,0,0,0.08); transition: width 0.28s ease;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.app-sidebar.expanded { width: min(260px, 82vw); }
+.sidebar-toggle {
+    width: 100%; margin: 0; padding: 14px 0; border-radius: 0; border: none;
+    border-bottom: 1px solid var(--input-border); background: var(--bg-card);
+    color: var(--text-main); font-size: 1.35em; flex-shrink: 0;
+}
+.sidebar-nav {
+    display: flex; flex-direction: column; gap: 6px; padding: 10px 8px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.app-sidebar.expanded .sidebar-nav { opacity: 1; pointer-events: auto; }
+.sidebar-btn {
+    width: 100%; margin: 0; padding: 11px 12px; text-align: left; font-size: 0.88em;
+    line-height: 1.3; white-space: normal; background: var(--result-bg);
+    color: var(--text-main); border: 1px solid var(--input-border);
+}
+.sidebar-btn:hover { border-color: var(--accent); background: var(--bg-body); }
+.app-main {
+    margin-left: 52px; min-height: 100dvh; transition: margin-left 0.28s ease;
+    display: flex; flex-direction: column; align-items: center; gap: 15px; padding: 10px;
+    box-sizing: border-box; width: calc(100% - 52px);
+}
+.app-main.sidebar-expanded { margin-left: min(260px, 82vw); width: calc(100% - min(260px, 82vw)); }
+
+/* ZUSTÄNDIGKEITEN-DETAIL */
+.zust-detail { margin-top: 10px; }
+.zust-grid { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--input-border); border-radius: 8px; overflow: hidden; }
+.zust-row { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-bottom: 1px solid var(--input-border); background: var(--result-bg); }
+.zust-row:last-child { border-bottom: none; }
+.zust-label { font-size: 0.76em; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; }
+.zust-wert { font-size: 0.92em; line-height: 1.45; word-break: break-word; }
+.zust-hinweis { font-size: 0.82em; color: var(--text-secondary); font-style: italic; }
+.zust-leer { text-align: center; color: var(--text-secondary); padding: 20px 10px; }
+
+#page-main #vertrauen-info,
+#page-main #am-wechsel-info { display: none !important; }
  
 .table-container { display: flex; align-items: stretch; gap: 6px; margin-top: 10px; }
 .table-wrapper { flex: 1; min-width: 0; overflow-x: auto; }
@@ -150,6 +196,19 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         <div id="nk-map-result"></div>
     </div>
 </div>
+
+<aside id="app-sidebar" class="app-sidebar" aria-label="Werkzeuge">
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Menü ein-/ausklappen">☰</button>
+    <nav class="sidebar-nav" id="sidebar-nav">
+        <button type="button" class="sidebar-btn" onclick="sidebarAktion('km')">📍 KM auf Karte erfassen</button>
+        <button type="button" class="sidebar-btn" onclick="sidebarAktion('nk')">📝 NK auf Karte erfassen</button>
+        <button type="button" class="sidebar-btn" onclick="sidebarAktion('pruef')">🗺️ Position prüfen</button>
+        <button type="button" class="sidebar-btn" onclick="sidebarAktion('zustaend')">⚖️ Zuständigkeiten</button>
+        <button type="button" class="sidebar-btn" onclick="sidebarAktion('wegzeit')">⏱️ Weg-Zeit Rechner</button>
+    </nav>
+</aside>
+
+<div id="app-main" class="app-main">
  
 <div class="card" id="page-main">
     <div class="theme-switch" onclick="toggleTheme()">🌓</div>
@@ -172,12 +231,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
  
     <button id="gpsBtn" onclick="toggleGPS()">📡 GPS Live-Erfassung starten</button>
     <div id="gps-info" class="gps-info--laden">Geodaten werden geladen …</div>
- 
-    <div style="display: flex; gap: 8px; width: 100%; margin-top: 8px;">
-        <button class="btn-action" style="margin-top: 0;" onclick="openMap('NK')">📝 NK erfassen</button>
-        <button class="btn-action" style="margin-top: 0;" onclick="openMap('KM')">📍 KM auf Karte erfassen</button>
-    </div>
-    <button class="btn-action" onclick="showPage('page-wegzeit')">⏱️ Weg-Zeit Live Tracker</button>
  
     <div id="grenzfall-warnungen" class="hilfs-hinweis" style="display:none;"></div>
 
@@ -208,8 +261,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         </div>
         <div id="dir-minus" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text"></span></div>
     </div>
-
-    <button type="button" class="btn-secondary" style="margin-top: 12px;" onclick="openPositionPruefen()">🗺️ Position prüfen</button>
  
     <div style="text-align:center; font-size: 0.85em; margin-top: 15px;">
        <label><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
@@ -252,6 +303,14 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
 </div>
+
+<div class="card" id="page-zustaendigkeiten" style="display:none;">
+    <h2>Zuständigkeiten</h2>
+    <div id="zust-detail" class="zust-detail">
+        <p class="zust-leer">Bitte Autobahn und Kilometer eingeben oder GPS nutzen.</p>
+    </div>
+    <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
+</div>
  
 <div class="card" id="page-impressum" style="display:none;">
    <h2>Impressum</h2>
@@ -279,6 +338,8 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 <div class="footer-nav" id="footer-nav">
     <a onclick="showPage('page-impressum')">Impressum</a>
     <a onclick="showPage('page-hinweise')">Quellen & Hinweise</a>
+</div>
+
 </div>
  
 <script>
@@ -429,6 +490,7 @@ function toggleTheme() {
 function showPage(pageId) {
    document.getElementById('page-main').style.display = 'none';
    document.getElementById('page-wegzeit').style.display = 'none';
+   document.getElementById('page-zustaendigkeiten').style.display = 'none';
    document.getElementById('page-impressum').style.display = 'none';
    document.getElementById('page-hinweise').style.display = 'none';
    document.getElementById('map-overlay').style.display = 'none';
@@ -440,6 +502,110 @@ function showPage(pageId) {
     } else {
        document.getElementById('footer-nav').style.display = 'none';
     }
+}
+
+function toggleSidebar(forceOpen) {
+    let sb = document.getElementById('app-sidebar');
+    let main = document.getElementById('app-main');
+    if (!sb || !main) return;
+    let open = (forceOpen !== undefined) ? !!forceOpen : !sb.classList.contains('expanded');
+    sb.classList.toggle('expanded', open);
+    main.classList.toggle('sidebar-expanded', open);
+    try { localStorage.setItem('sidebarOpen', open ? '1' : '0'); } catch (e) {}
+}
+
+function sidebarAktion(aktion) {
+    if (aktion === 'km') openMap('KM');
+    else if (aktion === 'nk') openMap('NK');
+    else if (aktion === 'pruef') openPositionPruefen();
+    else if (aktion === 'zustaend') openZustaendigkeitenSeite();
+    else if (aktion === 'wegzeit') showPage('page-wegzeit');
+}
+
+function openZustaendigkeitenSeite() {
+    showPage('page-zustaendigkeiten');
+    aktualisiereZustaendigkeitenSeite();
+}
+
+const NRW_REGIERUNGSBEZIRKE = {
+    '51': 'Düsseldorf', '53': 'Köln', '55': 'Münster', '57': 'Detmold', '58': 'Arnsberg'
+};
+
+function decodeGemeindeKennzeichen(kn) {
+    if (!kn) return { regierungsbezirk: '-', kreisCode: '-' };
+    let s = String(kn).padStart(8, '0');
+    return {
+        regierungsbezirk: NRW_REGIERUNGSBEZIRKE[s.substring(2, 4)] || ('RB ' + s.substring(2, 4)),
+        kreisCode: s.substring(0, 5)
+    };
+}
+
+function baueZustZeile(label, wertHtml) {
+    return '<div class="zust-row"><span class="zust-label">' + label + '</span><span class="zust-wert">' + wertHtml + '</span></div>';
+}
+
+function aktualisiereZustaendigkeitenSeite() {
+    let box = document.getElementById('zust-detail');
+    if (!box) return;
+
+    let km = parseFloat(String(document.getElementById('km').value || '').replace(',', '.'));
+    let strName = document.getElementById('autobahn').value;
+    let achse = document.getElementById('richtung').value || 'Bestandsachse';
+
+    if (!strName || !(km > 0) || isNaN(km)) {
+        box.innerHTML = '<p class="zust-leer">Bitte Autobahn und Kilometer eingeben oder GPS nutzen.</p>';
+        return;
+    }
+
+    let gemeinde = document.getElementById('g').innerText || '-';
+    let m_name = document.getElementById('m').innerText || '-';
+    let addr = document.getElementById('m_address').innerText || '-';
+    let phone = document.getElementById('m_phone').innerText || '-';
+
+    let justiz = null;
+    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    if (pos && pos.point) {
+        let treffer = findeGemeindeTreffer(pos.point);
+        if (treffer.length > 0) justiz = gemeindeJustizAusFeature(treffer[0]);
+    }
+
+    let gemeindeZeile = gemeinde;
+    if (justiz && justiz.kn) {
+        let geo = decodeGemeindeKennzeichen(justiz.kn);
+        gemeindeZeile += ' <span style="color:var(--text-secondary);">(' + geo.kreisCode + ' · ' + geo.regierungsbezirk + ')</span>';
+    }
+
+    let gerichteHtml = '-';
+    if (justiz) {
+        let teile = [];
+        if (justiz.oberlandesgericht) teile.push('OLG ' + justiz.oberlandesgericht);
+        if (justiz.landgericht) teile.push('LG ' + justiz.landgericht);
+        if (justiz.amtsgericht) teile.push('AG ' + justiz.amtsgericht);
+        if (justiz.staatsanwaltschaft) teile.push(justiz.staatsanwaltschaft);
+        if (teile.length) gerichteHtml = teile.join('<br>');
+    }
+
+    let kmAnzeige = strName + ' km ' + km.toFixed(3).replace('.', ',');
+    let rfListe = (datenWachen[aktuelleWache].richtungen || {})[strName];
+    if (rfListe && achse === 'Hauptachse') kmAnzeige += ' · ' + rfListe[0];
+    else if (rfListe && achse === 'Nebenachse') kmAnzeige += ' · ' + rfListe[1];
+
+    box.innerHTML = '<div class="zust-grid">' +
+        baueZustZeile('Wachbereich', aktuelleWache) +
+        baueZustZeile('Kilometer', kmAnzeige) +
+        baueZustZeile('Gemeinde (Kreis / Regierungsbezirk)', gemeindeZeile) +
+        baueZustZeile('Zuständigkeit AM / SM', m_name) +
+        baueZustZeile('Adresse', addr) +
+        baueZustZeile('Telefon', phone) +
+        baueZustZeile('Zuständige Gerichte und Staatsanwaltschaften', gerichteHtml) +
+        baueZustZeile('Zustellungsbevollmächtigte', '<span class="zust-hinweis">in Bearbeitung</span>') +
+        '</div>';
+}
+
+function initSidebar() {
+    try {
+        if (localStorage.getItem('sidebarOpen') === '1') toggleSidebar(true);
+    } catch (e) {}
 }
  
 let geoDatenBereit = false;
@@ -547,6 +713,7 @@ async function ladeAlleGeoDaten() {
     }
 
     loadWacheSetting();
+    initSidebar();
 }
 
 ladeAlleGeoDaten().catch(e => {
@@ -1596,10 +1763,22 @@ function formatiereInfraZeile(e) {
         ' <span class="infra-abstand">km ' + e.kmText + ' · ' + diffStr + ' km</span>';
 }
 
-function baueInfraKompaktHtml(ni, rfPlus, rfMinus) {
+function baueInfraKompaktHtml(ni, rfPlus, rfMinus, achse) {
+    let zeileOben, zeileUnten, labelOben, labelUnten;
+    if (achse === 'Nebenachse') {
+        zeileOben = ni.hinter;
+        zeileUnten = ni.vor;
+        labelOben = rfMinus;
+        labelUnten = rfPlus;
+    } else {
+        zeileOben = ni.vor;
+        zeileUnten = ni.hinter;
+        labelOben = rfPlus;
+        labelUnten = rfMinus;
+    }
     return '<div class="hilfs-box hilfs-box-infra"><div class="infra-kompakt">' +
-        '<div class="infra-zeile"><span class="infra-dir" title="' + rfPlus + '">▲</span><span class="infra-wert">' + formatiereInfraZeile(ni.vor) + '</span></div>' +
-        '<div class="infra-zeile"><span class="infra-dir" title="' + rfMinus + '">▼</span><span class="infra-wert">' + formatiereInfraZeile(ni.hinter) + '</span></div>' +
+        '<div class="infra-zeile"><span class="infra-dir" title="' + labelOben + '">▲</span><span class="infra-wert">' + formatiereInfraZeile(zeileOben) + '</span></div>' +
+        '<div class="infra-zeile"><span class="infra-dir" title="' + labelUnten + '">▼</span><span class="infra-wert">' + formatiereInfraZeile(zeileUnten) + '</span></div>' +
         '</div></div>';
 }
 
@@ -1736,7 +1915,7 @@ function aktualisiereKontextAnzeigen(opts) {
     let infraBox = document.getElementById("naechste-infra");
     if (infraBox) {
         let ni = naechsteInfrastruktur(strName, km);
-        infraBox.innerHTML = baueInfraKompaktHtml(ni, rfPlus, rfMinus);
+        infraBox.innerHTML = baueInfraKompaktHtml(ni, rfPlus, rfMinus, achse);
         infraBox.style.display = "block";
     }
 
@@ -1778,6 +1957,10 @@ function aktualisiereKontextAnzeigen(opts) {
             vertrauenBox.style.display = "none";
             vertrauenBox.innerHTML = "";
         }
+    }
+
+    if (document.getElementById('page-zustaendigkeiten').style.display === 'block') {
+        aktualisiereZustaendigkeitenSeite();
     }
 }
  
@@ -2213,6 +2396,9 @@ function berechnen(isManual = false){
         document.getElementById("m_address").innerText = "-";
         document.getElementById("m_phone").innerText = "-";
         leereKontextAnzeigen();
+        if (document.getElementById('page-zustaendigkeiten').style.display === 'block') {
+            aktualisiereZustaendigkeitenSeite();
+        }
         return;
     }
  
@@ -2268,6 +2454,10 @@ function berechnen(isManual = false){
 
     if (!istLandesOderBundesstrasse(a)) {
         setzeMeistereiAnzeige(a, km);
+    }
+
+    if (document.getElementById('page-zustaendigkeiten').style.display === 'block') {
+        aktualisiereZustaendigkeitenSeite();
     }
  
     if (isManual) {
