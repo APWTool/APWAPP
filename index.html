@@ -95,6 +95,65 @@ button.active { background: #dc3545; }
 .zust-hinweis { font-size: 0.82em; color: var(--text-secondary); font-style: italic; }
 .zust-leer { text-align: center; color: var(--text-secondary); padding: 20px 10px; }
 
+/* EINSTELLUNGEN */
+.settings-list { margin: 8px 0 16px; }
+.setting-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 2px; border-bottom: 1px solid var(--input-border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label {
+    flex: 1; min-width: 0; font-size: 0.92em; line-height: 1.35; text-align: left;
+}
+.setting-toggle { display: flex; align-items: center; flex-shrink: 0; }
+.toggle-switch {
+    width: auto !important; margin: 0 !important; padding: 6px 14px !important; min-width: 54px;
+    font-size: 0.82em !important; font-weight: 700; border-radius: 18px; line-height: 1.2;
+    background: #868e96; color: #fff; border: 2px solid transparent;
+}
+.toggle-switch.is-on { background: var(--accent); border-color: var(--accent); }
+
+/* GROSSE SCHRIFT (Handy-Lesbarkeit) */
+html.schrift-gross { font-size: 18px; }
+html.schrift-gross body { font-weight: 500; }
+html.schrift-gross select,
+html.schrift-gross input,
+html.schrift-gross button { font-size: 18px; font-weight: 600; }
+html.schrift-gross h2 { font-size: 1.55em; font-weight: 700; }
+html.schrift-gross .menu-switch,
+html.schrift-gross .theme-switch { font-size: 22px; }
+html.schrift-gross table { font-size: 0.95em; }
+html.schrift-gross th,
+html.schrift-gross td { padding: 10px 6px; font-weight: 600; }
+html.schrift-gross .wache-btn { font-size: 0.95em; font-weight: 700; padding: 12px 6px; }
+html.schrift-gross .result,
+html.schrift-gross .hilfs-box,
+html.schrift-gross .nk-box,
+html.schrift-gross .info-text { font-size: 1em; line-height: 1.5; }
+html.schrift-gross .result strong,
+html.schrift-gross strong { font-weight: 800; }
+html.schrift-gross .sidebar-btn { font-size: 0.98em; font-weight: 600; }
+html.schrift-gross .sidebar-btn--sub { font-size: 0.92em; }
+html.schrift-gross .hilfs-hinweis { font-size: 0.85em; font-weight: 500; }
+html.schrift-gross .hilfs-box-infra,
+html.schrift-gross .hilfs-box-am { font-size: 0.92em; }
+html.schrift-gross .infra-typ { font-size: 1em; font-weight: 700; }
+html.schrift-gross .zust-label { font-size: 0.82em; }
+html.schrift-gross .zust-wert { font-size: 1em; font-weight: 500; }
+html.schrift-gross .setting-label { font-size: 1em; font-weight: 500; }
+html.schrift-gross .toggle-switch { font-size: 0.88em !important; }
+html.schrift-gross #gps-info { font-size: 0.95em; font-weight: 500; }
+html.schrift-gross .map-header h3 { font-size: 1.2em; font-weight: 700; }
+html.schrift-gross .map-header button,
+html.schrift-gross .map-footer button { font-size: 0.95em; }
+html.schrift-gross .pruef-gemeinde-label span { font-size: 13px; }
+html.schrift-gross .pruef-bab-label span { font-size: 14px; }
+html.schrift-gross .pruef-am-label span { font-size: 12px; }
+html.schrift-gross .pruef-gem-grenz-label span { font-size: 12px; }
+html.schrift-gross .pruef-grenz-km span { font-size: 11px; }
+html.schrift-gross .pruef-ref-tooltip { font-size: 12px !important; }
+html.schrift-gross .direction-arrow { font-size: 0.92em; font-weight: 700; }
+
 #page-main #vertrauen-info,
 #page-main #am-wechsel-info { display: none !important; }
  
@@ -184,6 +243,9 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .info-text ul { padding-left: 20px; margin-top: 5px; }
 .info-text li { margin-bottom: 8px; }
 </style>
+<script>
+try { if (localStorage.getItem('schriftGross') === '1') document.documentElement.classList.add('schrift-gross'); } catch (e) {}
+</script>
 </head>
 <body>
  
@@ -322,8 +384,19 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 
 <div class="card" id="page-einstellungen" style="display:none;">
     <h2>Einstellungen</h2>
-    <div style="padding: 12px 4px; font-size: 0.92em; line-height: 1.5; text-align: center;">
-        <label style="cursor:pointer;"><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
+    <div class="settings-list">
+        <div class="setting-row">
+            <span class="setting-label">Ausgewählte Wache als Standard speichern</span>
+            <div class="setting-toggle">
+                <button type="button" class="toggle-switch" id="toggle-saveWache" onclick="toggleWacheSpeichern()" aria-pressed="false">Off</button>
+            </div>
+        </div>
+        <div class="setting-row">
+            <span class="setting-label">Schrift vergrößern</span>
+            <div class="setting-toggle">
+                <button type="button" class="toggle-switch" id="toggle-schriftGross" onclick="toggleSchriftGross()" aria-pressed="false">Off</button>
+            </div>
+        </div>
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
 </div>
@@ -739,7 +812,7 @@ async function ladeAlleGeoDaten() {
         info.innerHTML = '<span style="color:red; font-weight:bold;">❌ Geo-Daten leer</span>';
     }
 
-    loadWacheSetting();
+    loadEinstellungen();
     initSidebar();
 }
 
@@ -1113,20 +1186,46 @@ function setzeMeistereiAnzeige(strName, km) {
     return m;
 }
  
-function saveWacheSetting() {
-    let isChecked = document.getElementById('saveWache').checked;
-    if (isChecked) localStorage.setItem('stdWache', aktuelleWache);
+function istToggleAn(id) {
+    let el = document.getElementById(id);
+    return !!(el && el.classList.contains('is-on'));
+}
+
+function setToggleState(id, on) {
+    let el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('is-on', !!on);
+    el.textContent = on ? 'On' : 'Off';
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
+function toggleWacheSpeichern() {
+    let on = !istToggleAn('toggle-saveWache');
+    setToggleState('toggle-saveWache', on);
+    if (on) localStorage.setItem('stdWache', aktuelleWache);
     else localStorage.removeItem('stdWache');
 }
- 
-function loadWacheSetting() {
+
+function toggleSchriftGross() {
+    setSchriftGross(!istToggleAn('toggle-schriftGross'));
+}
+
+function setSchriftGross(on) {
+    document.documentElement.classList.toggle('schrift-gross', !!on);
+    setToggleState('toggle-schriftGross', on);
+    try { localStorage.setItem('schriftGross', on ? '1' : '0'); } catch (e) {}
+    if (map) setTimeout(() => map.invalidateSize(), 150);
+}
+
+function loadEinstellungen() {
     let std = localStorage.getItem('stdWache');
-    if (std && datenWachen[std]) {
-       document.getElementById('saveWache').checked = true;
-       wechsleWache(std, false);
-    } else {
-       wechsleWache('Hilden', false);
-    }
+    let wacheOn = !!(std && datenWachen[std]);
+    setToggleState('toggle-saveWache', wacheOn);
+    if (wacheOn) wechsleWache(std, false);
+    else wechsleWache('Hilden', false);
+    try {
+        setSchriftGross(localStorage.getItem('schriftGross') === '1');
+    } catch (e) {}
 }
  
 function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null, skipBerechnen = false) {
@@ -1156,7 +1255,7 @@ function wechsleWache(wacheName, triggerEvent = false, autobahnToSelect = null, 
         dropMain.value = autobahnToSelect;
     }
     
-    if (document.getElementById('saveWache').checked) {
+    if (istToggleAn('toggle-saveWache')) {
        localStorage.setItem('stdWache', wacheName);
     }
  
