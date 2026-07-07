@@ -28,6 +28,13 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--
 .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; }
 .theme-switch { position: absolute; top: 10px; right: 10px; cursor: pointer; font-size: 20px; user-select: none; }
+.menu-switch {
+    position: absolute; top: 10px; left: 10px; z-index: 2; width: auto; margin: 0; padding: 6px 10px;
+    font-size: 20px; line-height: 1; background: transparent; color: var(--text-main);
+    border: none; border-radius: 6px; cursor: pointer; user-select: none;
+}
+.menu-switch:hover { opacity: 0.75; }
+.menu-switch.versteckt { display: none; }
  
 .wache-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px; justify-content: center; }
 .wache-btn { flex: 1 1 calc(33% - 6px); padding: 10px 4px; background: var(--input-bg); color: var(--text-main); border: 2px solid var(--input-border); border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em; transition: 0.2s; text-align: center; }
@@ -45,35 +52,38 @@ button.active { background: #dc3545; }
 .btn-secondary:hover { filter: brightness(1.1); }
 
 /* SIDEBAR */
+.sidebar-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.38); z-index: 750;
+    display: none; opacity: 0; transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.visible { display: block; opacity: 1; }
 .app-sidebar {
-    position: fixed; left: 0; top: 0; height: 100dvh; width: 52px; z-index: 500;
+    position: fixed; left: 0; top: 0; height: 100dvh; width: min(280px, 88vw); z-index: 800;
     background: var(--bg-card); border-right: 1px solid var(--input-border);
-    box-shadow: 2px 0 12px rgba(0,0,0,0.08); transition: width 0.28s ease;
-    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15); transform: translateX(-105%);
+    transition: transform 0.28s ease; display: flex; flex-direction: column; overflow: hidden;
 }
-.app-sidebar.expanded { width: min(260px, 82vw); }
-.sidebar-toggle {
-    width: 100%; margin: 0; padding: 14px 0; border-radius: 0; border: none;
-    border-bottom: 1px solid var(--input-border); background: var(--bg-card);
-    color: var(--text-main); font-size: 1.35em; flex-shrink: 0;
-}
+.app-sidebar.expanded { transform: translateX(0); }
 .sidebar-nav {
-    display: flex; flex-direction: column; gap: 6px; padding: 10px 8px;
-    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 52px 10px 10px;
+    overflow-y: auto; min-height: 0;
 }
-.app-sidebar.expanded .sidebar-nav { opacity: 1; pointer-events: auto; }
+.sidebar-footer {
+    flex-shrink: 0; display: flex; flex-direction: column; gap: 4px;
+    padding: 8px 10px 14px; border-top: 1px solid var(--input-border); background: var(--bg-body);
+}
 .sidebar-btn {
     width: 100%; margin: 0; padding: 11px 12px; text-align: left; font-size: 0.88em;
     line-height: 1.3; white-space: normal; background: var(--result-bg);
     color: var(--text-main); border: 1px solid var(--input-border);
 }
 .sidebar-btn:hover { border-color: var(--accent); background: var(--bg-body); }
+.sidebar-btn--sub { font-size: 0.82em; padding: 9px 12px; background: var(--bg-card); }
 .app-main {
-    margin-left: 52px; min-height: 100dvh; transition: margin-left 0.28s ease;
+    margin-left: 0; min-height: 100dvh; width: 100%;
     display: flex; flex-direction: column; align-items: center; gap: 15px; padding: 10px;
-    box-sizing: border-box; width: calc(100% - 52px);
+    box-sizing: border-box;
 }
-.app-main.sidebar-expanded { margin-left: min(260px, 82vw); width: calc(100% - min(260px, 82vw)); }
 
 /* ZUSTÄNDIGKEITEN-DETAIL */
 .zust-detail { margin-top: 10px; }
@@ -166,11 +176,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     border: 1px solid #d39e00 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
  
-/* FUSSEILE */
-.footer-nav { display: flex; justify-content: center; gap: 20px; font-size: 0.85em; margin-top: 5px; margin-bottom: 20px; }
-.footer-nav a { color: var(--text-secondary); text-decoration: none; font-weight: bold; cursor: pointer; }
-.footer-nav a:hover { text-decoration: underline; }
- 
+/* FUSSEILE – entfernt, Links in Sidebar */
 /* INFOTEXTE */
 .info-text p { margin-bottom: 12px; }
 .info-text a { color: var(--accent); text-decoration: none; }
@@ -197,8 +203,8 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
 </div>
 
+<div id="sidebar-backdrop" class="sidebar-backdrop" onclick="schliesseSidebar()"></div>
 <aside id="app-sidebar" class="app-sidebar" aria-label="Werkzeuge">
-    <button type="button" class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Menü ein-/ausklappen">☰</button>
     <nav class="sidebar-nav" id="sidebar-nav">
         <button type="button" class="sidebar-btn" onclick="sidebarAktion('km')">📍 KM auf Karte erfassen</button>
         <button type="button" class="sidebar-btn" onclick="sidebarAktion('nk')">📝 NK auf Karte erfassen</button>
@@ -206,11 +212,17 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         <button type="button" class="sidebar-btn" onclick="sidebarAktion('zustaend')">⚖️ Zuständigkeiten</button>
         <button type="button" class="sidebar-btn" onclick="sidebarAktion('wegzeit')">⏱️ Weg-Zeit Rechner</button>
     </nav>
+    <div class="sidebar-footer">
+        <button type="button" class="sidebar-btn sidebar-btn--sub" onclick="sidebarAktion('impressum')">Impressum</button>
+        <button type="button" class="sidebar-btn sidebar-btn--sub" onclick="sidebarAktion('hinweise')">Quellen &amp; Hinweise</button>
+        <button type="button" class="sidebar-btn sidebar-btn--sub" onclick="sidebarAktion('einstellungen')">⚙️ Einstellungen</button>
+    </div>
 </aside>
 
 <div id="app-main" class="app-main">
  
 <div class="card" id="page-main">
+    <button type="button" class="menu-switch" id="menu-switch" onclick="toggleSidebar()" title="Menü ein-/ausklappen">☰</button>
     <div class="theme-switch" onclick="toggleTheme()">🌓</div>
    <h2>Zuständigkeitsfinder</h2>
     
@@ -261,10 +273,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         </div>
         <div id="dir-minus" class="direction-arrow"><span class="arrow-icon">⬆</span><span class="dir-text" id="dir-minus-text"></span></div>
     </div>
- 
-    <div style="text-align:center; font-size: 0.85em; margin-top: 15px;">
-       <label><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
-    </div>
 </div>
 
 <div class="card" id="page-wegzeit" style="display:none;">
@@ -311,6 +319,14 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
 </div>
+
+<div class="card" id="page-einstellungen" style="display:none;">
+    <h2>Einstellungen</h2>
+    <div style="padding: 12px 4px; font-size: 0.92em; line-height: 1.5; text-align: center;">
+        <label style="cursor:pointer;"><input type="checkbox" id="saveWache" onchange="saveWacheSetting()"> Ausgewählte Wache als Standard speichern</label>
+    </div>
+    <button class="btn-action" onclick="showPage('page-main')">Zurück zur Hauptseite</button>
+</div>
  
 <div class="card" id="page-impressum" style="display:none;">
    <h2>Impressum</h2>
@@ -333,11 +349,6 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
         </ul>
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück</button>
-</div>
- 
-<div class="footer-nav" id="footer-nav">
-    <a onclick="showPage('page-impressum')">Impressum</a>
-    <a onclick="showPage('page-hinweise')">Quellen & Hinweise</a>
 </div>
 
 </div>
@@ -488,38 +499,56 @@ function toggleTheme() {
 }
  
 function showPage(pageId) {
+   schliesseSidebar();
    document.getElementById('page-main').style.display = 'none';
    document.getElementById('page-wegzeit').style.display = 'none';
    document.getElementById('page-zustaendigkeiten').style.display = 'none';
+   document.getElementById('page-einstellungen').style.display = 'none';
    document.getElementById('page-impressum').style.display = 'none';
    document.getElementById('page-hinweise').style.display = 'none';
    document.getElementById('map-overlay').style.display = 'none';
+   setzeMenuSichtbarkeit(true);
     
    document.getElementById(pageId).style.display = 'block';
-    
-    if(pageId === 'page-main') {
-       document.getElementById('footer-nav').style.display = 'flex';
-    } else {
-       document.getElementById('footer-nav').style.display = 'none';
-    }
+   hefteMenuAnAktiveSeite(pageId);
+}
+
+function hefteMenuAnAktiveSeite(pageId) {
+    let menu = document.getElementById('menu-switch');
+    let page = document.getElementById(pageId);
+    if (!menu || !page) return;
+    page.insertBefore(menu, page.firstChild);
+}
+
+function setzeMenuSichtbarkeit(sichtbar) {
+    let btn = document.getElementById('menu-switch');
+    if (btn) btn.classList.toggle('versteckt', !sichtbar);
 }
 
 function toggleSidebar(forceOpen) {
     let sb = document.getElementById('app-sidebar');
-    let main = document.getElementById('app-main');
-    if (!sb || !main) return;
+    let backdrop = document.getElementById('sidebar-backdrop');
+    if (!sb) return;
     let open = (forceOpen !== undefined) ? !!forceOpen : !sb.classList.contains('expanded');
     sb.classList.toggle('expanded', open);
-    main.classList.toggle('sidebar-expanded', open);
+    if (backdrop) backdrop.classList.toggle('visible', open);
     try { localStorage.setItem('sidebarOpen', open ? '1' : '0'); } catch (e) {}
 }
 
+function schliesseSidebar() {
+    toggleSidebar(false);
+}
+
 function sidebarAktion(aktion) {
+    schliesseSidebar();
     if (aktion === 'km') openMap('KM');
     else if (aktion === 'nk') openMap('NK');
     else if (aktion === 'pruef') openPositionPruefen();
     else if (aktion === 'zustaend') openZustaendigkeitenSeite();
     else if (aktion === 'wegzeit') showPage('page-wegzeit');
+    else if (aktion === 'impressum') showPage('page-impressum');
+    else if (aktion === 'hinweise') showPage('page-hinweise');
+    else if (aktion === 'einstellungen') showPage('page-einstellungen');
 }
 
 function openZustaendigkeitenSeite() {
@@ -603,9 +632,7 @@ function aktualisiereZustaendigkeitenSeite() {
 }
 
 function initSidebar() {
-    try {
-        if (localStorage.getItem('sidebarOpen') === '1') toggleSidebar(true);
-    } catch (e) {}
+    schliesseSidebar();
 }
  
 let geoDatenBereit = false;
@@ -2571,6 +2598,8 @@ function waehleStrassenKandidat(pt, zielName, maxDistKm) {
 }
 
 function openMap(mode = 'NK') {
+    schliesseSidebar();
+    setzeMenuSichtbarkeit(false);
     mapMode = mode;
     document.getElementById('map-overlay').style.display = 'flex';
     document.getElementById('nk-map-result').style.display = 'none';
@@ -2606,6 +2635,7 @@ function openMap(mode = 'NK') {
 
 function closeMap() {
     document.getElementById('map-overlay').style.display = 'none';
+    setzeMenuSichtbarkeit(true);
     if (mapLineLayer) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
     document.getElementById('map-action-btn').style.display = 'block';
@@ -2878,6 +2908,8 @@ function openPositionPruefen() {
         return;
     }
 
+    schliesseSidebar();
+    setzeMenuSichtbarkeit(false);
     mapMode = "PRUEFEN";
     document.getElementById("map-overlay").style.display = "flex";
     let kmText = ctx.km > 0 ? " km " + ctx.km.toFixed(3).replace(".", ",") : "";
