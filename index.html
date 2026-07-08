@@ -3324,8 +3324,8 @@ function berechneAlongFuerKm(strName, km, feature) {
     return null;
 }
 
-function punktUndBearingAufFahrbahn(strName, km) {
-    let basis = holeKoordinateFuerKM(strName, km);
+function punktUndBearingAufFahrbahn(strName, km, pt) {
+    let basis = holeKoordinateFuerKM(strName, km, pt);
     if (!basis) return null;
     let features = holeStrassenFeatures(strName, "Bestandsachse", false);
     if (!features.length) features = holeStrassenFeatures(strName, "", false);
@@ -3397,9 +3397,9 @@ function punktUndBearingAufFahrbahn(strName, km) {
     return { coords: coords, bearing: bearing };
 }
 
-function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm) {
+function baueQuerLinieKoordinaten(strName, km, achse, halbeLaengeKm, pt) {
     halbeLaengeKm = halbeLaengeKm || 0.035;
-    let auf = punktUndBearingAufFahrbahn(strName, km);
+    let auf = punktUndBearingAufFahrbahn(strName, km, pt);
     if (!auf) return null;
     let center = turf.point(auf.coords);
     let links = turf.destination(center, halbeLaengeKm, auf.bearing - 90, { units: "kilometers" });
@@ -3586,7 +3586,7 @@ function amNamenAnGrenzeKm(amSegs, gKm, strName, pt) {
 }
 
 function zeichneAmGrenzLinie(strName, gKm, amSegs, pt) {
-    let ql = baueQuerLinieKoordinaten(strName, gKm, "Bestandsachse", 0.06);
+    let ql = baueQuerLinieKoordinaten(strName, gKm, "Bestandsachse", 0.06, pt);
     if (!ql) return false;
     L.polyline(
         [[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]],
@@ -3643,7 +3643,7 @@ function sammleWachGrenzenFuerKarte(strName, kmVon, kmBis) {
 }
 
 function zeichneWachGrenzLinie(strName, grenze) {
-    let ql = baueQuerLinieKoordinaten(strName, grenze.km, "Bestandsachse", 0.06);
+    let ql = baueQuerLinieKoordinaten(strName, grenze.km, "Bestandsachse", 0.06, pt);
     if (!ql) return false;
     L.polyline(
         [[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]],
