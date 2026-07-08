@@ -515,6 +515,9 @@ let gpsLastProcessed = null;
 let gemeindeBereichCache = {};
 let streckenIndex = null;
 let meistereiMap = { am: {}, sm: {} }; 
+let amGrenzenBab = null; // { A3: [ {km, links, rechts}, ... ], ... }
+let amSegmenteBab = null; // { A3: [ {von,bis,name}, ... ], ... }
+let amGrenzenBabPromise = null; // legacy (kept to avoid ref errors if any)
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
 let manuellerFokus = null;
@@ -866,13 +869,14 @@ async function ladeStrassenNetz() {
 
 async function ladeAlleGeoDaten() {
     let fehler = [];
-    const [strassen, punkte, gem, amData, smData, indexData] = await Promise.all([
+    const [strassen, punkte, gem, amData, smData, indexData, amGrenzenData] = await Promise.all([
         ladeStrassenNetz(),
         ladeGeoJson("BABKM.json").catch(e => { fehler.push(e.message); return {}; }),
         ladeGeoJson("NRW_Justiz_Gemeinden.geojson").catch(e => { fehler.push(e.message); return {}; }),
         ladeGeoJson("amDatenbank.json", true).catch(() => ({})),
         ladeGeoJson("smDatenbank.json", true).catch(() => ({})),
-        ladeGeoJson("StreckenIndex.json", true).catch(() => null)
+        ladeGeoJson("StreckenIndex.json", true).catch(() => null),
+        ladeGeoJson("AM_Grenzen_BAB.json", true).catch(() => null)
     ]);
     fehler = fehler.concat(strassen.fehler || []);
 
@@ -881,6 +885,12 @@ async function ladeAlleGeoDaten() {
 
     meistereiMap.am = amData || {};
     meistereiMap.sm = smData || {};
+    try {
+        if (amGrenzenData && amGrenzenData.autobahnen && amGrenzenData.segmente) {
+            amGrenzenBab = amGrenzenData.autobahnen;
+            amSegmenteBab = amGrenzenData.segmente;
+        }
+    } catch (e) {}
     try {
         streckenIndex = (indexData && indexData.autobahnen && typeof indexData.autobahnen === "object") ? indexData : null;
     } catch (e) {
@@ -914,6 +924,8 @@ ladeAlleGeoDaten().catch(e => {
     info.className = "";
     info.innerHTML = '<span style="color:red;">❌ Fehler beim Laden der Geo-Dateien: ' + (e.message || e) + '</span>';
 });
+
+// AM-Grenzen werden als feste Datei `AM_Grenzen_BAB.json` geladen (kein Runtime-Compute, kein User-Cache nötig).
 
 function zeigeGpsInfo(html) {
     let info = document.getElementById("gps-info");
@@ -1227,6 +1239,18 @@ function findeStrassenFeatureFuerPunkt(pt, strName, achse = "") {
 }
 
 function ermittleMeistereiFuerKM(strName, km) {
+    // Prefer precomputed, hard AM segments (from amDatenbank + Berechnung geometry), if available.
+    try {
+        if (strName && strName.startsWith("A") && (km > 0) && amSegmenteBab && amSegmenteBab[strName]) {
+            for (let s of amSegmenteBab[strName]) {
+                if (km >= s.von && km <= s.bis) {
+                    let kontakte = holeAdresseUndTelefon(s.name);
+                    return { name: s.name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: "", distMeter: 0 };
+                }
+            }
+        }
+    } catch (e) {}
+
     let anchorPt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
     let idx = lookupAmAusIndex(strName, km, anchorPt);
     if (idx && idx.name && idx.name !== "Nicht in DB") {
@@ -2612,6 +2636,7 @@ function toggleGPS(){
     } else {
        if(!navigator.geolocation) return zeigeGpsInfo("GPS nicht unterstützt");
        btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); zeigeGpsInfo("⏳ Suche Signal...");
+        // AM-Grenzen sind als feste Datei geladen; kein Runtime-Build nötig.
         watchId = navigator.geolocation.watchPosition(pos => {
            queueVerarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
         }, err => { zeigeGpsInfo("❌ GPS-Fehler: " + err.message); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 27000 });
@@ -3421,6 +3446,18 @@ function sammleAmGrenzKm(segments, kmVon, kmBis) {
 }
 
 function sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt) {
+    // If we already have hard, precomputed AM boundaries for this BAB, use them.
+    // This avoids sampling error and keeps boundaries stable across sessions.
+    try {
+        if (amGrenzenBab && amGrenzenBab[strName] && Array.isArray(amGrenzenBab[strName])) {
+            let gr = amGrenzenBab[strName]
+                .map(e => Number(e.km))
+                .filter(k => isFinite(k) && k >= kmVon - 0.02 && k <= kmBis + 0.02)
+                .sort((a, b) => a - b);
+            return { grenzKm: gr, amSegs: (amSegmenteBab && amSegmenteBab[strName]) ? amSegmenteBab[strName] : [] };
+        }
+    } catch (e) {}
+
     let mid = (kmVon + kmBis) / 2;
     let region = waehleStreckenRegion(strName, mid, pt);
     let amSegs = (region && region.am && region.am.length) ? bereinigeAmSegmente(region.am) : [];
@@ -3722,6 +3759,8 @@ function openPositionPruefen() {
         alert("Position konnte nicht ermittelt werden.");
         return;
     }
+
+    // AM-Grenzen sind als feste Datei geladen; kein Runtime-Build nötig.
 
     schliesseSidebar();
     setzeMenuSichtbarkeit(false);
