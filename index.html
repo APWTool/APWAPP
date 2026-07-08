@@ -1511,6 +1511,7 @@ function holeKoordinateFuerKM(autobahn, km, pt) {
     if (passende.length === 0) return null;
 
     let mitKm = referenzPunkteMitKm(passende);
+    if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km);
     let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
     let cluster = waehleKmCluster(mitKm, km, anchorPt, autobahn);
     if (cluster && cluster.length > 1) cluster = cluster.slice().sort((a, b) => a.km - b.km);
