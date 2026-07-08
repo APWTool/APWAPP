@@ -3366,6 +3366,34 @@ function punktUndBearingAufFahrbahn(strName, km) {
         let ptNach = turf.along(feature, Math.min(lineLen, alongKm + delta), { units: "kilometers" });
         bearing = turf.bearing(ptVor, ptNach);
     } catch (e) {}
+
+    // #region agent log
+    try {
+        if (strName === "A46" && km >= 75 && km <= 90) {
+            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '2a3a11',
+                },
+                body: JSON.stringify({
+                    sessionId: '2a3a11',
+                    runId: 'ui-a46',
+                    hypothesisId: 'UI1',
+                    location: 'index.html:punktUndBearingAufFahrbahn',
+                    message: 'A46 boundary line placement',
+                    data: {
+                        kmRequested: km,
+                        coords,
+                        bearing,
+                    },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => {});
+        }
+    } catch (e) {}
+    // #endregion agent log
+
     return { coords: coords, bearing: bearing };
 }
 
