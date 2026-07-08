@@ -1529,13 +1529,17 @@ function holeKoordinateFuerKM(autobahn, km, pt) {
         if (!needFallback && Math.abs(after.km - before.km) > 8) needFallback = true;
         if (needFallback && mitKm && mitKm.length >= 2) {
             let win = mitKm.filter(p => Math.abs(p.km - km) <= 4.0);
-            if (win.length < 2) win = mitKm.slice(Math.max(0, Math.floor(mitKm.length / 2) - 60), Math.min(mitKm.length, Math.floor(mitKm.length / 2) + 60));
-            if (pt && win.length > 2) {
-                win.forEach(p => {
-                    try { p.__geo = turf.distance(pt, turf.point(p.coord), { units: "kilometers" }); } catch (e) { p.__geo = 999; }
-                });
-                win.sort((a, b) => (a.__geo || 999) - (b.__geo || 999));
-                win = win.slice(0, Math.min(30, win.length));
+            if (win.length < 2) win = mitKm;
+            if (pt && win.length > 30) {
+                win = win
+                    .map(p => {
+                        let d = 999;
+                        try { d = turf.distance(pt, turf.point(p.coord), { units: "kilometers" }); } catch (e) {}
+                        return { p, d };
+                    })
+                    .sort((a, b) => a.d - b.d)
+                    .slice(0, 30)
+                    .map(x => x.p);
             }
             win = win.slice().sort((a, b) => a.km - b.km);
             let b2 = null, a2 = null;
@@ -1543,62 +1547,9 @@ function holeKoordinateFuerKM(autobahn, km, pt) {
                 if (p.km <= km) b2 = p;
                 if (p.km >= km && !a2) a2 = p;
             });
-            if (b2 || a2) {
-                before = b2;
-                after = a2;
-                // #region agent log
-                try {
-                    if (autobahn === "A46" && km >= 75 && km <= 90) {
-                        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2a3a11' },
-                            body: JSON.stringify({
-                                sessionId: '2a3a11',
-                                runId: 'ui-a46',
-                                hypothesisId: 'UI3',
-                                location: 'index.html:holeKoordinateFuerKM',
-                                message: 'Fallback bracketing refs selected',
-                                data: {
-                                    kmRequested: km,
-                                    anchorProvided: !!pt,
-                                    before: before ? { km: before.km, coord: before.coord } : null,
-                                    after: after ? { km: after.km, coord: after.coord } : null,
-                                    winCount: win.length,
-                                },
-                                timestamp: Date.now(),
-                            }),
-                        }).catch(() => {});
-                    }
-                } catch (e) {}
-                // #endregion agent log
-            }
+            if (b2 || a2) { before = b2; after = a2; }
         }
     } catch (e) {}
-
-    // #region agent log
-    try {
-        if (autobahn === "A46" && km >= 75 && km <= 90) {
-            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2a3a11' },
-                body: JSON.stringify({
-                    sessionId: '2a3a11',
-                    runId: 'ui-a46',
-                    hypothesisId: 'UI2',
-                    location: 'index.html:holeKoordinateFuerKM',
-                    message: 'A46 km -> coord endpoints selected',
-                    data: {
-                        kmRequested: km,
-                        anchorProvided: !!pt,
-                        before: before ? { km: before.km, coord: before.coord } : null,
-                        after: after ? { km: after.km, coord: after.coord } : null,
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => {});
-        }
-    } catch (e) {}
-    // #endregion agent log
 
     return interpoliereKmKoordinate(before, after, km);
 }
@@ -3448,33 +3399,6 @@ function punktUndBearingAufFahrbahn(strName, km, pt) {
         bearing = turf.bearing(ptVor, ptNach);
     } catch (e) {}
 
-    // #region agent log
-    try {
-        if (strName === "A46" && km >= 75 && km <= 90) {
-            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '2a3a11',
-                },
-                body: JSON.stringify({
-                    sessionId: '2a3a11',
-                    runId: 'ui-a46',
-                    hypothesisId: 'UI1',
-                    location: 'index.html:punktUndBearingAufFahrbahn',
-                    message: 'A46 boundary line placement',
-                    data: {
-                        kmRequested: km,
-                        coords,
-                        bearing,
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => {});
-        }
-    } catch (e) {}
-    // #endregion agent log
-
     return { coords: coords, bearing: bearing };
 }
 
@@ -3563,65 +3487,9 @@ function sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt) {
                 .map(e => Number(e.km))
                 .filter(k => isFinite(k) && k >= kmVon - 0.02 && k <= kmBis + 0.02)
                 .sort((a, b) => a - b);
-
-            // #region agent log
-            try {
-                if (strName === "A46" && kmVon <= 82.5 && kmBis >= 78.0) {
-                    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2a3a11' },
-                        body: JSON.stringify({
-                            sessionId: '2a3a11',
-                            runId: 'ui-a46',
-                            hypothesisId: 'UI0',
-                            location: 'index.html:sammleAmGrenzenFuerKarte',
-                            message: 'Using precomputed AM_Grenzen_BAB.json boundaries',
-                            data: {
-                                strName,
-                                kmVon,
-                                kmBis,
-                                amGrenzenBabLoaded: !!amGrenzenBab,
-                                amGrenzenBabKeys: amGrenzenBab ? Object.keys(amGrenzenBab).length : 0,
-                                entriesTotal: amGrenzenBab[strName].length,
-                                grenzKmInWindow: gr,
-                            },
-                            timestamp: Date.now(),
-                        }),
-                    }).catch(() => {});
-                }
-            } catch (e) {}
-            // #endregion agent log
-
             return { grenzKm: gr, amSegs: (amSegmenteBab && amSegmenteBab[strName]) ? amSegmenteBab[strName] : [] };
         }
     } catch (e) {}
-
-    // #region agent log
-    try {
-        if (strName === "A46" && kmVon <= 82.5 && kmBis >= 78.0) {
-            fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2a3a11' },
-                body: JSON.stringify({
-                    sessionId: '2a3a11',
-                    runId: 'ui-a46',
-                    hypothesisId: 'UI0',
-                    location: 'index.html:sammleAmGrenzenFuerKarte',
-                    message: 'Precomputed AM boundaries unavailable; falling back',
-                    data: {
-                        strName,
-                        kmVon,
-                        kmBis,
-                        hasAmGrenzenBab: !!amGrenzenBab,
-                        hasEntryForRoad: !!(amGrenzenBab && amGrenzenBab[strName]),
-                        hasSegmenteBab: !!(amSegmenteBab && amSegmenteBab[strName]),
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => {});
-        }
-    } catch (e) {}
-    // #endregion agent log
 
     let mid = (kmVon + kmBis) / 2;
     let region = waehleStreckenRegion(strName, mid, pt);
