@@ -29,8 +29,9 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; padding: 0 44px; box-sizing: border-box; }
 .theme-switch { position: absolute; top: 10px; right: 8px; z-index: 2; cursor: pointer; font-size: 20px; user-select: none; }
 .home-switch {
-    position: absolute; top: 10px; right: 4px; z-index: 2; cursor: pointer; font-size: 26px; user-select: none;
-    color: #dc3545; font-weight: bold; background: none; border: none; padding: 0; line-height: 1;
+    position: absolute; top: 10px; right: 10px; z-index: 2; width: auto; margin: 0;
+    cursor: pointer; font-size: 26px; user-select: none;
+    color: #dc3545; font-weight: bold; background: transparent; border: none; padding: 0; line-height: 1;
     transform: scaleX(-1);
 }
 .home-switch:hover { opacity: 0.8; }
@@ -680,7 +681,11 @@ function hefteNavigationAnSeite(pageId) {
         }
     }
     if (home) {
-        if (!aufStart) page.insertBefore(home, menu ? menu.nextSibling : page.firstChild);
+        if (!aufStart) {
+            let h2 = page.querySelector('h2');
+            if (h2) page.insertBefore(home, h2);
+            else page.appendChild(home);
+        }
         home.style.display = aufStart ? 'none' : '';
     }
 }
