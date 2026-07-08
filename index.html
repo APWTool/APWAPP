@@ -1522,6 +1522,59 @@ function holeKoordinateFuerKM(autobahn, km, pt) {
         if (item.km >= km && !after) after = item;
     });
 
+    // If cluster does not bracket the requested km, we would snap to a single ref point.
+    // Fall back to a local km window (and optionally geo-anchor to pt) to pick a real before/after pair.
+    try {
+        let needFallback = (!before || !after || before === after);
+        if (!needFallback && Math.abs(after.km - before.km) > 8) needFallback = true;
+        if (needFallback && mitKm && mitKm.length >= 2) {
+            let win = mitKm.filter(p => Math.abs(p.km - km) <= 4.0);
+            if (win.length < 2) win = mitKm.slice(Math.max(0, Math.floor(mitKm.length / 2) - 60), Math.min(mitKm.length, Math.floor(mitKm.length / 2) + 60));
+            if (pt && win.length > 2) {
+                win.forEach(p => {
+                    try { p.__geo = turf.distance(pt, turf.point(p.coord), { units: "kilometers" }); } catch (e) { p.__geo = 999; }
+                });
+                win.sort((a, b) => (a.__geo || 999) - (b.__geo || 999));
+                win = win.slice(0, Math.min(30, win.length));
+            }
+            win = win.slice().sort((a, b) => a.km - b.km);
+            let b2 = null, a2 = null;
+            win.forEach(p => {
+                if (p.km <= km) b2 = p;
+                if (p.km >= km && !a2) a2 = p;
+            });
+            if (b2 || a2) {
+                before = b2;
+                after = a2;
+                // #region agent log
+                try {
+                    if (autobahn === "A46" && km >= 75 && km <= 90) {
+                        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2a3a11' },
+                            body: JSON.stringify({
+                                sessionId: '2a3a11',
+                                runId: 'ui-a46',
+                                hypothesisId: 'UI3',
+                                location: 'index.html:holeKoordinateFuerKM',
+                                message: 'Fallback bracketing refs selected',
+                                data: {
+                                    kmRequested: km,
+                                    anchorProvided: !!pt,
+                                    before: before ? { km: before.km, coord: before.coord } : null,
+                                    after: after ? { km: after.km, coord: after.coord } : null,
+                                    winCount: win.length,
+                                },
+                                timestamp: Date.now(),
+                            }),
+                        }).catch(() => {});
+                    }
+                } catch (e) {}
+                // #endregion agent log
+            }
+        }
+    } catch (e) {}
+
     // #region agent log
     try {
         if (autobahn === "A46" && km >= 75 && km <= 90) {
