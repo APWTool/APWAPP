@@ -1314,6 +1314,10 @@ function waehleParallelesSegment(kandidaten, referenzPt) {
 }
 
 function ermittleFahrbahnPosition(strName, km, achse = "") {
+    if (strName && strName.startsWith("A") && referenzPunkte.length > 0) {
+        let exakt = ermittlePruefFahrbahnPosition(strName, km, achse);
+        if (exakt && exakt.coords) return exakt;
+    }
     let anchor = holeKontextAnkerPt(strName, km, null);
     let kmOpts = holeBkmKorridorAnker(strName, km) ? { kmOnly: true } : {};
     let coords = holeKoordinateFuerKM(strName, km, anchor, kmOpts);
@@ -4076,16 +4080,10 @@ function ermittleKontextKartenPunkt(strName, km, achse) {
     if (!strName) strName = aktiveStrasse || "";
     if (!(km > 0)) km = 0;
 
-    if (aktiveLat !== 0 && strName && aktiveStrasse === strName) {
-        if (!(km > 0) || Math.abs(aktiveKM - km) < 0.05) {
-            return { pt: turf.point([aktiveLon, aktiveLat]), coords: [aktiveLon, aktiveLat], quelle: "aktiv" };
-        }
-    }
-
     if (km > 0 && strName) {
-        let pos = ermittleFahrbahnPosition(strName, km, achse);
+        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
         if (pos && pos.coords) {
-            return { pt: turf.point(pos.coords), coords: pos.coords, quelle: "fahrbahn" };
+            return { pt: turf.point(pos.coords), coords: pos.coords, quelle: "exakt-bkm" };
         }
     }
 
@@ -4163,7 +4161,7 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
     if (!strName || !(km > 0) || isNaN(km)) return null;
     let anchorPt = holeKontextAnkerPt(strName, km, null);
     let coords = holeKoordinateFuerKM(strName, km, anchorPt, { kmOnly: true });
-    if (!coords) return ermittleFahrbahnPosition(strName, km, achse);
+    if (!coords) return null;
 
     let basisPt = turf.point(coords);
     let zielAchse = normalisiereAchse(achse) || "Bestandsachse";
@@ -4179,16 +4177,14 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
 
     let bestandSnap = null;
     let snapCoords = null;
+    let alongKm = null;
+    let snapMethode = "nearest";
     try {
-        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature, { pt: anchorPt || basisPt });
+        alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature, { pt: anchorPt || basisPt });
         if (alongKm !== null && alongKm >= 0) {
-            let alongSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
-            let alongCoords = turf.getCoord(alongSnap);
-            let distBasisAlong = turf.distance(basisPt, turf.point(alongCoords), { units: "kilometers" });
-            if (distBasisAlong < 0.6) {
-                bestandSnap = alongSnap;
-                snapCoords = alongCoords;
-            }
+            bestandSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
+            snapCoords = turf.getCoord(bestandSnap);
+            snapMethode = "along";
         }
     } catch (e) {}
     if (!bestandSnap) {
@@ -4196,6 +4192,18 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
         snapCoords = turf.getCoord(bestandSnap);
     }
     let locationKm = bestandSnap.properties.location || 0;
+  // #region agent log
+    (function() {
+        let passende = holeReferenzFuerStrasse(strName);
+        let mitKm = referenzPunkteMitKm(passende);
+        let nRef = null, nDist = null;
+        mitKm.forEach(r => {
+            let d = Math.abs(r.km - km);
+            if (nDist === null || d < nDist) { nDist = d; nRef = r.km; }
+        });
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittlePruefFahrbahnPosition',message:'bkm snap',data:{strName:strName,km:km,alongKm:alongKm,snapMethode:snapMethode,coords:snapCoords,nearestRefKm:nRef,nearestRefDelta:nDist},timestamp:Date.now(),hypothesisId:'H-exakt',runId:'bkm-exakt'})}).catch(()=>{});
+    })();
+  // #endregion
 
     if (!zielAchse || zielAchse === "Bestandsachse") {
         return {
@@ -4248,6 +4256,22 @@ function holeAktuellePruefPosition() {
     return { strName: strName, km: km, achse: achse, pt: kartenPunkt.pt };
 }
 
+function projiziereRefsAufLinie(mitKm, feature, maxLineDist) {
+    maxLineDist = maxLineDist || 2.5;
+    let seen = {};
+    return mitKm.map(p => {
+        try {
+            let refPt = turf.point(p.coord);
+            if (turf.pointToLineDistance(refPt, feature, { units: "kilometers" }) > maxLineDist) return null;
+            let sn = turf.nearestPointOnLine(feature, refPt, { units: "kilometers" });
+            let kmKey = (Math.round(p.km * 1000) / 1000).toFixed(3);
+            if (seen[kmKey]) return null;
+            seen[kmKey] = true;
+            return { km: p.km, along: sn.properties.location || 0 };
+        } catch (e) { return null; }
+    }).filter(Boolean).sort((a, b) => a.km - b.km);
+}
+
 function berechneAlongFuerKm(strName, km, feature, opts) {
     opts = opts || {};
     let passende = holeReferenzFuerStrasse(strName);
@@ -4259,14 +4283,12 @@ function berechneAlongFuerKm(strName, km, feature, opts) {
     if (!anchorPt && letzteLat !== 0) anchorPt = turf.point([letzteLon, letzteLat]);
     if (!anchorPt) anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
     let chain = waehleReferenzGeoKette(mitKm, km, strName, { kmOnly: true, pt: anchorPt });
-    let refs = chain.map(p => {
-        try {
-            let refPt = turf.point(p.coord);
-            if (turf.pointToLineDistance(refPt, feature, { units: "kilometers" }) > 2.5) return null;
-            let sn = turf.nearestPointOnLine(feature, refPt, { units: "kilometers" });
-            return { km: p.km, along: sn.properties.location || 0 };
-        } catch (e) { return null; }
-    }).filter(Boolean).sort((a, b) => a.km - b.km);
+    let korridorRefs = filtereRefsImGleichenKorridor(mitKm, chain, strName, km, km - 3, km + 3, 4.5, anchorPt);
+    let quelle = korridorRefs.length >= 2 ? korridorRefs : chain;
+    let refs = projiziereRefsAufLinie(quelle, feature);
+    if (refs.length < 2) {
+        refs = projiziereRefsAufLinie(mitKm.filter(r => Math.abs(r.km - km) <= 4), feature);
+    }
     if (refs.length < 1) return null;
     let before = null;
     let after = null;
@@ -4274,9 +4296,22 @@ function berechneAlongFuerKm(strName, km, feature, opts) {
         if (r.km <= km) before = r;
         if (r.km >= km && !after) after = r;
     });
-    if (before && after && before !== after && Math.abs(after.km - before.km) > 1e-6) {
+    if (before && after && Math.abs(after.km - before.km) > 1e-6) {
         let t = (km - before.km) / (after.km - before.km);
         return before.along + t * (after.along - before.along);
+    }
+    if (before && after && before !== after) {
+        let t = (km - before.km) / (after.km - before.km);
+        return before.along + t * (after.along - before.along);
+    }
+    if (refs.length >= 2) {
+        let r0 = refs[0];
+        let r1 = refs[refs.length - 1];
+        if (Math.abs(r1.km - r0.km) > 1e-6) {
+            let t = (km - r0.km) / (r1.km - r0.km);
+            t = Math.max(0, Math.min(1, t));
+            return r0.along + t * (r1.along - r0.along);
+        }
     }
     if (before) return before.along;
     if (after) return after.along;
