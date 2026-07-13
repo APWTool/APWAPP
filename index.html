@@ -1762,13 +1762,22 @@ function waehleKmCluster(mitKm, km, pt, strName, opts) {
 function holeBkmInterpolationsAnker(strName, km) {
     let bkm = holeBkmKorridorAnker(strName, km);
     if (bkm) return bkm;
-    let disambiguierungsPt = null;
     if (aktiveLat !== 0 && strName === aktiveStrasse && Math.abs(aktiveKM - km) <= 1.5) {
-        disambiguierungsPt = turf.point([aktiveLon, aktiveLat]);
+        return turf.point([aktiveLon, aktiveLat]);
     }
-    let wache = findeWacheFuerAutobahnKm(strName, km, disambiguierungsPt);
-    if (wache && wachenAnker[wache]) return turf.point(wachenAnker[wache]);
-    return turf.point(holeKmAnkerFuerAutobahn(strName, km));
+    if (aktuelleWache) {
+        let gAkt = datenWachen[aktuelleWache]?.grenzen?.[strName];
+        if (gAkt && km >= Math.min(...gAkt) && km <= Math.max(...gAkt) && wachenAnker[aktuelleWache]) {
+            return turf.point(wachenAnker[aktuelleWache]);
+        }
+    }
+    for (let wache in datenWachen) {
+        let g = datenWachen[wache].grenzen[strName];
+        if (g && km >= Math.min(...g) && km <= Math.max(...g) && wachenAnker[wache]) {
+            return turf.point(wachenAnker[wache]);
+        }
+    }
+    return turf.point(holeKmAnkerKoordinaten());
 }
 
 function findeKmGeoBracket(refs, km, anchorPt) {
@@ -1854,7 +1863,7 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
     let anchorPt;
     if (opts.kmOnly) {
-        anchorPt = holeBkmInterpolationsAnker(autobahn, km);
+        anchorPt = pt || holeBkmKorridorAnker(autobahn, km) || holeBkmInterpolationsAnker(autobahn, km);
     } else {
         anchorPt = pt || holeBkmKorridorAnker(autobahn, km);
         if (!anchorPt && letzteLat !== 0) anchorPt = turf.point([letzteLon, letzteLat]);
