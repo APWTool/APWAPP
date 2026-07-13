@@ -4054,13 +4054,47 @@ function distanzMapAktion() {
     aktualisiereDistanzDarstellung(false);
 }
 
-function ermittleKontextKartenPunkt(strName, km, achse) {
-    if (km > 0 && strName) {
-        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
-        if (pos && pos.coords) return { pt: turf.point(pos.coords), coords: pos.coords, quelle: "bkm" };
+function holeAngezeigteKm(aufDuessel) {
+    let el = document.getElementById(aufDuessel ? "km-duessel" : "km");
+    if (el && el.value.trim()) {
+        let uiKm = parseFloat(el.value.replace(",", "."));
+        if (uiKm > 0 && !isNaN(uiKm)) return uiKm;
     }
-    if (aktiveLat !== 0) return { pt: turf.point([aktiveLon, aktiveLat]), coords: [aktiveLon, aktiveLat], quelle: "aktiv" };
-    if (letzteLat !== 0) return { pt: turf.point([letzteLon, letzteLat]), coords: [letzteLon, letzteLat], quelle: "gps" };
+    return aktiveKM > 0 ? aktiveKM : 0;
+}
+
+function holeAngezeigteAutobahn(aufDuessel) {
+    return aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value || "";
+}
+
+function holeAngezeigteAchse(aufDuessel) {
+    let el = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung");
+    return (el && el.value) || aktiveAchse || "Bestandsachse";
+}
+
+function ermittleKontextKartenPunkt(strName, km, achse) {
+    if (!strName) strName = aktiveStrasse || "";
+    if (!(km > 0)) km = 0;
+
+    if (aktiveLat !== 0 && strName && aktiveStrasse === strName) {
+        if (!(km > 0) || Math.abs(aktiveKM - km) < 0.05) {
+            return { pt: turf.point([aktiveLon, aktiveLat]), coords: [aktiveLon, aktiveLat], quelle: "aktiv" };
+        }
+    }
+
+    if (km > 0 && strName) {
+        let pos = ermittleFahrbahnPosition(strName, km, achse);
+        if (pos && pos.coords) {
+            return { pt: turf.point(pos.coords), coords: pos.coords, quelle: "fahrbahn" };
+        }
+    }
+
+    if (aktiveLat !== 0) {
+        return { pt: turf.point([aktiveLon, aktiveLat]), coords: [aktiveLon, aktiveLat], quelle: "aktiv-fallback" };
+    }
+    if (letzteLat !== 0) {
+        return { pt: turf.point([letzteLon, letzteLat]), coords: [letzteLon, letzteLat], quelle: "gps" };
+    }
     return { pt: null, coords: null, quelle: "keine" };
 }
 
@@ -4070,20 +4104,17 @@ function openDistanzMessen() {
         return;
     }
     let aufDuessel = istDuesselAktiv();
-    let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
-    let km = aktiveKM;
-    if (!(km > 0)) {
-        let raw = document.getElementById(aufDuessel ? "km-duessel" : "km").value.replace(",", ".");
-        km = parseFloat(raw);
-    }
-    let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
+    let strName = holeAngezeigteAutobahn(aufDuessel);
+    let km = holeAngezeigteKm(aufDuessel);
+    let achse = holeAngezeigteAchse(aufDuessel);
     if (!(km > 0) && !aktiveLat && !letzteLat) {
         alert("Bitte Kilometer eingeben oder GPS-Position erfassen.");
         return;
     }
     let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
+    let pruefPos = (km > 0 && strName) ? ermittlePruefFahrbahnPosition(strName, km, achse) : null;
   // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:openDistanzMessen',message:'karten punkt',data:{strName:strName,km:km,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,anchor:bkmKorridorAnkerPt?bkmKorridorAnkerPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-pos',runId:'distanz-fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:openDistanzMessen',message:'pos compare',data:{strName:strName,km:km,uiKm:holeAngezeigteKm(aufDuessel),aktiveKM:aktiveKM,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,aktiv:[aktiveLon,aktiveLat],pruef:pruefPos?pruefPos.coords:null,anchor:bkmKorridorAnkerPt?bkmKorridorAnkerPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-pos',runId:'marker-fix'})}).catch(()=>{});
   // #endregion
     if (!kartenPunkt.pt) {
         alert("Position konnte nicht ermittelt werden.");
@@ -4207,16 +4238,12 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
 
 function holeAktuellePruefPosition() {
     let aufDuessel = istDuesselAktiv();
-    let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
-    let km = aktiveKM;
-    if (!(km > 0)) {
-        let raw = document.getElementById(aufDuessel ? "km-duessel" : "km").value.replace(",", ".");
-        km = parseFloat(raw);
-    }
-    let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
+    let strName = holeAngezeigteAutobahn(aufDuessel);
+    let km = holeAngezeigteKm(aufDuessel);
+    let achse = holeAngezeigteAchse(aufDuessel);
     let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
   // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeAktuellePruefPosition',message:'kontext punkt',data:{strName:strName,km:km,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords},timestamp:Date.now(),hypothesisId:'H-pos',runId:'distanz-fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeAktuellePruefPosition',message:'pos compare',data:{strName:strName,km:km,aktiveKM:aktiveKM,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,aktiv:[aktiveLon,aktiveLat]},timestamp:Date.now(),hypothesisId:'H-pos',runId:'marker-fix'})}).catch(()=>{});
   // #endregion
     return { strName: strName, km: km, achse: achse, pt: kartenPunkt.pt };
 }
@@ -4827,9 +4854,9 @@ function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
 
 function zeichnePositionsPruefung(strName, km, achse, pt) {
     if (!map) return;
-    if (strName && km > 0) {
-        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
-        if (pos && pos.coords) pt = turf.point(pos.coords);
+    if (!pt && strName && km > 0) {
+        let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
+        if (kartenPunkt.pt) pt = kartenPunkt.pt;
     }
     pruefCtxCache = { strName: strName, km: km || 0, achse: achse, pt: pt };
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
@@ -4877,20 +4904,14 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
         let pc = pt.geometry.coordinates;
         L.circleMarker([pc[1], pc[0]], { radius: 1, opacity: 0, fillOpacity: 0 }).addTo(focusLayer);
     }
-    if (strName && strName.startsWith("A") && km > 0) {
-        holeRefsFuerPruefKarte(strName, strName, km, kmVon, kmBis).forEach(r => {
-            L.circleMarker([r.coord[1], r.coord[0]], { radius: 1, opacity: 0, fillOpacity: 0 }).addTo(focusLayer);
-        });
-    }
     try {
-        if (focusLayer.getLayers().length > 0) {
-            let bounds = focusLayer.getBounds();
-            if (bounds.isValid()) {
-                map.fitBounds(bounds.pad(0.3));
-            }
-        } else if (pt) {
+        if (pt) {
             let pc = pt.geometry.coordinates;
-            map.setView([pc[1], pc[0]], 15);
+            map.setView([pc[1], pc[0]], Math.max(map.getZoom() || 15, 15));
+        }
+        if (focusLayer.getLayers().length > 1) {
+            let bounds = focusLayer.getBounds();
+            if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
         }
     } catch (e) {}
 }
@@ -4916,13 +4937,6 @@ function openPositionPruefen() {
             bkm = validiereBkmPlausibilitaet(ctx.pt, ctx.strName, bkm);
             if (bkm > 0) ctx.km = bkm;
         }
-    }
-    if (ctx.km > 0 && ctx.strName) {
-        let pos = ermittlePruefFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
-        if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
-    } else if (!ctx.pt && ctx.km > 0) {
-        let pos = ermittlePruefFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
-        if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
     }
     if (!ctx.pt) {
         alert("Position konnte nicht ermittelt werden.");
