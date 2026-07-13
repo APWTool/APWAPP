@@ -574,6 +574,7 @@ let streckenIndex = null;
 let meistereiMap = { am: {}, sm: {} }; 
 let amGrenzenBab = null; // { A3: [ {km, links, rechts}, ... ], ... }
 let amSegmenteBab = null; // { A3: [ {von,bis,name}, ... ], ... }
+let amGrenzenKorridore = null; // { A3: [ { mid, kmVon, kmBis, grenzen, segmente }, ... ], ... }
 let amGrenzenBabPromise = null; // legacy (kept to avoid ref errors if any)
 let letzteLat = 0, letzteLon = 0, letzteAcc = 0; 
 let aktiveLat = 0, aktiveLon = 0, aktiveKM = 0; 
@@ -978,6 +979,7 @@ async function ladeAlleGeoDaten() {
         if (amGrenzenData && amGrenzenData.autobahnen && amGrenzenData.segmente) {
             amGrenzenBab = amGrenzenData.autobahnen;
             amSegmenteBab = amGrenzenData.segmente;
+            amGrenzenKorridore = amGrenzenData.korridore || null;
         }
     } catch (e) {}
     try {
@@ -1347,19 +1349,10 @@ function findeStrassenFeatureFuerPunkt(pt, strName, achse = "") {
 }
 
 function ermittleMeistereiFuerKM(strName, km) {
-    // Prefer precomputed, hard AM segments (from amDatenbank + Berechnung geometry), if available.
-    try {
-        if (strName && strName.startsWith("A") && (km > 0) && amSegmenteBab && amSegmenteBab[strName]) {
-            for (let s of amSegmenteBab[strName]) {
-                if (km >= s.von && km <= s.bis) {
-                    let kontakte = holeAdresseUndTelefon(s.name);
-                    return { name: s.name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: "", distMeter: 0 };
-                }
-            }
-        }
-    } catch (e) {}
+    let anchorPt = holeKontextAnkerPt(strName, km, null);
+    let korridorHit = findeAmBeiKm(strName, km, anchorPt);
+    if (korridorHit) return korridorHit;
 
-    let anchorPt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
     let idx = lookupAmAusIndex(strName, km, anchorPt);
     if (idx && idx.name && idx.name !== "Nicht in DB") {
         let kontakte = holeAdresseUndTelefon(idx.name);
@@ -1499,10 +1492,24 @@ function holeKmAnkerKoordinaten() {
 }
 
 function holeBkmKorridorAnker(autobahn, km) {
-    if (bkmKorridorAnkerPt && bkmKorridorAnkerStr === autobahn && Math.abs(bkmKorridorAnkerKm - km) <= 1.5) {
+    if (bkmKorridorAnkerPt && bkmKorridorAnkerStr === autobahn && Math.abs(bkmKorridorAnkerKm - km) <= 3.0) {
         return bkmKorridorAnkerPt;
     }
     return null;
+}
+
+function holeKontextAnkerPt(strName, km, pt) {
+    if (pt) return pt;
+    let bkm = holeBkmKorridorAnker(strName, km);
+    if (bkm) return bkm;
+    if (aktiveLat !== 0) return turf.point([aktiveLon, aktiveLat]);
+    if (letzteLat !== 0) return turf.point([letzteLon, letzteLat]);
+    return turf.point(holeKmAnkerFuerAutobahn(strName, km));
+}
+
+function koordinateImKorridor(strName, km, pt) {
+    let anchor = holeKontextAnkerPt(strName, km, pt);
+    return holeKoordinateFuerKM(strName, km, anchor, { kmOnly: true });
 }
 
 function holeKmAnkerFuerAutobahn(strName, km) {
@@ -2405,7 +2412,7 @@ function waehleStreckenRegion(strName, km, pt) {
         if (!streckenIndex || !streckenIndex.autobahnen) return null;
         let entry = streckenIndex.autobahnen[strName];
         if (!entry || !entry.regionen || !entry.regionen.length) return null;
-        let anchor = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+        let anchor = holeKontextAnkerPt(strName, km, pt);
         let pool = entry.regionen.slice();
         if (anchor) {
             let near = pool.filter(r => turf.distance(anchor, turf.point(r.mid || [0, 0]), { units: "kilometers" }) <= 40);
@@ -2900,11 +2907,10 @@ function ermittleGemeindeGrenzAbstand(strName, km, achse) {
 }
 
 function naechsterAmWechsel(strName, km) {
-    let pt = (aktiveLat !== 0) ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
-    let region = waehleStreckenRegion(strName, km, pt);
+    let pt = holeKontextAnkerPt(strName, km, null);
     let startAm = ermittleMeistereiFuerKM(strName, km).name;
-    if (region && region.am && region.am.length) {
-        let amListe = bereinigeAmSegmente(region.am);
+    let amListe = waehleAmSegmenteFuerKorridor(strName, km, pt);
+    if (amListe.length) {
         let cur = findeSegmentBeiKm(amListe, km);
         if (cur && cur.name) startAm = cur.name;
         let vor = null, hinter = null;
@@ -3971,9 +3977,114 @@ function findeAngrenzendeNetzabschnitte(absRaw, aktuellesFeature) {
 }
 
 function amNameAnKm(strName, km, pt) {
-    let hit = lookupAmAusIndex(strName, km, pt);
+    let anchor = holeKontextAnkerPt(strName, km, pt);
+    let hit = findeAmBeiKm(strName, km, anchor);
     if (hit && hit.name && hit.name !== "Nicht in DB") return hit.name;
     return ermittleMeistereiFuerKM(strName, km).name;
+}
+
+function baueAmSegmenteAusGrenzen(grenzen, kmMin, kmMax) {
+    let dedup = grenzen.slice().sort((a, b) => a.km - b.km);
+    let segs = [];
+    if (!dedup.length) return segs;
+    for (let i = 0; i < dedup.length; i++) {
+        let b = dedup[i];
+        if (i === 0) segs.push({ von: kmMin, bis: b.km, name: b.links });
+        else segs.push({ von: dedup[i - 1].km, bis: b.km, name: dedup[i - 1].rechts });
+        if (i === dedup.length - 1) segs.push({ von: b.km, bis: kmMax, name: b.rechts });
+    }
+    return bereinigeAmSegmente(segs);
+}
+
+function grenzeGehoertZumKorridor(strName, grenze, kontextKm, pt, maxDistKm) {
+    maxDistKm = maxDistKm || 18;
+    let anchor = holeKontextAnkerPt(strName, kontextKm, pt);
+    let posCoord = koordinateImKorridor(strName, kontextKm, anchor);
+    if (grenze.coord && posCoord) {
+        return turf.distance(turf.point(grenze.coord), turf.point(posCoord), { units: "kilometers" }) <= maxDistKm;
+    }
+    let gCoord = holeKoordinateFuerKM(strName, grenze.km, anchor, { kmOnly: true });
+    if (!posCoord || !gCoord) return true;
+    return turf.distance(turf.point(posCoord), turf.point(gCoord), { units: "kilometers" }) <= maxDistKm;
+}
+
+function filtereAmGrenzenNachKorridor(strName, grenzen, kmVon, kmBis, pt) {
+    let mid = (kmVon + kmBis) / 2;
+    return grenzen.filter(g => {
+        let km = Number(g.km);
+        if (!isFinite(km) || km < kmVon - 0.02 || km > kmBis + 0.02) return false;
+        return grenzeGehoertZumKorridor(strName, g, mid, pt, 18);
+    });
+}
+
+function waehleAmKorridor(strName, km, pt) {
+    if (!amGrenzenKorridore || !amGrenzenKorridore[strName] || !amGrenzenKorridore[strName].length) return null;
+    let anchor = holeKontextAnkerPt(strName, km, pt);
+    let kors = amGrenzenKorridore[strName];
+    let cand = kors.filter(k => km >= k.kmVon - 0.5 && km <= k.kmBis + 0.5);
+    if (!cand.length) cand = kors.slice();
+    cand.sort((a, b) => {
+        let strictA = (km >= a.kmVon && km <= a.kmBis) ? 0 : 1;
+        let strictB = (km >= b.kmVon && km <= b.kmBis) ? 0 : 1;
+        if (strictA !== strictB) return strictA - strictB;
+        let da = turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" });
+        let db = turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" });
+        return da - db;
+    });
+    return cand[0] || null;
+}
+
+function waehleAmSegmenteFuerKorridor(strName, km, pt) {
+    let anchor = holeKontextAnkerPt(strName, km, pt);
+    let korridor = waehleAmKorridor(strName, km, anchor);
+    if (korridor && korridor.segmente && korridor.segmente.length) {
+        return bereinigeAmSegmente(korridor.segmente);
+    }
+
+    let region = waehleStreckenRegion(strName, km, anchor);
+    if (region && region.am && region.am.length) {
+        return bereinigeAmSegmente(region.am);
+    }
+
+    let allGrenzen = (amGrenzenBab && amGrenzenBab[strName]) ? amGrenzenBab[strName] : [];
+    let kmSpan = 30;
+    let gefiltert = filtereAmGrenzenNachKorridor(strName, allGrenzen, km - kmSpan, km + kmSpan, anchor);
+    if (!gefiltert.length && allGrenzen.length) {
+        let posCoord = koordinateImKorridor(strName, km, anchor);
+        if (posCoord) {
+            gefiltert = allGrenzen.map(g => {
+                let gc = g.coord || holeKoordinateFuerKM(strName, g.km, anchor, { kmOnly: true });
+                let d = gc ? turf.distance(turf.point(posCoord), turf.point(gc), { units: "kilometers" }) : 999;
+                return { g, d };
+            }).sort((a, b) => a.d - b.d).filter(x => x.d <= 25).map(x => x.g);
+        }
+    }
+
+    let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(strName));
+    let kmMin = 0;
+    let kmMax = 999;
+    if (mitKm.length) {
+        let chain = waehleReferenzGeoKette(mitKm, km, strName, { kmOnly: true, pt: anchor });
+        if (chain.length) {
+            kmMin = chain[0].km;
+            kmMax = chain[chain.length - 1].km;
+        } else {
+            kmMin = Math.min(...mitKm.map(p => p.km));
+            kmMax = Math.max(...mitKm.map(p => p.km));
+        }
+    }
+    if (gefiltert.length) {
+        return baueAmSegmenteAusGrenzen(gefiltert, kmMin, kmMax);
+    }
+    return (amSegmenteBab && amSegmenteBab[strName]) ? amSegmenteBab[strName] : [];
+}
+
+function findeAmBeiKm(strName, km, pt) {
+    let segs = waehleAmSegmenteFuerKorridor(strName, km, pt);
+    let hit = findeSegmentBeiKm(segs, km, true) || findeSegmentBeiKm(segs, km, false);
+    if (!hit || !hit.name || hit.name === "Nicht in DB") return null;
+    let kontakte = holeAdresseUndTelefon(hit.name);
+    return { name: hit.name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: hit.abs || "", distMeter: 0 };
 }
 
 function sammleAmGrenzKm(segments, kmVon, kmBis) {
@@ -3993,44 +4104,31 @@ function sammleAmGrenzKm(segments, kmVon, kmBis) {
 }
 
 function sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt) {
-    // If we already have hard, precomputed AM boundaries for this BAB, use them.
-    // This avoids sampling error and keeps boundaries stable across sessions.
+    let mid = (kmVon + kmBis) / 2;
+    let anchor = holeKontextAnkerPt(strName, mid, pt);
+    let amSegs = waehleAmSegmenteFuerKorridor(strName, mid, anchor);
+    let grenzKm = sammleAmGrenzKm(amSegs, kmVon, kmBis);
+
     try {
-        if (amGrenzenBab && amGrenzenBab[strName] && Array.isArray(amGrenzenBab[strName])) {
-            let gr = amGrenzenBab[strName]
+        let korridor = waehleAmKorridor(strName, mid, anchor);
+        if (korridor && korridor.grenzen && korridor.grenzen.length) {
+            grenzKm = korridor.grenzen
                 .map(e => Number(e.km))
                 .filter(k => isFinite(k) && k >= kmVon - 0.02 && k <= kmBis + 0.02)
                 .sort((a, b) => a - b);
-            return { grenzKm: gr, amSegs: (amSegmenteBab && amSegmenteBab[strName]) ? amSegmenteBab[strName] : [] };
+        } else if (amGrenzenBab && amGrenzenBab[strName] && Array.isArray(amGrenzenBab[strName])) {
+            let gr = filtereAmGrenzenNachKorridor(strName, amGrenzenBab[strName], kmVon, kmBis, anchor)
+                .map(e => Number(e.km))
+                .filter(k => isFinite(k))
+                .sort((a, b) => a - b);
+            if (gr.length) grenzKm = gr;
         }
     } catch (e) {}
 
-    let mid = (kmVon + kmBis) / 2;
-    let region = waehleStreckenRegion(strName, mid, pt);
-    let amSegs = (region && region.am && region.am.length) ? bereinigeAmSegmente(region.am) : [];
-    if (amSegs.length) {
-        return { grenzKm: sammleAmGrenzKm(amSegs, kmVon, kmBis), amSegs: amSegs };
-    }
-    let schritt = 0.15;
-    let gescannt = [];
-    let grenzKm = [];
-    let cur = null;
-    for (let k = kmVon; k <= kmBis + 0.001; k = Math.round((k + schritt) * 1000) / 1000) {
-        let am = ermittleMeistereiFuerKM(strName, k).name;
-        if (!am || am === "Nicht in DB") continue;
-        if (!cur) {
-            cur = { von: k, bis: k, name: am };
-        } else if (am === cur.name) {
-            cur.bis = k;
-        } else {
-            let grenze = Math.round(((cur.bis + k) / 2) * 1000) / 1000;
-            gescannt.push(cur);
-            grenzKm.push(grenze);
-            cur = { von: grenze, bis: k, name: am };
-        }
-    }
-    if (cur) gescannt.push(cur);
-    return { grenzKm: [...new Set(grenzKm)].sort((a, b) => a - b), amSegs: bereinigeAmSegmente(gescannt) };
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:sammleAmGrenzenFuerKarte',message:'am korridor',data:{strName:strName,kmVon:kmVon,kmBis:kmBis,grenzKm:grenzKm,amSegs:amSegs.map(s=>s.name+' '+s.von+'-'+s.bis)},timestamp:Date.now(),hypothesisId:'H-am',runId:'pruef-a46'})}).catch(()=>{});
+  // #endregion
+    return { grenzKm: grenzKm, amSegs: amSegs };
 }
 
 function amNamenAnGrenzeKm(amSegs, gKm, strName, pt) {
@@ -4049,7 +4147,8 @@ function amNamenAnGrenzeKm(amSegs, gKm, strName, pt) {
 }
 
 function zeichneAmGrenzLinie(strName, gKm, amSegs, pt) {
-    let ql = baueQuerLinieKoordinaten(strName, gKm, "Bestandsachse", 0.06, pt);
+    let anchor = holeKontextAnkerPt(strName, gKm, pt);
+    let ql = baueQuerLinieKoordinaten(strName, gKm, "Bestandsachse", 0.06, anchor);
     if (!ql) return false;
     L.polyline(
         [[ql.linksCoord[1], ql.linksCoord[0]], [ql.rechtsCoord[1], ql.rechtsCoord[0]]],
