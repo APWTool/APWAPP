@@ -1759,6 +1759,36 @@ function waehleKmCluster(mitKm, km, pt, strName, opts) {
     return pool[0];
 }
 
+function holeBkmInterpolationsAnker(strName, km) {
+    let bkm = holeBkmKorridorAnker(strName, km);
+    if (bkm) return bkm;
+    let disambiguierungsPt = null;
+    if (aktiveLat !== 0 && strName === aktiveStrasse && Math.abs(aktiveKM - km) <= 1.5) {
+        disambiguierungsPt = turf.point([aktiveLon, aktiveLat]);
+    }
+    let wache = findeWacheFuerAutobahnKm(strName, km, disambiguierungsPt);
+    if (wache && wachenAnker[wache]) return turf.point(wachenAnker[wache]);
+    return turf.point(holeKmAnkerFuerAutobahn(strName, km));
+}
+
+function findeKmGeoBracket(refs, km, anchorPt) {
+    let sorted = dedupliziereRefsNachKm(refs, anchorPt);
+    let before = null;
+    let after = null;
+    for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].km < km - 1e-4) before = sorted[i];
+        else if (sorted[i].km > km + 1e-4) { after = sorted[i]; break; }
+    }
+    if (!before && sorted.length) before = sorted[0];
+    if (!after && sorted.length) after = sorted[sorted.length - 1];
+    if (before && after && Math.abs(before.km - after.km) < 1e-4) {
+        let ai = sorted.indexOf(after);
+        if (ai >= 0 && ai < sorted.length - 1) after = sorted[ai + 1];
+        else if (ai > 0) before = sorted[ai - 1];
+    }
+    return { before: before, after: after };
+}
+
 function interpoliereKmKoordinate(before, after, km) {
     if (!before && !after) return null;
     if (!before) return after.coord;
@@ -1822,36 +1852,24 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
 
     let mitKm = referenzPunkteMitKm(passende);
     if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
-    let anchorPt = pt;
-    if (!anchorPt) anchorPt = holeBkmKorridorAnker(autobahn, km);
-    if (!anchorPt && !opts.kmOnly && letzteLat !== 0) {
-        anchorPt = turf.point([letzteLon, letzteLat]);
-    }
-    if (!anchorPt && opts.kmOnly) {
-        anchorPt = holeBkmKorridorAnker(autobahn, km) || turf.point(holeKmAnkerFuerAutobahn(autobahn, km));
+    let anchorPt;
+    if (opts.kmOnly) {
+        anchorPt = holeBkmInterpolationsAnker(autobahn, km);
+    } else {
+        anchorPt = pt || holeBkmKorridorAnker(autobahn, km);
+        if (!anchorPt && letzteLat !== 0) anchorPt = turf.point([letzteLon, letzteLat]);
+        if (!anchorPt) anchorPt = holeBkmInterpolationsAnker(autobahn, km);
     }
 
     let chain = waehleReferenzGeoKette(mitKm, km, autobahn, Object.assign({}, opts, { pt: anchorPt }));
-    let before = null;
-    let after = null;
-    chain.forEach(item => {
-        if (item.km <= km) before = item;
-        if (item.km >= km && !after) after = item;
-    });
-
-    if ((!before || !after || before === after) && mitKm.length >= 2) {
-        let win = chain.filter(p => Math.abs(p.km - km) <= 4.0);
-        if (win.length < 2) win = chain;
-        win = win.slice().sort((a, b) => a.km - b.km);
-        let b2 = null, a2 = null;
-        win.forEach(p => {
-            if (p.km <= km) b2 = p;
-            if (p.km >= km && !a2) a2 = p;
-        });
-        if (b2 || a2) { before = b2; after = a2; }
-    }
-
-    return interpoliereKmKoordinate(before, after, km);
+    let bracket = findeKmGeoBracket(chain, km, anchorPt);
+    let result = interpoliereKmKoordinate(bracket.before, bracket.after, km);
+  // #region agent log
+    (function() {
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'geo interp',data:{autobahn:autobahn,km:km,beforeKm:bracket.before?bracket.before.km:null,afterKm:bracket.after?bracket.after.km:null,result:result,anchor:anchorPt?anchorPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-interp',runId:'interp-fix'})}).catch(()=>{});
+    })();
+  // #endregion
+    return result;
 }
  
 function updateRichtungDropdown(a) {
@@ -4157,7 +4175,7 @@ function openDistanzMessen() {
 
 function ermittlePruefFahrbahnPosition(strName, km, achse) {
     if (!strName || !(km > 0) || isNaN(km)) return null;
-    let anchorPt = holeKontextAnkerPt(strName, km, null);
+    let anchorPt = holeBkmInterpolationsAnker(strName, km);
     let coords = holeKoordinateFuerKM(strName, km, anchorPt, { kmOnly: true });
     if (!coords) return null;
 
@@ -4315,9 +4333,7 @@ function berechneAlongFuerKm(strName, km, feature, opts) {
     if (!feature) return null;
     let anchorPt = opts.pt;
     if (!anchorPt && opts.basisCoord) anchorPt = turf.point(opts.basisCoord);
-    if (!anchorPt) anchorPt = holeBkmKorridorAnker(strName, km);
-    if (!anchorPt && letzteLat !== 0) anchorPt = turf.point([letzteLon, letzteLat]);
-    if (!anchorPt) anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
+    if (!anchorPt) anchorPt = holeBkmInterpolationsAnker(strName, km);
     let geoCoord = holeKoordinateFuerKM(strName, km, anchorPt, { kmOnly: true });
     if (!geoCoord) return null;
     try {
