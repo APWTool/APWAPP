@@ -259,7 +259,11 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .distanz-pin-marker--ziel { filter: hue-rotate(-35deg) saturate(1.2); }
 .distanz-map-controls label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 0.9em; font-weight: normal; }
 .distanz-map-controls label input { width: auto; margin: 0; }
-#distanz-ergebnis { margin: 8px 0 0; font-size: 1.05em; color: var(--text-secondary); }
+#distanz-ergebnis { margin: 4px 0 8px; font-size: 1.05em; color: var(--text-secondary); text-align: center; }
+.distanz-map-controls { margin-top: 0; }
+.distanz-map-controls .distanz-btn-row { display: flex; gap: 8px; }
+.distanz-map-controls .distanz-btn-row button { flex: 1; margin-top: 0; }
+.distanz-map-controls .distanz-modus-row { display: flex; justify-content: center; gap: 16px; margin-bottom: 8px; }
 #distanz-hint { margin: 0 0 8px; font-size: 0.88em; text-align: center; color: var(--text-secondary); line-height: 1.4; }
 
 .pruef-grenz-km span {
@@ -358,14 +362,15 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
         <p id="map-hint" style="margin: 0 0 10px 0; font-size: 0.9em; text-align: center;">Bewege die Karte exakt unter die Nadelspitze.</p>
         <button id="map-action-btn" onclick="calculateMapResult()">Hier erfassen</button>
         <div id="distanz-map-controls" class="distanz-map-controls" style="display:none;">
-            <div style="text-align:center; margin-bottom:8px;">
+            <div class="distanz-modus-row">
                 <label><input type="radio" name="distanz_modus" value="luft" checked onchange="setzeDistanzModus('luft')"> Luftlinie</label>
-                <label style="margin-left:14px;"><input type="radio" name="distanz_modus" value="strasse" onchange="setzeDistanzModus('strasse')"> Straßenverlauf</label>
+                <label><input type="radio" name="distanz_modus" value="strasse" onchange="setzeDistanzModus('strasse')"> Straße</label>
             </div>
-            <p id="distanz-hint">Bewege die Karte unter die Nadelspitze und setze den Startpunkt.</p>
             <p id="distanz-ergebnis" style="display:none;"></p>
-            <button type="button" id="distanz-action-btn" onclick="distanzMapAktion()">Startpunkt setzen</button>
-            <button type="button" class="btn-secondary" style="margin-top:8px;" onclick="resetDistanzMessen()">Zurücksetzen</button>
+            <div class="distanz-btn-row">
+                <button type="button" id="distanz-action-btn" onclick="distanzMapAktion()">Start</button>
+                <button type="button" class="btn-secondary" onclick="resetDistanzMessen()">Reset</button>
+            </div>
         </div>
         <div id="nk-map-result"></div>
     </div>
@@ -630,7 +635,13 @@ let distanzZielCoord = null;
 let distanzPhase = "start";
 let distanzModus = "luft";
 let distanzMoveHandler = null;
+let distanzMoveEndHandler = null;
+let distanzRafId = null;
+let distanzStartMarker = null;
+let distanzZielMarker = null;
+let distanzLinie = null;
 let distanzAktuellMarker = null;
+let distanzUpdateZaehler = 0;
 
 if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
    document.documentElement.setAttribute("data-theme", "dark");
@@ -3825,11 +3836,19 @@ function closeMap() {
 
 function entferneDistanzKartenHandler() {
     if (distanzMoveHandler && map) {
-        map.off('move', distanzMoveHandler);
+        map.off("move", distanzMoveHandler);
         distanzMoveHandler = null;
     }
+    if (distanzMoveEndHandler && map) {
+        map.off("moveend", distanzMoveEndHandler);
+        distanzMoveEndHandler = null;
+    }
+    if (distanzRafId) { cancelAnimationFrame(distanzRafId); distanzRafId = null; }
     if (distanzMapLayer && map) { map.removeLayer(distanzMapLayer); distanzMapLayer = null; }
     if (distanzAktuellMarker && map) { map.removeLayer(distanzAktuellMarker); distanzAktuellMarker = null; }
+    distanzStartMarker = null;
+    distanzZielMarker = null;
+    distanzLinie = null;
     distanzStartCoord = null;
     distanzZielCoord = null;
     distanzPhase = "start";
@@ -3848,7 +3867,7 @@ function distanzPinIcon(typ) {
 
 function setzeDistanzModus(modus) {
     distanzModus = modus === "strasse" ? "strasse" : "luft";
-    if (distanzStartCoord) aktualisiereDistanzDarstellung();
+    if (distanzStartCoord) aktualisiereDistanzDarstellung(false);
 }
 
 function formatiereDistanzAnzeige(meter) {
@@ -3863,27 +3882,8 @@ function holeKartenMitteCoord() {
     return [c.lng, c.lat];
 }
 
-function berechneDistanzZwischenPunkten(startCoord, zielCoord, modus) {
-    if (!startCoord || !zielCoord) return { ok: false, distM: 0, line: null, hinweis: "" };
-    let startPt = turf.point(startCoord);
-    let zielPt = turf.point(zielCoord);
-    if (modus === "strasse") {
-        let strasse = berechneDistanzStrassenverlauf(startCoord, zielCoord);
-        if (strasse.ok) return strasse;
-        let luftM = turf.distance(startPt, zielPt, { units: "kilometers" }) * 1000;
-        return {
-            ok: true,
-            distM: luftM,
-            line: turf.lineString([startCoord, zielCoord]),
-            hinweis: strasse.grund ? " (Straßenverlauf nicht ermittelbar – Luftlinie)" : ""
-        };
-    }
-    return {
-        ok: true,
-        distM: turf.distance(startPt, zielPt, { units: "kilometers" }) * 1000,
-        line: turf.lineString([startCoord, zielCoord]),
-        hinweis: ""
-    };
+function berechneDistanzLuftlinie(startCoord, zielCoord) {
+    return turf.distance(turf.point(startCoord), turf.point(zielCoord), { units: "kilometers" }) * 1000;
 }
 
 function berechneDistanzStrassenverlauf(startCoord, zielCoord) {
@@ -3895,79 +3895,129 @@ function berechneDistanzStrassenverlauf(startCoord, zielCoord) {
     if (!startHits.length || !zielHits.length) {
         return { ok: false, distM: 0, line: null, grund: "Keine Straße in der Nähe" };
     }
-    let features = [];
-    let pushFeat = f => { if (f && !features.includes(f)) features.push(f); };
-    pushFeat(startHits[0].feature);
-    pushFeat(zielHits[0].feature);
-    if (startHits[0].name === zielHits[0].name) {
-        holeStrassenListeFuerName(startHits[0].name).forEach(pushFeat);
+    let features = [startHits[0].feature, zielHits[0].feature];
+    if (startHits[0].name === zielHits[0].name && startHits[0].feature !== zielHits[0].feature) {
+        let liste = holeStrassenListeFuerName(startHits[0].name);
+        if (liste.length > 0 && liste.length <= 12) liste.forEach(f => { if (!features.includes(f)) features.push(f); });
     }
     let best = null;
     features.forEach(feat => {
         try {
             let s = turf.nearestPointOnLine(feat, startPt, { units: "kilometers" });
             let e = turf.nearestPointOnLine(feat, zielPt, { units: "kilometers" });
-            let distStart = turf.distance(startPt, s, { units: "kilometers" });
-            let distZiel = turf.distance(zielPt, e, { units: "kilometers" });
-            if (distStart > 0.25 || distZiel > 0.25) return;
+            if (turf.distance(startPt, s, { units: "kilometers" }) > 0.25) return;
+            if (turf.distance(zielPt, e, { units: "kilometers" }) > 0.25) return;
             let slice = turf.lineSlice(s, e, feat);
             let lenM = turf.length(slice, { units: "kilometers" }) * 1000;
-            if (!best || lenM < best.distM) {
-                best = { ok: true, distM: lenM, line: slice, hinweis: "" };
-            }
+            if (!best || lenM < best.distM) best = { ok: true, distM: lenM, line: slice };
         } catch (err) {}
     });
     return best || { ok: false, distM: 0, line: null, grund: "Straßenverlauf nicht ermittelbar" };
 }
 
-function aktualisiereDistanzDarstellung() {
+function sicherstelleDistanzLayer() {
+    if (!map) return;
+    if (!distanzMapLayer) distanzMapLayer = L.layerGroup().addTo(map);
+    if (!distanzStartMarker) {
+        distanzStartMarker = L.marker([0, 0], { icon: distanzPinIcon("start"), interactive: false }).addTo(distanzMapLayer);
+    }
+    if (!distanzZielMarker) {
+        distanzZielMarker = L.marker([0, 0], { icon: distanzPinIcon("ziel"), interactive: false }).addTo(distanzMapLayer);
+    }
+    if (!distanzLinie) {
+        distanzLinie = L.polyline([], { color: "#007BFF", weight: 3, opacity: 0.9, dashArray: "10, 8" }).addTo(distanzMapLayer);
+    }
+}
+
+function setzeDistanzLinieCoords(coords) {
+    sicherstelleDistanzLayer();
+    if (!distanzLinie || !coords || coords.length < 2) return;
+    distanzLinie.setLatLngs(coords.map(c => [c[1], c[0]]));
+}
+
+function aktualisiereDistanzDarstellung(nurVorschau) {
     if (!map || !distanzStartCoord) return;
     let zielCoord = distanzPhase === "ziel" ? holeKartenMitteCoord() : distanzZielCoord;
     if (!zielCoord) return;
-    if (distanzMapLayer) map.removeLayer(distanzMapLayer);
-    distanzMapLayer = L.layerGroup().addTo(map);
-    L.marker([distanzStartCoord[1], distanzStartCoord[0]], { icon: distanzPinIcon("start"), interactive: false }).addTo(distanzMapLayer);
+    sicherstelleDistanzLayer();
+    distanzStartMarker.setLatLng([distanzStartCoord[1], distanzStartCoord[0]]);
     if (distanzPhase === "fertig" && distanzZielCoord) {
-        L.marker([distanzZielCoord[1], distanzZielCoord[0]], { icon: distanzPinIcon("ziel"), interactive: false }).addTo(distanzMapLayer);
+        distanzZielMarker.setLatLng([distanzZielCoord[1], distanzZielCoord[0]]);
+        distanzZielMarker.setOpacity(1);
+    } else {
+        distanzZielMarker.setOpacity(0);
     }
-    let ergebnis = berechneDistanzZwischenPunkten(distanzStartCoord, zielCoord, distanzModus);
-    if (ergebnis.line) {
-        L.geoJSON(ergebnis.line, {
-            style: { color: "#007BFF", weight: 3, opacity: 0.9, dashArray: "10, 8" }
-        }).addTo(distanzMapLayer);
+    let distM = 0;
+    let hinweis = "";
+    if (nurVorschau || distanzModus === "luft") {
+        setzeDistanzLinieCoords([distanzStartCoord, zielCoord]);
+        distM = berechneDistanzLuftlinie(distanzStartCoord, zielCoord);
+    } else {
+        let strasse = berechneDistanzStrassenverlauf(distanzStartCoord, zielCoord);
+        if (strasse.ok && strasse.line) {
+            let coords = turf.getCoords(strasse.line);
+            if (strasse.line.geometry.type === "MultiLineString") {
+                coords = strasse.line.geometry.coordinates.reduce((a, b) => a.concat(b), []);
+            }
+            setzeDistanzLinieCoords(coords);
+            distM = strasse.distM;
+        } else {
+            setzeDistanzLinieCoords([distanzStartCoord, zielCoord]);
+            distM = berechneDistanzLuftlinie(distanzStartCoord, zielCoord);
+            hinweis = " *";
+        }
     }
     let ergebnisEl = document.getElementById("distanz-ergebnis");
     if (distanzPhase !== "start") {
-        let modusLabel = distanzModus === "strasse" ? "Straßenverlauf" : "Luftlinie";
         ergebnisEl.style.display = "block";
-        ergebnisEl.textContent = modusLabel + ": " + formatiereDistanzAnzeige(ergebnis.distM) + (ergebnis.hinweis || "");
+        ergebnisEl.textContent = formatiereDistanzAnzeige(distM) + hinweis;
     } else {
         ergebnisEl.style.display = "none";
         ergebnisEl.textContent = "";
     }
+  // #region agent log
+    if (!nurVorschau) fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:aktualisiereDistanzDarstellung',message:'distanz update',data:{nurVorschau:!!nurVorschau,modus:distanzModus,phase:distanzPhase,distM:Math.round(distM),updateZaehler:++distanzUpdateZaehler},timestamp:Date.now(),hypothesisId:'H-perf',runId:'distanz-fix'})}).catch(()=>{});
+  // #endregion
+}
+
+function planeDistanzVorschau() {
+    if (distanzRafId) return;
+    distanzRafId = requestAnimationFrame(() => {
+        distanzRafId = null;
+        aktualisiereDistanzDarstellung(true);
+    });
+}
+
+function verbindeDistanzKartenHandler() {
+    if (!map || distanzMoveHandler) return;
+    distanzMoveHandler = () => planeDistanzVorschau();
+    distanzMoveEndHandler = () => {
+        if (distanzModus === "strasse" && distanzStartCoord) aktualisiereDistanzDarstellung(false);
+    };
+    map.on("move", distanzMoveHandler);
+    map.on("moveend", distanzMoveEndHandler);
+}
+
+function trenneDistanzKartenHandler() {
+    if (distanzMoveHandler && map) { map.off("move", distanzMoveHandler); distanzMoveHandler = null; }
+    if (distanzMoveEndHandler && map) { map.off("moveend", distanzMoveEndHandler); distanzMoveEndHandler = null; }
+    if (distanzRafId) { cancelAnimationFrame(distanzRafId); distanzRafId = null; }
 }
 
 function aktualisiereDistanzUi() {
-    let hint = document.getElementById("distanz-hint");
     let btn = document.getElementById("distanz-action-btn");
-    if (distanzPhase === "start") {
-        hint.textContent = "Bewege die Karte unter die Nadelspitze und setze den Startpunkt.";
-        btn.textContent = "Startpunkt setzen";
-    } else if (distanzPhase === "ziel") {
-        hint.textContent = "Bewege die Karte zum Zielpunkt. Die gestrichelte Linie folgt der Nadel.";
-        btn.textContent = "Zielpunkt setzen";
-    } else {
-        hint.textContent = "Messung abgeschlossen. Zurücksetzen für eine neue Messung.";
-        btn.textContent = "Zielpunkt ändern";
-    }
+    if (!btn) return;
+    if (distanzPhase === "start") btn.textContent = "Start";
+    else if (distanzPhase === "ziel") btn.textContent = "Ziel";
+    else btn.textContent = "Ziel";
 }
 
 function resetDistanzMessen() {
-    if (distanzMoveHandler && map) {
-        map.off("move", distanzMoveHandler);
-        distanzMoveHandler = null;
-    }
+    trenneDistanzKartenHandler();
     if (distanzMapLayer && map) { map.removeLayer(distanzMapLayer); distanzMapLayer = null; }
+    distanzStartMarker = null;
+    distanzZielMarker = null;
+    distanzLinie = null;
     distanzStartCoord = null;
     distanzZielCoord = null;
     distanzPhase = "start";
@@ -3983,30 +4033,35 @@ function distanzMapAktion() {
     if (distanzPhase === "fertig") {
         distanzPhase = "ziel";
         distanzZielCoord = null;
-        if (!distanzMoveHandler) {
-            distanzMoveHandler = () => aktualisiereDistanzDarstellung();
-            map.on("move", distanzMoveHandler);
-        }
+        verbindeDistanzKartenHandler();
         aktualisiereDistanzUi();
-        aktualisiereDistanzDarstellung();
+        aktualisiereDistanzDarstellung(true);
         return;
     }
     if (distanzPhase === "start") {
         distanzStartCoord = coord;
         distanzZielCoord = null;
         distanzPhase = "ziel";
-        if (!distanzMoveHandler) {
-            distanzMoveHandler = () => aktualisiereDistanzDarstellung();
-            map.on("move", distanzMoveHandler);
-        }
+        verbindeDistanzKartenHandler();
         aktualisiereDistanzUi();
-        aktualisiereDistanzDarstellung();
+        aktualisiereDistanzDarstellung(true);
         return;
     }
+    trenneDistanzKartenHandler();
     distanzZielCoord = coord;
     distanzPhase = "fertig";
     aktualisiereDistanzUi();
-    aktualisiereDistanzDarstellung();
+    aktualisiereDistanzDarstellung(false);
+}
+
+function ermittleKontextKartenPunkt(strName, km, achse) {
+    if (km > 0 && strName) {
+        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
+        if (pos && pos.coords) return { pt: turf.point(pos.coords), coords: pos.coords, quelle: "bkm" };
+    }
+    if (aktiveLat !== 0) return { pt: turf.point([aktiveLon, aktiveLat]), coords: [aktiveLon, aktiveLat], quelle: "aktiv" };
+    if (letzteLat !== 0) return { pt: turf.point([letzteLon, letzteLat]), coords: [letzteLon, letzteLat], quelle: "gps" };
+    return { pt: null, coords: null, quelle: "keine" };
 }
 
 function openDistanzMessen() {
@@ -4014,36 +4069,34 @@ function openDistanzMessen() {
         alert("Kartendaten werden noch geladen. Bitte kurz warten.");
         return;
     }
-    let ctx = holeAktuellePruefPosition();
-    if (!(ctx.km > 0) && !ctx.pt && letzteLat === 0) {
+    let aufDuessel = istDuesselAktiv();
+    let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
+    let km = aktiveKM;
+    if (!(km > 0)) {
+        let raw = document.getElementById(aufDuessel ? "km-duessel" : "km").value.replace(",", ".");
+        km = parseFloat(raw);
+    }
+    let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
+    if (!(km > 0) && !aktiveLat && !letzteLat) {
         alert("Bitte Kilometer eingeben oder GPS-Position erfassen.");
         return;
     }
-    if (!(ctx.km > 0) && ctx.pt) {
-        let hit = findeStrassenFeatureFuerPunkt(ctx.pt, ctx.strName, ctx.achse);
-        if (hit) {
-            let bkm = berechneGoldgriffBKM(ctx.pt, ctx.strName, hit.feature);
-            bkm = validiereBkmPlausibilitaet(ctx.pt, ctx.strName, bkm);
-            if (bkm > 0) ctx.km = bkm;
-        }
+    let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:openDistanzMessen',message:'karten punkt',data:{strName:strName,km:km,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,anchor:bkmKorridorAnkerPt?bkmKorridorAnkerPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-pos',runId:'distanz-fix'})}).catch(()=>{});
+  // #endregion
+    if (!kartenPunkt.pt) {
+        alert("Position konnte nicht ermittelt werden.");
+        return;
     }
-    if (ctx.km > 0 && ctx.strName) {
-        let pos = ermittlePruefFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
-        if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
-    }
-    if (!ctx.pt && letzteLat !== 0) ctx.pt = turf.point([letzteLon, letzteLat]);
 
     schliesseSidebar();
     setzeMenuSichtbarkeit(false);
     mapMode = "DISTANZ";
     resetDistanzMessen();
     document.getElementById("map-overlay").style.display = "flex";
-    let titel = "📏 Distanz messen";
-    if (ctx.strName && ctx.km > 0) titel += " – " + ctx.strName + " km " + ctx.km.toFixed(3).replace(".", ",");
-    else if (ctx.strName) titel += " – " + ctx.strName;
-    document.getElementById("map-title").innerText = titel;
-    document.getElementById("map-hint").style.display = "block";
-    document.getElementById("map-hint").textContent = "Aktuelle Position auf der Karte. Bewege die Nadel für Start und Ziel.";
+    document.getElementById("map-title").innerText = "📏 Distanz messen";
+    document.getElementById("map-hint").style.display = "none";
     document.getElementById("map-action-btn").style.display = "none";
     document.getElementById("distanz-map-controls").style.display = "block";
     document.getElementById("nk-map-result").style.display = "none";
@@ -4054,7 +4107,7 @@ function openDistanzMessen() {
     if (pruefOverlayLayer && map) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
     setzePruefKartenOverlays(false);
 
-    let initCoord = ctx.pt ? ctx.pt.geometry.coordinates : [letzteLon || 6.85, letzteLat || 51.3];
+    let initCoord = kartenPunkt.coords;
     if (!map) {
         map = L.map("karte", { zoomControl: false }).setView([initCoord[1], initCoord[0]], 17);
         let osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxNativeZoom: 19, maxZoom: 22 });
@@ -4065,14 +4118,9 @@ function openDistanzMessen() {
         map.setView([initCoord[1], initCoord[0]], 17);
     }
     if (distanzAktuellMarker && map) map.removeLayer(distanzAktuellMarker);
-    if (ctx.pt) {
-        let ac = ctx.pt.geometry.coordinates;
-        distanzAktuellMarker = L.circleMarker([ac[1], ac[0]], {
-            radius: 7, color: "#0d6efd", fillColor: "#0d6efd", fillOpacity: 0.35, weight: 2
-        }).addTo(map).bindTooltip("Aktuelle Position", { permanent: false, direction: "top" });
-    } else {
-        distanzAktuellMarker = null;
-    }
+    distanzAktuellMarker = L.circleMarker([initCoord[1], initCoord[0]], {
+        radius: 7, color: "#0d6efd", fillColor: "#0d6efd", fillOpacity: 0.45, weight: 2
+    }).addTo(map);
     let modusRadio = document.querySelector('input[name="distanz_modus"][value="luft"]');
     if (modusRadio) modusRadio.checked = true;
     distanzModus = "luft";
@@ -4082,7 +4130,8 @@ function openDistanzMessen() {
 
 function ermittlePruefFahrbahnPosition(strName, km, achse) {
     if (!strName || !(km > 0) || isNaN(km)) return null;
-    let coords = holeKoordinateFuerKM(strName, km, null, { kmOnly: true });
+    let anchorPt = holeKontextAnkerPt(strName, km, null);
+    let coords = holeKoordinateFuerKM(strName, km, anchorPt, { kmOnly: true });
     if (!coords) return ermittleFahrbahnPosition(strName, km, achse);
 
     let basisPt = turf.point(coords);
@@ -4100,7 +4149,7 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
     let bestandSnap = null;
     let snapCoords = null;
     try {
-        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature, { pt: basisPt });
+        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature, { pt: anchorPt || basisPt });
         if (alongKm !== null && alongKm >= 0) {
             let alongSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
             let alongCoords = turf.getCoord(alongSnap);
@@ -4165,14 +4214,11 @@ function holeAktuellePruefPosition() {
         km = parseFloat(raw);
     }
     let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
-    let pt = null;
-    if (km > 0 && strName) {
-        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
-        if (pos && pos.coords) pt = turf.point(pos.coords);
-    }
-    if (!pt && aktiveLat !== 0) pt = turf.point([aktiveLon, aktiveLat]);
-    if (!pt && letzteLat !== 0) pt = turf.point([letzteLon, letzteLat]);
-    return { strName: strName, km: km, achse: achse, pt: pt };
+    let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeAktuellePruefPosition',message:'kontext punkt',data:{strName:strName,km:km,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords},timestamp:Date.now(),hypothesisId:'H-pos',runId:'distanz-fix'})}).catch(()=>{});
+  // #endregion
+    return { strName: strName, km: km, achse: achse, pt: kartenPunkt.pt };
 }
 
 function berechneAlongFuerKm(strName, km, feature, opts) {
