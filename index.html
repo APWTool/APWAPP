@@ -1679,6 +1679,7 @@ function waehleReferenzGeoKette(mitKm, km, strName, opts) {
     pool.sort((a, b) => {
         let distA = Math.min(...a.map(p => turf.distance(anchorPt, turf.point(p.coord), { units: "kilometers" })));
         let distB = Math.min(...b.map(p => turf.distance(anchorPt, turf.point(p.coord), { units: "kilometers" })));
+        if (Math.abs(distA - distB) < 2) return b.length - a.length;
         return distA - distB;
     });
     return pool[0] || sorted;
@@ -4098,11 +4099,37 @@ function holeVerwaltungsGrenze(cacheKey, features) {
     return merged;
 }
 
+function filtereRefsImGleichenKorridor(mitKm, kette, strName, km, kmVon, kmBis, maxAbstandKm) {
+    maxAbstandKm = maxAbstandKm || 4.5;
+    let imKm = mitKm.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
+    if (!kette || !kette.length) return imKm;
+    let refs = imKm.filter(r => {
+        let minD = Math.min(...kette.map(c => turf.distance(turf.point(c.coord), turf.point(r.coord), { units: "kilometers" })));
+        return minD <= maxAbstandKm;
+    });
+    if (refs.length >= 4) return refs;
+    let basis = (km > 0 && strName) ? holeKoordinateFuerKM(strName, km, null, { kmOnly: true }) : null;
+    if (!basis && kette.length) {
+        basis = [
+            kette.reduce((s, p) => s + p.coord[0], 0) / kette.length,
+            kette.reduce((s, p) => s + p.coord[1], 0) / kette.length
+        ];
+    }
+    if (basis) {
+        let bp = turf.point(basis);
+        let byBasis = imKm.filter(r => turf.distance(bp, turf.point(r.coord), { units: "kilometers" }) <= maxAbstandKm);
+        if (byBasis.length > refs.length) refs = byBasis;
+    }
+    return refs.length > 0 ? refs : kette.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
+}
+
 function holeRefsFuerPruefKarte(bab, strName, km, kmVon, kmBis) {
     let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(bab));
     if (!mitKm.length) return [];
-    let chain = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true }) : mitKm;
-    return dedupliziereRefsNachKm(chain.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2));
+    let kette = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true }) : mitKm;
+    let refs = filtereRefsImGleichenKorridor(mitKm, kette, bab, km, kmVon, kmBis, 4.5);
+    refs.sort((a, b) => a.km - b.km);
+    return dedupliziereRefsNachKm(refs);
 }
 
 function setzePruefKartenOverlays(sichtbar) {
