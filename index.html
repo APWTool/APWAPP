@@ -1094,6 +1094,23 @@ function findeNaechsteStrassenFeature(pt, strName, achse = "") {
     return best ? { feature: best, dist: minDist, props: best.properties || {} } : null;
 }
 
+function findeNaechsteStrassenFeatureInNaehe(pt, strName, achse, maxDistKm) {
+    let zielAchse = normalisiereAchse(achse);
+    let features = holeStrassenFeatures(strName, achse, !!zielAchse);
+    let best = null;
+    let minDist = Infinity;
+    features.forEach(f => {
+        try {
+            let d = turf.pointToLineDistance(pt, f, { units: "kilometers" });
+            if (d <= maxDistKm && d < minDist) {
+                minDist = d;
+                best = f;
+            }
+        } catch (e) {}
+    });
+    return best ? { feature: best, dist: minDist, props: best.properties || {} } : null;
+}
+
 function berechneFahrtBearing(strName, km) {
     let coords = holeKoordinateFuerKM(strName, km);
     if (!coords) return 0;
@@ -1632,6 +1649,41 @@ function autobahnSuchNummer(strName) {
     return n.replace(/^A/, "");
 }
 
+function waehleReferenzGeoKette(mitKm, km, strName, opts) {
+    opts = opts || {};
+    if (!mitKm || !mitKm.length) return [];
+    let kmCluster = waehleKmCluster(mitKm, km, opts.pt || null, strName, opts);
+    let sorted = kmCluster.slice().sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
+
+    let chains = [];
+    let cur = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+        let prev = cur[cur.length - 1];
+        let gapKm = sorted[i].km - prev.km;
+        let gapGeo = turf.distance(turf.point(prev.coord), turf.point(sorted[i].coord), { units: "kilometers" });
+        if (gapGeo > Math.max(3, gapKm * 2.5 + 1.5)) {
+            chains.push(cur);
+            cur = [];
+        }
+        cur.push(sorted[i]);
+    }
+    if (cur.length) chains.push(cur);
+
+    let passend = chains.filter(c => km >= c[0].km - 0.5 && km <= c[c.length - 1].km + 0.5);
+    let pool = passend.length > 0 ? passend : chains.filter(c => c.some(p => Math.abs(p.km - km) <= 4));
+    if (!pool.length) pool = chains;
+
+    let anchorPt = opts.pt;
+    if (!anchorPt) anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
+
+    pool.sort((a, b) => {
+        let distA = Math.min(...a.map(p => turf.distance(anchorPt, turf.point(p.coord), { units: "kilometers" })));
+        let distB = Math.min(...b.map(p => turf.distance(anchorPt, turf.point(p.coord), { units: "kilometers" })));
+        return distA - distB;
+    });
+    return pool[0] || sorted;
+}
+
 function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     opts = opts || {};
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
@@ -1639,48 +1691,34 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     if (passende.length === 0) return null;
 
     let mitKm = referenzPunkteMitKm(passende);
-    if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km);
+    if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
     let anchorPt = pt;
     if (!anchorPt && !opts.kmOnly && letzteLat !== 0) {
         anchorPt = turf.point([letzteLon, letzteLat]);
     }
-    let cluster = waehleKmCluster(mitKm, km, anchorPt, autobahn, opts);
-    if (cluster && cluster.length > 1) cluster = cluster.slice().sort((a, b) => a.km - b.km);
+    if (!anchorPt && opts.kmOnly) {
+        anchorPt = turf.point(holeKmAnkerFuerAutobahn(autobahn, km));
+    }
+
+    let chain = waehleReferenzGeoKette(mitKm, km, autobahn, Object.assign({}, opts, { pt: anchorPt }));
     let before = null;
     let after = null;
-    cluster.forEach(item => {
+    chain.forEach(item => {
         if (item.km <= km) before = item;
         if (item.km >= km && !after) after = item;
     });
 
-    // If cluster does not bracket the requested km, we would snap to a single ref point.
-    // Fall back to a local km window (and optionally geo-anchor to pt) to pick a real before/after pair.
-    try {
-        let needFallback = (!before || !after || before === after);
-        if (!needFallback && Math.abs(after.km - before.km) > 8) needFallback = true;
-        if (needFallback && mitKm && mitKm.length >= 2) {
-            let win = mitKm.filter(p => Math.abs(p.km - km) <= 4.0);
-            if (win.length < 2) win = mitKm;
-            if (!opts.kmOnly && pt && win.length > 30) {
-                win = win
-                    .map(p => {
-                        let d = 999;
-                        try { d = turf.distance(pt, turf.point(p.coord), { units: "kilometers" }); } catch (e) {}
-                        return { p, d };
-                    })
-                    .sort((a, b) => a.d - b.d)
-                    .slice(0, 30)
-                    .map(x => x.p);
-            }
-            win = win.slice().sort((a, b) => a.km - b.km);
-            let b2 = null, a2 = null;
-            win.forEach(p => {
-                if (p.km <= km) b2 = p;
-                if (p.km >= km && !a2) a2 = p;
-            });
-            if (b2 || a2) { before = b2; after = a2; }
-        }
-    } catch (e) {}
+    if ((!before || !after || before === after) && mitKm.length >= 2) {
+        let win = chain.filter(p => Math.abs(p.km - km) <= 4.0);
+        if (win.length < 2) win = chain;
+        win = win.slice().sort((a, b) => a.km - b.km);
+        let b2 = null, a2 = null;
+        win.forEach(p => {
+            if (p.km <= km) b2 = p;
+            if (p.km >= km && !a2) a2 = p;
+        });
+        if (b2 || a2) { before = b2; after = a2; }
+    }
 
     return interpoliereKmKoordinate(before, after, km);
 }
@@ -3589,7 +3627,10 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
 
     let basisPt = turf.point(coords);
     let zielAchse = normalisiereAchse(achse) || "Bestandsachse";
-    let bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "Bestandsachse");
+    let maxSnapKm = 3.5;
+    let bestandMatch = findeNaechsteStrassenFeatureInNaehe(basisPt, strName, "Bestandsachse", maxSnapKm);
+    if (!bestandMatch) bestandMatch = findeNaechsteStrassenFeatureInNaehe(basisPt, strName, "", maxSnapKm);
+    if (!bestandMatch) bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "Bestandsachse");
     if (!bestandMatch) bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "");
 
     if (!bestandMatch) {
@@ -4060,13 +4101,8 @@ function holeVerwaltungsGrenze(cacheKey, features) {
 function holeRefsFuerPruefKarte(bab, strName, km, kmVon, kmBis) {
     let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(bab));
     if (!mitKm.length) return [];
-    let cluster = km > 0 ? waehleKmCluster(mitKm, km, null, bab, { kmOnly: true }) : mitKm;
-    let refs = dedupliziereRefsNachKm(cluster.length ? cluster.slice() : mitKm);
-    if (km > 0) {
-        let imKm = mitKm.filter(r => r.km >= kmVon - 0.8 && r.km <= kmBis + 0.8);
-        refs = dedupliziereRefsNachKm(refs.concat(imKm));
-    }
-    return refs.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
+    let chain = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true }) : mitKm;
+    return dedupliziereRefsNachKm(chain.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2));
 }
 
 function setzePruefKartenOverlays(sichtbar) {
@@ -4152,11 +4188,13 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
         let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
         if (pos && pos.coords) pt = turf.point(pos.coords);
         let refs = strName.startsWith("A") ? holeRefsFuerPruefKarte(strName, strName, km, Math.max(0, km - 4), km + 4) : [];
+        let basis = holeKoordinateFuerKM(strName, km, null, { kmOnly: true });
         debugLogPruef('index.html:zeichnePositionsPruefung', 'pruef map draw', {
             strName: strName, km: km,
+            basis: basis,
             pt: pt ? pt.geometry.coordinates : null,
             refCount: refs.length,
-            refKm: refs.slice(0, 6).map(r => r.km)
+            refKm: refs.map(r => r.km).sort((a, b) => a - b).slice(0, 8)
         });
     }
     pruefCtxCache = { strName: strName, km: km || 0, achse: achse, pt: pt };
