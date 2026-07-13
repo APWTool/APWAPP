@@ -1398,9 +1398,6 @@ function ermittleMeistereiFuerKM(strName, km) {
     }
     let geoHit = !korridorHit ? findeAmAusGeometrie(strName, km, anchorPt) : null;
     let result = korridorHit || geoHit;
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittleMeistereiFuerKM',message:'am lookup',data:{strName:strName,km:km,korridorMid:korridor?korridor.mid:null,korridorOk:!!(korridor&&amKorridorPasstZuAnker(korridor,strName,km,anchorPt)),am:result?result.name:null,source:korridorHit?'korridor':(geoHit?'geo':'fallback')},timestamp:Date.now(),hypothesisId:'H-am-zust',runId:'bestwig'})}).catch(()=>{});
-  // #endregion
     if (result) return result;
 
     let idx = lookupAmAusIndex(strName, km, anchorPt);
@@ -1650,9 +1647,6 @@ function wacheDecktPositionGeografisch(wache, strName, bkm, pt) {
 function holeWachbereichAnzeige(strName, km, pt) {
     pt = pt || holeKontextAnkerPt(strName, km, null);
     let w = findeWacheFuerAutobahnKm(strName, km, pt);
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeWachbereichAnzeige',message:'wache lookup',data:{strName:strName,km:km,wache:w,anzeige:w||WACHE_AUSSERHALB,pt:pt?pt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-wache',runId:'bestwig'})}).catch(()=>{});
-  // #endregion
     return w || WACHE_AUSSERHALB;
 }
 
@@ -2808,9 +2802,6 @@ function ermittleBkmMehrfachvergabe(strName, km, pt, achse) {
         gewaehltIndex: gewaehltIdx,
         _korridore: korridore
     };
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittleBkmMehrfachvergabe',message:'bkm korridore',data:{strName:strName,km:km,anzahl:result.anzahl,labels:result.abschnitte.map(a=>a.label)},timestamp:Date.now(),hypothesisId:'H-bkm',runId:'pruef-a46'})}).catch(()=>{});
-  // #endregion
     return result;
 }
 
@@ -3837,11 +3828,6 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
         snapCoords = turf.getCoord(bestandSnap);
     }
     let locationKm = bestandSnap.properties.location || 0;
-  // #region agent log
-    debugLogPruef('index.html:ermittlePruefFahrbahnPosition', 'snap compare', {
-        strName: strName, km: km, basis: coords, snap: snapCoords, alongUsed: snapCoords && coords && (Math.abs(snapCoords[0] - coords[0]) > 1e-6 || Math.abs(snapCoords[1] - coords[1]) > 1e-6)
-    });
-  // #endregion
 
     if (!zielAchse || zielAchse === "Bestandsachse") {
         return {
@@ -3882,12 +3868,6 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
     };
 }
 
-function debugLogPruef(location, message, data) {
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:location,message:message,data:data,timestamp:Date.now(),hypothesisId:'H-pruef',runId:'pruef-a46'})}).catch(()=>{});
-    // #endregion
-}
-
 function holeAktuellePruefPosition() {
     let aufDuessel = istDuesselAktiv();
     let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
@@ -3926,9 +3906,6 @@ function berechneAlongFuerKm(strName, km, feature, opts) {
             return { km: p.km, along: sn.properties.location || 0 };
         } catch (e) { return null; }
     }).filter(Boolean).sort((a, b) => a.km - b.km);
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:berechneAlongFuerKm',message:'along refs',data:{strName:strName,km:km,refKms:refs.map(r=>r.km),chainLen:chain.length},timestamp:Date.now(),hypothesisId:'H-along',runId:'pruef-a46'})}).catch(()=>{});
-  // #endregion
     if (refs.length < 1) return null;
     let before = null;
     let after = null;
@@ -4194,9 +4171,6 @@ function sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt) {
         }
     } catch (e) {}
 
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:sammleAmGrenzenFuerKarte',message:'am korridor',data:{strName:strName,kmVon:kmVon,kmBis:kmBis,grenzKm:grenzKm,amSegs:amSegs.map(s=>s.name+' '+s.von+'-'+s.bis)},timestamp:Date.now(),hypothesisId:'H-am',runId:'pruef-a46'})}).catch(()=>{});
-  // #endregion
     return { grenzKm: grenzKm, amSegs: amSegs };
 }
 
@@ -4437,9 +4411,6 @@ function holeRefsFuerPruefKarte(bab, strName, km, kmVon, kmBis) {
     let kette = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true, pt: anchor }) : mitKm;
     let refs = filtereRefsImGleichenKorridor(mitKm, kette, bab, km, kmVon, kmBis, 4.5, anchor);
     refs.sort((a, b) => a.km - b.km);
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeRefsFuerPruefKarte',message:'refs korridor',data:{bab:bab,km:km,kmVon:kmVon,kmBis:kmBis,chainLen:kette.length,refCount:refs.length,refKm:refs.map(r=>r.km).slice(0,8),anchor:anchor?anchor.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-refs',runId:'bestwig'})}).catch(()=>{});
-  // #endregion
     return dedupliziereRefsNachKm(refs);
 }
 
@@ -4525,15 +4496,6 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     if (strName && km > 0) {
         let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
         if (pos && pos.coords) pt = turf.point(pos.coords);
-        let refs = strName.startsWith("A") ? holeRefsFuerPruefKarte(strName, strName, km, Math.max(0, km - 4), km + 4) : [];
-        let basis = holeKoordinateFuerKM(strName, km, null, { kmOnly: true });
-        debugLogPruef('index.html:zeichnePositionsPruefung', 'pruef map draw', {
-            strName: strName, km: km,
-            basis: basis,
-            pt: pt ? pt.geometry.coordinates : null,
-            refCount: refs.length,
-            refKm: refs.map(r => r.km).sort((a, b) => a - b).slice(0, 8)
-        });
     }
     pruefCtxCache = { strName: strName, km: km || 0, achse: achse, pt: pt };
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
@@ -4591,15 +4553,6 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
             let bounds = focusLayer.getBounds();
             if (bounds.isValid()) {
                 map.fitBounds(bounds.pad(0.3));
-              // #region agent log
-                let c = bounds.getCenter();
-                debugLogPruef('index.html:zeichnePositionsPruefung', 'map focus', {
-                    strName: strName, km: km,
-                    pt: pt ? pt.geometry.coordinates : null,
-                    center: [c.lng, c.lat],
-                    zoom: map.getZoom()
-                });
-              // #endregion
             }
         } else if (pt) {
             let pc = pt.geometry.coordinates;
