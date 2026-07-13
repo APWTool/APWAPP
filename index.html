@@ -846,12 +846,15 @@ function aktualisiereZustaendigkeitenSeite() {
     }
 
     let gemeinde = leseGemeindeNameAusAnzeige();
-    let m_name = document.getElementById('m').innerText || '-';
-    let addr = document.getElementById('m_address').innerText || '-';
-    let phone = document.getElementById('m_phone').innerText || '-';
+    let m = ermittleMeistereiFuerKM(strName, km);
+    let m_name = m.name || '-';
+    let addr = m.addr || '-';
+    let phone = m.phone || '-';
 
     let justiz = null;
-    let pos = ermittleFahrbahnPosition(strName, km, achse);
+    let anchor = holeKontextAnkerPt(strName, km, null);
+    let posCoord = koordinateImKorridor(strName, km, anchor);
+    let pos = posCoord ? { point: turf.point(posCoord) } : ermittleFahrbahnPosition(strName, km, achse);
     if (pos && pos.point) {
         let treffer = findeGemeindeTreffer(pos.point);
         if (treffer.length > 0) justiz = gemeindeJustizAusFeature(treffer[0]);
@@ -1272,7 +1275,9 @@ function waehleParallelesSegment(kandidaten, referenzPt) {
 }
 
 function ermittleFahrbahnPosition(strName, km, achse = "") {
-    let coords = holeKoordinateFuerKM(strName, km);
+    let anchor = holeKontextAnkerPt(strName, km, null);
+    let kmOpts = holeBkmKorridorAnker(strName, km) ? { kmOnly: true } : {};
+    let coords = holeKoordinateFuerKM(strName, km, anchor, kmOpts);
     if (!coords) return null;
 
     let basisPt = turf.point([coords[0], coords[1]]);
@@ -1348,10 +1353,54 @@ function findeStrassenFeatureFuerPunkt(pt, strName, achse = "") {
     return hits.length > 0 ? hits[0] : null;
 }
 
+function findeAmAusGeometrie(strName, km, pt) {
+    let anchor = holeKontextAnkerPt(strName, km, pt);
+    let coords = koordinateImKorridor(strName, km, anchor);
+    if (!coords) return null;
+    let basisPt = turf.point(coords);
+    let hit = findeNaechsteStrassenFeatureInNaehe(basisPt, strName, "Bestandsachse", 5);
+    if (!hit) hit = findeNaechsteStrassenFeatureInNaehe(basisPt, strName, "", 5);
+    if (!hit) return null;
+    let snap = turf.nearestPointOnLine(hit.feature, basisPt, { units: "kilometers" });
+    let rawAbs = (hit.props || {}).ABSNr || "";
+    let distMeter = (snap.properties.location || 0) * 1000;
+    let m_name = ermittleAM(rawAbs, distMeter);
+    if (!m_name || m_name === "Nicht in DB") return null;
+    let kontakte = holeAdresseUndTelefon(m_name);
+    return { name: m_name, addr: kontakte.addr, phone: kontakte.phone, rawAbs: rawAbs, distMeter: distMeter };
+}
+
+function amKorridorPasstZuAnker(korridor, strName, km, anchor) {
+    if (!korridor) return false;
+    let posCoord = koordinateImKorridor(strName, km, anchor);
+    if (!posCoord) return false;
+    if (korridor.mid) {
+        let dMid = turf.distance(turf.point(posCoord), turf.point(korridor.mid), { units: "kilometers" });
+        if (dMid > 22) return false;
+    }
+    if (korridor.grenzen && korridor.grenzen.length) {
+        let nearGrenze = korridor.grenzen.some(g => {
+            if (!g.coord) return false;
+            return turf.distance(turf.point(posCoord), turf.point(g.coord), { units: "kilometers" }) <= 28;
+        });
+        if (!nearGrenze && korridor.grenzen.every(g => g.coord)) return false;
+    }
+    return true;
+}
+
 function ermittleMeistereiFuerKM(strName, km) {
     let anchorPt = holeKontextAnkerPt(strName, km, null);
-    let korridorHit = findeAmBeiKm(strName, km, anchorPt);
-    if (korridorHit) return korridorHit;
+    let korridor = waehleAmKorridor(strName, km, anchorPt);
+    let korridorHit = null;
+    if (korridor && amKorridorPasstZuAnker(korridor, strName, km, anchorPt)) {
+        korridorHit = findeAmBeiKm(strName, km, anchorPt);
+    }
+    let geoHit = !korridorHit ? findeAmAusGeometrie(strName, km, anchorPt) : null;
+    let result = korridorHit || geoHit;
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittleMeistereiFuerKM',message:'am lookup',data:{strName:strName,km:km,korridorMid:korridor?korridor.mid:null,korridorOk:!!(korridor&&amKorridorPasstZuAnker(korridor,strName,km,anchorPt)),am:result?result.name:null,source:korridorHit?'korridor':(geoHit?'geo':'fallback')},timestamp:Date.now(),hypothesisId:'H-am-zust',runId:'bestwig'})}).catch(()=>{});
+  // #endregion
+    if (result) return result;
 
     let idx = lookupAmAusIndex(strName, km, anchorPt);
     if (idx && idx.name && idx.name !== "Nicht in DB") {
@@ -1711,6 +1760,7 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     let mitKm = referenzPunkteMitKm(passende);
     if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
     let anchorPt = pt;
+    if (!anchorPt) anchorPt = holeBkmKorridorAnker(autobahn, km);
     if (!anchorPt && !opts.kmOnly && letzteLat !== 0) {
         anchorPt = turf.point([letzteLon, letzteLat]);
     }
@@ -2788,6 +2838,8 @@ function waehleBkmAbschnitt(index) {
     bkmKorridorAnkerPt = turf.point(coord);
     bkmKorridorAnkerStr = letzteBkmDoppelInfo.strName;
     bkmKorridorAnkerKm = letzteBkmDoppelInfo.km;
+    aktiveLat = coord[1];
+    aktiveLon = coord[0];
     letzteLat = coord[1];
     letzteLon = coord[0];
     letzteKontextMeta.manuell = true;
@@ -3509,14 +3561,18 @@ function berechnen(isManual = false){
         return;
     }
  
-    if(isManual) {
+    if(isManual || holeBkmKorridorAnker(a, km)) {
+        let anchorPt = holeKontextAnkerPt(a, km, null);
+        let zielWache = findeWacheFuerAutobahnKm(a, km, anchorPt);
+        if (zielWache && zielWache !== aktuelleWache) {
+            wechsleWache(zielWache, true, a);
+            return;
+        }
         let currentGrenzen = datenWachen[aktuelleWache].grenzen[a];
         if (currentGrenzen) {
             let minKm = Math.min(...currentGrenzen);
             let maxKm = Math.max(...currentGrenzen);
             if (km < minKm || km > maxKm) {
-                let pt = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
-                let zielWache = findeWacheFuerAutobahnKm(a, km, pt);
                 if (zielWache) { wechsleWache(zielWache, true, a); return; }
                 for (let wache in datenWachen) {
                    let g = datenWachen[wache].grenzen[a];
