@@ -2582,63 +2582,143 @@ function clustersSindGleich(a, b) {
     return a[0].km === b[0].km && a[0].coord[0] === b[0].coord[0] && a[0].coord[1] === b[0].coord[1];
 }
 
-function ermittleBkmMehrfachvergabe(strName, km, pt) {
-    if (!strName || !strName.startsWith("A") || !(km > 0) || isNaN(km)) return null;
-    let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(strName));
-    if (mitKm.length < 2) return null;
-    let clusters = clustereReferenzPunkte(mitKm);
-    if (clusters.length < 2) return null;
-
-    let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
-    let treffende = clusters.filter(c => clusterEnthaeltKm(c, km, 0.5));
-
-    if (treffende.length < 2) {
-        let gleicheKm = mitKm.filter(p => Math.abs(p.km - km) <= 0.15);
-        if (gleicheKm.length >= 2) {
-            let maxAbstand = 0;
-            for (let i = 0; i < gleicheKm.length; i++) {
-                for (let j = i + 1; j < gleicheKm.length; j++) {
-                    let d = turf.distance(turf.point(gleicheKm[i].coord), turf.point(gleicheKm[j].coord), { units: "kilometers" });
-                    if (d > maxAbstand) maxAbstand = d;
-                }
-            }
-            if (maxAbstand > 6) {
-                let geoGroups = [];
-                gleicheKm.forEach(p => {
-                    let placed = false;
-                    for (let g of geoGroups) {
-                        let d = turf.distance(turf.point(g[0].coord), turf.point(p.coord), { units: "kilometers" });
-                        if (d < 4) { g.push(p); placed = true; break; }
-                    }
-                    if (!placed) geoGroups.push([p]);
-                });
-                if (geoGroups.length >= 2) treffende = geoGroups;
-            }
+function teileReferenzenInGeoKetten(sorted) {
+    if (!sorted || !sorted.length) return [];
+    let chains = [];
+    let cur = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+        let prev = cur[cur.length - 1];
+        let gapKm = sorted[i].km - prev.km;
+        let gapGeo = turf.distance(turf.point(prev.coord), turf.point(sorted[i].coord), { units: "kilometers" });
+        if (gapGeo > Math.max(3, gapKm * 2.5 + 1.5)) {
+            chains.push(cur);
+            cur = [];
         }
+        cur.push(sorted[i]);
+    }
+    if (cur.length) chains.push(cur);
+    return chains;
+}
+
+function korridorZentrumKoordinate(refs, km) {
+    let sorted = refs.slice().sort((a, b) => a.km - b.km);
+    let before = null;
+    let after = null;
+    sorted.forEach(r => {
+        if (r.km <= km) before = r;
+        if (r.km >= km && !after) after = r;
+    });
+    let coord = interpoliereKmKoordinate(before, after, km);
+    if (!coord && before) coord = before.coord;
+    if (!coord && after) coord = after.coord;
+    if (!coord && refs[0]) coord = refs[0].coord;
+    return coord;
+}
+
+function korridorEntsprichtKette(a, b) {
+    if (!a || !b || !a.length || !b.length) return false;
+    if (clustersSindGleich(a, b)) return true;
+    let ka = korridorZentrumKoordinate(a, (a[0].km + a[a.length - 1].km) / 2);
+    let kb = korridorZentrumKoordinate(b, (b[0].km + b[b.length - 1].km) / 2);
+    if (!ka || !kb) return false;
+    return turf.distance(turf.point(ka), turf.point(kb), { units: "kilometers" }) < 6;
+}
+
+function dedupliziereBkmKorridore(korridore, km) {
+    let out = [];
+    korridore.forEach(k => {
+        let coord = korridorZentrumKoordinate(k, km);
+        if (!coord) return;
+        let dupIdx = -1;
+        out.forEach((o, i) => {
+            let oc = korridorZentrumKoordinate(o, km);
+            if (oc && turf.distance(turf.point(coord), turf.point(oc), { units: "kilometers" }) < 6) dupIdx = i;
+        });
+        if (dupIdx < 0) out.push(k);
+        else if (k.length > out[dupIdx].length) out[dupIdx] = k;
+    });
+    return out;
+}
+
+function ermittleBkmKorridoreAmKm(strName, km) {
+    let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(strName));
+    if (mitKm.length < 2) return [];
+    let korridore = [];
+
+    clustereReferenzPunkte(mitKm).forEach(cluster => {
+        if (!clusterEnthaeltKm(cluster, km, 0.5)) return;
+        teileReferenzenInGeoKetten(cluster.slice().sort((a, b) => a.km - b.km)).forEach(chain => {
+            if (clusterEnthaeltKm(chain, km, 0.5)) korridore.push(chain);
+        });
+    });
+
+    let gleicheKm = mitKm.filter(p => Math.abs(p.km - km) <= 0.25);
+    if (gleicheKm.length >= 2) {
+        let geoGroups = [];
+        gleicheKm.forEach(p => {
+            let placed = false;
+            for (let g of geoGroups) {
+                let d = turf.distance(turf.point(g[0].coord), turf.point(p.coord), { units: "kilometers" });
+                if (d < 8) { g.push(p); placed = true; break; }
+            }
+            if (!placed) geoGroups.push([p]);
+        });
+        geoGroups.forEach(g => {
+            if (!korridore.some(k => korridorEntsprichtKette(k, g))) korridore.push(g);
+        });
     }
 
-    if (treffende.length < 2) return null;
+    return dedupliziereBkmKorridore(korridore, km);
+}
 
-    let gewaehltCluster = waehleKmCluster(mitKm, km, anchorPt, strName);
-    let gewaehltIdx = treffende.findIndex(c => clustersSindGleich(c, gewaehltCluster));
-    if (gewaehltIdx < 0) gewaehltIdx = 0;
+function gemeindeLabelFuerBkmKorridor(strName, km, achse, refs) {
+    let coord = korridorZentrumKoordinate(refs, km);
+    if (!coord) return "Unbekannt";
+    let g = findeGemeindeFuerPunkt(turf.point(coord), strName, km);
+    if (g && g !== "-") return g;
+    return gemeindeBeiKm(strName, km, achse || "Bestandsachse") || "Unbekannt";
+}
 
-    return {
+function ermittleBkmMehrfachvergabe(strName, km, pt, achse) {
+    if (!strName || !strName.startsWith("A") || !(km > 0) || isNaN(km)) return null;
+    let korridore = ermittleBkmKorridoreAmKm(strName, km);
+    if (korridore.length < 2) return null;
+
+    let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(strName));
+    let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
+    let gewaehltKette = waehleReferenzGeoKette(mitKm, km, strName, { kmOnly: true, pt: anchorPt });
+    let gewaehltIdx = korridore.findIndex(k => korridorEntsprichtKette(k, gewaehltKette));
+    if (gewaehltIdx < 0) {
+        let bestD = Infinity;
+        korridore.forEach((k, i) => {
+            let c = korridorZentrumKoordinate(k, km);
+            if (!c) return;
+            let d = turf.distance(anchorPt, turf.point(c), { units: "kilometers" });
+            if (d < bestD) { bestD = d; gewaehltIdx = i; }
+        });
+        if (gewaehltIdx < 0) gewaehltIdx = 0;
+    }
+
+    let zielAchse = achse || "Bestandsachse";
+    let result = {
         strName: strName,
         km: km,
-        anzahl: treffende.length,
-        abschnitte: treffende.map((c, i) => {
-            let b = clusterKmBereichAusRefs(c);
+        anzahl: korridore.length,
+        abschnitte: korridore.map((k, i) => {
+            let gemeinde = gemeindeLabelFuerBkmKorridor(strName, km, zielAchse, k);
             return {
                 index: i,
-                von: b.von,
-                bis: b.bis,
+                gemeinde: gemeinde,
                 gewaehlt: i === gewaehltIdx,
-                label: "Abschnitt " + (i + 1) + " (km " + formatiereGemeindeKm(b.von) + "–" + formatiereGemeindeKm(b.bis) + ")"
+                label: "Abschnitt " + (i + 1) + ": " + gemeinde
             };
         }),
         gewaehltIndex: gewaehltIdx
     };
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittleBkmMehrfachvergabe',message:'bkm korridore',data:{strName:strName,km:km,anzahl:result.anzahl,labels:result.abschnitte.map(a=>a.label)},timestamp:Date.now(),hypothesisId:'H-bkm',runId:'pruef-a46'})}).catch(()=>{});
+  // #endregion
+    return result;
 }
 
 function setzeBkmDoppelWarnung(info, sichtbar) {
@@ -2686,7 +2766,9 @@ function aktualisiereBkmDoppelWarnung(strName, km, opts) {
         return;
     }
     let pt = aktiveLat !== 0 ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
-    setzeBkmDoppelWarnung(ermittleBkmMehrfachvergabe(strName, km, pt), true);
+    let aufDuessel = istDuesselAktiv();
+    let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
+    setzeBkmDoppelWarnung(ermittleBkmMehrfachvergabe(strName, km, pt, achse), true);
 }
 
 function formatiereGemeindeAnzeige(name, bereich, km) {
@@ -3638,13 +3720,30 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
         return { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0, approximiert: true };
     }
 
-    let bestandSnap = turf.nearestPointOnLine(bestandMatch.feature, basisPt, { units: "kilometers" });
+    let bestandSnap = null;
+    let snapCoords = null;
+    try {
+        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature);
+        if (alongKm !== null && alongKm >= 0) {
+            bestandSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
+            snapCoords = turf.getCoord(bestandSnap);
+        }
+    } catch (e) {}
+    if (!bestandSnap) {
+        bestandSnap = turf.nearestPointOnLine(bestandMatch.feature, basisPt, { units: "kilometers" });
+        snapCoords = turf.getCoord(bestandSnap);
+    }
     let locationKm = bestandSnap.properties.location || 0;
+  // #region agent log
+    debugLogPruef('index.html:ermittlePruefFahrbahnPosition', 'snap compare', {
+        strName: strName, km: km, basis: coords, snap: snapCoords, alongUsed: snapCoords && coords && (Math.abs(snapCoords[0] - coords[0]) > 1e-6 || Math.abs(snapCoords[1] - coords[1]) > 1e-6)
+    });
+  // #endregion
 
     if (!zielAchse || zielAchse === "Bestandsachse") {
         return {
             point: bestandSnap,
-            coords: turf.getCoord(bestandSnap),
+            coords: snapCoords,
             feature: bestandMatch.feature,
             props: bestandMatch.props,
             distMeter: locationKm * 1000,
@@ -4265,9 +4364,35 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
         }).addTo(pruefMapLayer);
     }
 
+    let focusLayer = L.layerGroup();
+    if (pt) {
+        let pc = pt.geometry.coordinates;
+        L.circleMarker([pc[1], pc[0]], { radius: 1, opacity: 0, fillOpacity: 0 }).addTo(focusLayer);
+    }
+    if (strName && strName.startsWith("A") && km > 0) {
+        holeRefsFuerPruefKarte(strName, strName, km, kmVon, kmBis).forEach(r => {
+            L.circleMarker([r.coord[1], r.coord[0]], { radius: 1, opacity: 0, fillOpacity: 0 }).addTo(focusLayer);
+        });
+    }
     try {
-        let bounds = L.featureGroup([pruefGrenzLayer, pruefMapLayer]).getBounds();
-        if (bounds.isValid()) map.fitBounds(bounds.pad(0.12));
+        if (focusLayer.getLayers().length > 0) {
+            let bounds = focusLayer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds.pad(0.3));
+              // #region agent log
+                let c = bounds.getCenter();
+                debugLogPruef('index.html:zeichnePositionsPruefung', 'map focus', {
+                    strName: strName, km: km,
+                    pt: pt ? pt.geometry.coordinates : null,
+                    center: [c.lng, c.lat],
+                    zoom: map.getZoom()
+                });
+              // #endregion
+            }
+        } else if (pt) {
+            let pc = pt.geometry.coordinates;
+            map.setView([pc[1], pc[0]], 15);
+        }
     } catch (e) {}
 }
 
