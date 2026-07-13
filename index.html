@@ -25,7 +25,7 @@ if ('serviceWorker' in navigator) {
 [data-theme="dark"] { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --text-secondary: #4dabff; --input-bg: #2d2d2d; --input-border: #444; --table-head: #333; --result-bg: #2a2d31; }
  
 body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; box-sizing: border-box; }
-.card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
+.card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shaQdow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; padding: 0 44px; box-sizing: border-box; }
 .theme-switch { position: absolute; top: 10px; right: 8px; z-index: 2; cursor: pointer; font-size: 20px; user-select: none; }
 .home-switch {
@@ -1782,20 +1782,49 @@ function holeBkmInterpolationsAnker(strName, km) {
 
 function findeKmGeoBracket(refs, km, anchorPt) {
     let sorted = dedupliziereRefsNachKm(refs, anchorPt);
+    if (!sorted.length) return { before: null, after: null };
+
     let before = null;
     let after = null;
     for (let i = 0; i < sorted.length; i++) {
-        if (sorted[i].km < km - 1e-4) before = sorted[i];
-        else if (sorted[i].km > km + 1e-4) { after = sorted[i]; break; }
+        if (sorted[i].km <= km + 1e-4) before = sorted[i];
     }
+    for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].km >= km - 1e-4) { after = sorted[i]; break; }
+    }
+
+    if (before && after && (before === after || Math.abs(before.km - after.km) < 1e-4)) {
+        let idx = sorted.indexOf(after);
+        if (idx > 0) before = sorted[idx - 1];
+        else if (idx < sorted.length - 1) after = sorted[idx + 1];
+    }
+
+    if (!before || !after || before.km > km + 0.01 || after.km < km - 0.01) {
+        for (let j = 1; j < sorted.length; j++) {
+            if (sorted[j - 1].km <= km + 1e-4 && sorted[j].km >= km - 1e-4 &&
+                Math.abs(sorted[j].km - sorted[j - 1].km) > 1e-4) {
+                before = sorted[j - 1];
+                after = sorted[j];
+                break;
+            }
+        }
+    }
+
     if (!before && sorted.length) before = sorted[0];
     if (!after && sorted.length) after = sorted[sorted.length - 1];
-    if (before && after && Math.abs(before.km - after.km) < 1e-4) {
-        let ai = sorted.indexOf(after);
-        if (ai >= 0 && ai < sorted.length - 1) after = sorted[ai + 1];
-        else if (ai > 0) before = sorted[ai - 1];
-    }
     return { before: before, after: after };
+}
+
+function waehleRefsFuerKmInterpolation(mitKm, km, anchorPt) {
+    let fenster = mitKm.filter(r => r.km >= km - 4 && r.km <= km + 4);
+    let quelle = fenster.length >= 2 ? fenster : mitKm;
+    let bracket = findeKmGeoBracket(quelle, km, anchorPt);
+    if (bracket.before && bracket.after &&
+        bracket.before.km <= km + 0.05 && bracket.after.km >= km - 0.05 &&
+        Math.abs(bracket.after.km - bracket.before.km) > 1e-4) {
+        return bracket;
+    }
+    return findeKmGeoBracket(mitKm, km, anchorPt);
 }
 
 function interpoliereKmKoordinate(before, after, km) {
@@ -1870,12 +1899,11 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
         if (!anchorPt) anchorPt = holeBkmInterpolationsAnker(autobahn, km);
     }
 
-    let chain = waehleReferenzGeoKette(mitKm, km, autobahn, Object.assign({}, opts, { pt: anchorPt }));
-    let bracket = findeKmGeoBracket(chain, km, anchorPt);
+    let bracket = waehleRefsFuerKmInterpolation(mitKm, km, anchorPt);
     let result = interpoliereKmKoordinate(bracket.before, bracket.after, km);
   // #region agent log
     (function() {
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'geo interp',data:{autobahn:autobahn,km:km,beforeKm:bracket.before?bracket.before.km:null,afterKm:bracket.after?bracket.after.km:null,result:result,anchor:anchorPt?anchorPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-interp',runId:'interp-fix'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'geo interp',data:{autobahn:autobahn,km:km,beforeKm:bracket.before?bracket.before.km:null,afterKm:bracket.after?bracket.after.km:null,result:result,anchor:anchorPt?anchorPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-interp',runId:'interp-fix2'})}).catch(()=>{});
     })();
   // #endregion
     return result;
