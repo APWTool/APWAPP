@@ -286,9 +286,25 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .pruef-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .pruef-legend-swatch { width: 22px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 .pruef-legend-swatch--fill { width: 14px; height: 14px; border-radius: 3px; border: 2px solid; background: transparent; }
-.ort-anzeige { display: flex; flex-direction: column; gap: 2px; }
+.ort-anzeige { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .ort-name { font-weight: 600; }
 .ort-detail { font-size: 0.88em; color: var(--text-secondary); line-height: 1.35; }
+.ort-zeile { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.bkm-doppel-badge {
+    display: none; align-items: center; gap: 4px; flex-shrink: 0;
+    margin: 0; padding: 4px 10px; width: auto; font-size: 0.78em; font-weight: 600;
+    color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 999px;
+    cursor: pointer; line-height: 1.2;
+}
+[data-theme="dark"] .bkm-doppel-badge { color: #fcd34d; background: #422006; border-color: #b45309; }
+.bkm-doppel-badge[aria-expanded="true"] { background: #fde68a; border-color: #d97706; }
+.bkm-doppel-detail {
+    display: none; margin: 6px 0 0; padding: 8px 10px; font-size: 0.82em; line-height: 1.45;
+    background: var(--result-bg); border-left: 3px solid #f59e0b; border-radius: 4px;
+}
+.bkm-doppel-detail ul { margin: 6px 0 0; padding-left: 18px; }
+.bkm-doppel-detail li { margin-bottom: 4px; }
+.bkm-doppel-detail li.bkm-doppel-aktiv { font-weight: 600; color: var(--accent); }
  
 /* FUSSEILE – entfernt, Links in Sidebar */
 /* INFOTEXTE */
@@ -383,7 +399,11 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
     <div class="result">
        <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
        <p><strong>Ort:</strong></p>
-       <div id="g" class="ort-anzeige"><span class="ort-name">-</span></div>
+       <div class="ort-zeile">
+           <div id="g" class="ort-anzeige"><span class="ort-name">-</span></div>
+           <button type="button" id="bkm-doppel-toggle" class="bkm-doppel-badge" style="display:none;" aria-expanded="false" onclick="toggleBkmDoppelDetail()" title="BKM-Mehrfachvergabe">⚠ BKM doppelt</button>
+       </div>
+       <div id="bkm-doppel-detail" class="bkm-doppel-detail"></div>
        <div id="vertrauen-info" style="display:none;"></div>
        <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
        <p><strong>Adresse:</strong> <span id="m_address">-</span></p>
@@ -581,7 +601,7 @@ let wzStartTime = 0;
 let wzStartKm = 0;
 let wzSpeed = 0;
 let wzDir = 1;
-let letzteAutobahnDropdown = null;
+let letzteBkmDoppelInfo = null;
 
 if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
    document.documentElement.setAttribute("data-theme", "dark");
@@ -2472,6 +2492,131 @@ function formatiereGemeindeKm(km) {
     return r.toFixed(3).replace('.', ',');
 }
 
+function clusterKmBereichAusRefs(refs) {
+    if (!refs || !refs.length) return { von: 0, bis: 0 };
+    let kms = refs.map(r => r.km);
+    return { von: Math.min(...kms), bis: Math.max(...kms) };
+}
+
+function clusterEnthaeltKm(refs, km, margin) {
+    if (!refs || !refs.length) return false;
+    margin = margin === undefined ? 0.5 : margin;
+    let b = clusterKmBereichAusRefs(refs);
+    return km >= b.von - margin && km <= b.bis + margin;
+}
+
+function clustersSindGleich(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    return a[0].km === b[0].km && a[0].coord[0] === b[0].coord[0] && a[0].coord[1] === b[0].coord[1];
+}
+
+function ermittleBkmMehrfachvergabe(strName, km, pt) {
+    if (!strName || !strName.startsWith("A") || !(km > 0) || isNaN(km)) return null;
+    let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(strName));
+    if (mitKm.length < 2) return null;
+    let clusters = clustereReferenzPunkte(mitKm);
+    if (clusters.length < 2) return null;
+
+    let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : turf.point(holeKmAnkerKoordinaten()));
+    let treffende = clusters.filter(c => clusterEnthaeltKm(c, km, 0.5));
+
+    if (treffende.length < 2) {
+        let gleicheKm = mitKm.filter(p => Math.abs(p.km - km) <= 0.15);
+        if (gleicheKm.length >= 2) {
+            let maxAbstand = 0;
+            for (let i = 0; i < gleicheKm.length; i++) {
+                for (let j = i + 1; j < gleicheKm.length; j++) {
+                    let d = turf.distance(turf.point(gleicheKm[i].coord), turf.point(gleicheKm[j].coord), { units: "kilometers" });
+                    if (d > maxAbstand) maxAbstand = d;
+                }
+            }
+            if (maxAbstand > 6) {
+                let geoGroups = [];
+                gleicheKm.forEach(p => {
+                    let placed = false;
+                    for (let g of geoGroups) {
+                        let d = turf.distance(turf.point(g[0].coord), turf.point(p.coord), { units: "kilometers" });
+                        if (d < 4) { g.push(p); placed = true; break; }
+                    }
+                    if (!placed) geoGroups.push([p]);
+                });
+                if (geoGroups.length >= 2) treffende = geoGroups;
+            }
+        }
+    }
+
+    if (treffende.length < 2) return null;
+
+    let gewaehltCluster = waehleKmCluster(mitKm, km, anchorPt, strName);
+    let gewaehltIdx = treffende.findIndex(c => clustersSindGleich(c, gewaehltCluster));
+    if (gewaehltIdx < 0) gewaehltIdx = 0;
+
+    return {
+        strName: strName,
+        km: km,
+        anzahl: treffende.length,
+        abschnitte: treffende.map((c, i) => {
+            let b = clusterKmBereichAusRefs(c);
+            return {
+                index: i,
+                von: b.von,
+                bis: b.bis,
+                gewaehlt: i === gewaehltIdx,
+                label: "Abschnitt " + (i + 1) + " (km " + formatiereGemeindeKm(b.von) + "–" + formatiereGemeindeKm(b.bis) + ")"
+            };
+        }),
+        gewaehltIndex: gewaehltIdx
+    };
+}
+
+function setzeBkmDoppelWarnung(info, sichtbar) {
+    let badge = document.getElementById("bkm-doppel-toggle");
+    let detail = document.getElementById("bkm-doppel-detail");
+    if (!badge || !detail) return;
+    letzteBkmDoppelInfo = info;
+    if (!sichtbar || !info) {
+        badge.style.display = "none";
+        badge.setAttribute("aria-expanded", "false");
+        detail.style.display = "none";
+        detail.innerHTML = "";
+        return;
+    }
+    badge.style.display = "inline-flex";
+    badge.textContent = "⚠ BKM " + info.anzahl + "×";
+    badge.title = "km " + info.km.toFixed(3).replace(".", ",") + " auf " + info.anzahl + " Streckenabschnitten – Details";
+    if (detail.style.display === "block") toggleBkmDoppelDetail(true);
+}
+
+function toggleBkmDoppelDetail(forceOpen) {
+    let detail = document.getElementById("bkm-doppel-detail");
+    let badge = document.getElementById("bkm-doppel-toggle");
+    if (!detail || !letzteBkmDoppelInfo) return;
+    let open = forceOpen === true ? true : (forceOpen === false ? false : detail.style.display === "none");
+    detail.style.display = open ? "block" : "none";
+    if (badge) badge.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) return;
+    let kmStr = letzteBkmDoppelInfo.km.toFixed(3).replace(".", ",");
+    let html = "<strong>Mehrfachvergabe " + letzteBkmDoppelInfo.strName + " km " + kmStr + ":</strong><ul>";
+    letzteBkmDoppelInfo.abschnitte.forEach(a => {
+        html += '<li class="' + (a.gewaehlt ? "bkm-doppel-aktiv" : "") + '">' + a.label;
+        if (a.gewaehlt) html += " ← gewählt";
+        html += "</li>";
+    });
+    html += "</ul><p class=\"hilfs-hinweis\">In NRW trägt dieselbe BAB ggf. mehrere km-Bereiche. Ohne GPS wird der Abschnitt über Wache/Anker gewählt – bitte mit „Position prüfen“ oder GPS verifizieren.</p>";
+    detail.innerHTML = html;
+}
+
+function aktualisiereBkmDoppelWarnung(strName, km, opts) {
+    opts = opts || {};
+    let manuellKontext = opts.isManual || !watchId || letzteKontextMeta.manuell;
+    if (!manuellKontext || !strName || !strName.startsWith("A") || !(km > 0) || isNaN(km)) {
+        setzeBkmDoppelWarnung(null, false);
+        return;
+    }
+    let pt = aktiveLat !== 0 ? turf.point([aktiveLon, aktiveLat]) : (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
+    setzeBkmDoppelWarnung(ermittleBkmMehrfachvergabe(strName, km, pt), true);
+}
+
 function formatiereGemeindeAnzeige(name, bereich, km) {
     if (!bereich) return name;
     let span = bereich.bis - bereich.von;
@@ -3028,6 +3173,7 @@ async function verarbeiteGPS(lat, lon, acc){
 
         if (strName.startsWith("A") && bkm > 0) {
             setzeMeistereiAnzeige(strName, bkm);
+            setzeBkmDoppelWarnung(null, false);
         } else if (strName.startsWith("A") && rawAbs) {
             setzeMeistereiAusAbschnitt(rawAbs, distMeter);
         }
@@ -3054,10 +3200,6 @@ async function verarbeiteGPS(lat, lon, acc){
         zeigeGpsInfo(htmlOutput);
         if (strName.startsWith("A") && bkm > 0) {
             aktualisiereKontextAnzeigen({ strName: strName, km: bkm, achse: document.getElementById("richtung").value || achse, pt: pt, snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc });
-            debugLogBkm('index.html:verarbeiteGPS', 'gps capture', {
-                strName: strName, bkm: bkm, snapDistM: Math.round(sel.dist * 1000), gpsAccM: acc,
-                manuellerFokus: manuellerFokus
-            }, 'H2');
         }
  
     } else {
@@ -3156,19 +3298,7 @@ function berechneGoldgriffBKM(meinPunkt, strName, feature) {
         bkm = Math.max(lo, Math.min(hi, bkm));
     }
 
-    let result = (isFinite(bkm) && bkm > 0) ? bkm : 0;
-    debugLogBkm('index.html:berechneGoldgriffBKM', 'bkm result', {
-        strName: strName, bkm: result, clusterSize: cluster.length,
-        clusterKm: cluster.length ? [cluster[0].km, cluster[cluster.length - 1].km] : null,
-        hasFeature: !!feature
-    }, 'H1');
-    return result;
-}
-
-function debugLogBkm(location, message, data, hypothesisId) {
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:location,message:message,data:data,timestamp:Date.now(),hypothesisId:hypothesisId,runId:'pruef-fix'})}).catch(()=>{});
-    // #endregion
+    return (isFinite(bkm) && bkm > 0) ? bkm : 0;
 }
  
 function berechnenDebounced(isManual = false) {
@@ -3184,6 +3314,7 @@ function berechnen(isManual = false){
     
     if(isNaN(km)) {
         document.getElementById("g").innerHTML = '<span class="ort-name">-</span>';
+        setzeBkmDoppelWarnung(null, false);
         document.getElementById("progress").style.width = "0%";
         document.getElementById("m").innerText = "-";
         document.getElementById("m_address").innerText = "-";
@@ -3228,6 +3359,8 @@ function berechnen(isManual = false){
     } else {
         setzeGemeindeAnzeigeHtml(datenGemeinden.length === 0 ? "-" : "Außerhalb NRW", "");
     }
+
+    aktualisiereBkmDoppelWarnung(a, km, { isManual: isManual });
 
     letzteKontextMeta = {
         snapDistM: null,
