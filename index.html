@@ -1478,6 +1478,15 @@ function holeKmAnkerKoordinaten() {
     return wachenAnker["Hilden"] || [6.95, 51.17];
 }
 
+function holeKmAnkerFuerAutobahn(strName, km) {
+    if (strName && km > 0) {
+        let wache = findeWacheFuerAutobahnKm(strName, km, null);
+        if (wache && wachenAnker[wache]) return wachenAnker[wache];
+    }
+    if (wachenAnker[aktuelleWache]) return wachenAnker[aktuelleWache];
+    return holeKmAnkerKoordinaten();
+}
+
 function referenzPunkteMitKm(passende) {
     return passende.map(p => ({
         pt: p,
@@ -1567,15 +1576,35 @@ function findeWacheFuerAutobahnKm(strName, bkm, pt) {
     return scored[0].wache;
 }
 
-function waehleKmCluster(mitKm, km, pt, strName) {
+function waehleKmCluster(mitKm, km, pt, strName, opts) {
+    opts = opts || {};
     let clusters = clustereReferenzPunkte(mitKm);
     if (clusters.length === 1) return clusters[0];
 
     let passend = clusters.filter(c => km >= c[0].km - 2 && km <= c[c.length - 1].km + 2);
     if (passend.length === 1) return passend[0];
 
-    let anchorPt = pt || turf.point(holeKmAnkerKoordinaten());
+    let anchorPt = pt;
+    if (!anchorPt) {
+        if (opts.kmOnly && strName && km > 0) {
+            anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
+        } else if (!opts.kmOnly && letzteLat !== 0) {
+            anchorPt = turf.point([letzteLon, letzteLat]);
+        } else {
+            anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
+        }
+    }
+
     let pool = passend.length > 0 ? passend : clusters;
+    if (passend.length === 0 && km > 0) {
+        pool = clusters.slice().sort((a, b) => {
+            let midA = (a[0].km + a[a.length - 1].km) / 2;
+            let midB = (b[0].km + b[b.length - 1].km) / 2;
+            return Math.abs(midA - km) - Math.abs(midB - km);
+        });
+        return pool[0];
+    }
+
     pool.sort((a, b) => {
         let midA = a[Math.floor(a.length / 2)];
         let midB = b[Math.floor(b.length / 2)];
@@ -1603,15 +1632,19 @@ function autobahnSuchNummer(strName) {
     return n.replace(/^A/, "");
 }
 
-function holeKoordinateFuerKM(autobahn, km, pt) {
+function holeKoordinateFuerKM(autobahn, km, pt, opts) {
+    opts = opts || {};
     if (referenzPunkte.length === 0 || isNaN(km)) return null;
     let passende = holeReferenzFuerStrasse(autobahn);
     if (passende.length === 0) return null;
 
     let mitKm = referenzPunkteMitKm(passende);
     if (mitKm && mitKm.length > 1) mitKm.sort((a, b) => a.km - b.km);
-    let anchorPt = pt || (letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null);
-    let cluster = waehleKmCluster(mitKm, km, anchorPt, autobahn);
+    let anchorPt = pt;
+    if (!anchorPt && !opts.kmOnly && letzteLat !== 0) {
+        anchorPt = turf.point([letzteLon, letzteLat]);
+    }
+    let cluster = waehleKmCluster(mitKm, km, anchorPt, autobahn, opts);
     if (cluster && cluster.length > 1) cluster = cluster.slice().sort((a, b) => a.km - b.km);
     let before = null;
     let after = null;
@@ -1628,7 +1661,7 @@ function holeKoordinateFuerKM(autobahn, km, pt) {
         if (needFallback && mitKm && mitKm.length >= 2) {
             let win = mitKm.filter(p => Math.abs(p.km - km) <= 4.0);
             if (win.length < 2) win = mitKm;
-            if (pt && win.length > 30) {
+            if (!opts.kmOnly && pt && win.length > 30) {
                 win = win
                     .map(p => {
                         let d = 999;
@@ -3549,6 +3582,68 @@ function closeMap() {
     mapMode = 'NK';
 }
 
+function ermittlePruefFahrbahnPosition(strName, km, achse) {
+    if (!strName || !(km > 0) || isNaN(km)) return null;
+    let coords = holeKoordinateFuerKM(strName, km, null, { kmOnly: true });
+    if (!coords) return ermittleFahrbahnPosition(strName, km, achse);
+
+    let basisPt = turf.point(coords);
+    let zielAchse = normalisiereAchse(achse) || "Bestandsachse";
+    let bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "Bestandsachse");
+    if (!bestandMatch) bestandMatch = findeNaechsteStrassenFeature(basisPt, strName, "");
+
+    if (!bestandMatch) {
+        return { point: basisPt, coords: coords, feature: null, props: {}, distMeter: 0, approximiert: true };
+    }
+
+    let bestandSnap = turf.nearestPointOnLine(bestandMatch.feature, basisPt, { units: "kilometers" });
+    let locationKm = bestandSnap.properties.location || 0;
+
+    if (!zielAchse || zielAchse === "Bestandsachse") {
+        return {
+            point: bestandSnap,
+            coords: turf.getCoord(bestandSnap),
+            feature: bestandMatch.feature,
+            props: bestandMatch.props,
+            distMeter: locationKm * 1000,
+            approximiert: false
+        };
+    }
+
+    let dirFeatures = holeStrassenFeatures(strName, zielAchse, true);
+    let absNr = bestandMatch.props.ABSNr || "";
+    if (absNr) {
+        let passendAbs = dirFeatures.filter(f => (f.properties || {}).ABSNr === absNr);
+        if (passendAbs.length > 0) dirFeatures = passendAbs;
+    }
+    let dirFeature = waehleParallelesSegment(dirFeatures, bestandSnap);
+    if (!dirFeature) {
+        return {
+            point: bestandSnap,
+            coords: turf.getCoord(bestandSnap),
+            feature: bestandMatch.feature,
+            props: bestandMatch.props,
+            distMeter: locationKm * 1000,
+            approximiert: true
+        };
+    }
+    let dirSnap = turf.nearestPointOnLine(dirFeature, bestandSnap, { units: "kilometers" });
+    return {
+        point: dirSnap,
+        coords: turf.getCoord(dirSnap),
+        feature: dirFeature,
+        props: dirFeature.properties || {},
+        distMeter: locationKm * 1000,
+        approximiert: false
+    };
+}
+
+function debugLogPruef(location, message, data) {
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:location,message:message,data:data,timestamp:Date.now(),hypothesisId:'H-pruef',runId:'pruef-a46'})}).catch(()=>{});
+    // #endregion
+}
+
 function holeAktuellePruefPosition() {
     let aufDuessel = istDuesselAktiv();
     let strName = aktiveStrasse || document.getElementById(aufDuessel ? "autobahn-duessel" : "autobahn").value;
@@ -3560,7 +3655,7 @@ function holeAktuellePruefPosition() {
     let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
     let pt = null;
     if (km > 0 && strName) {
-        let pos = ermittleFahrbahnPosition(strName, km, achse);
+        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
         if (pos && pos.coords) pt = turf.point(pos.coords);
     }
     if (!pt && aktiveLat !== 0) pt = turf.point([aktiveLon, aktiveLat]);
@@ -3962,25 +4057,16 @@ function holeVerwaltungsGrenze(cacheKey, features) {
     return merged;
 }
 
-function holeRefsFuerPruefKarte(bab, pt, strName, km, kmVon, kmBis, radiusKm) {
+function holeRefsFuerPruefKarte(bab, strName, km, kmVon, kmBis) {
     let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(bab));
     if (!mitKm.length) return [];
-    let cluster = km > 0 ? waehleKmCluster(mitKm, km, pt, bab) : mitKm;
+    let cluster = km > 0 ? waehleKmCluster(mitKm, km, null, bab, { kmOnly: true }) : mitKm;
     let refs = dedupliziereRefsNachKm(cluster.length ? cluster.slice() : mitKm);
     if (km > 0) {
         let imKm = mitKm.filter(r => r.km >= kmVon - 0.8 && r.km <= kmBis + 0.8);
         refs = dedupliziereRefsNachKm(refs.concat(imKm));
     }
-    return refs.filter(r => {
-        try {
-            if (bab === strName && km > 0) {
-                if (r.km < kmVon - 1.2 || r.km > kmBis + 1.2) return false;
-            } else if (turf.distance(pt, turf.point(r.coord), { units: "kilometers" }) > radiusKm + 0.8) {
-                return false;
-            }
-        } catch (e) { return false; }
-        return true;
-    });
+    return refs.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
 }
 
 function setzePruefKartenOverlays(sichtbar) {
@@ -4062,13 +4148,23 @@ function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
 
 function zeichnePositionsPruefung(strName, km, achse, pt) {
     if (!map) return;
+    if (strName && km > 0) {
+        let pos = ermittlePruefFahrbahnPosition(strName, km, achse);
+        if (pos && pos.coords) pt = turf.point(pos.coords);
+        let refs = strName.startsWith("A") ? holeRefsFuerPruefKarte(strName, strName, km, Math.max(0, km - 4), km + 4) : [];
+        debugLogPruef('index.html:zeichnePositionsPruefung', 'pruef map draw', {
+            strName: strName, km: km,
+            pt: pt ? pt.geometry.coordinates : null,
+            refCount: refs.length,
+            refKm: refs.slice(0, 6).map(r => r.km)
+        });
+    }
     pruefCtxCache = { strName: strName, km: km || 0, achse: achse, pt: pt };
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
     if (pruefGrenzLayer) { map.removeLayer(pruefGrenzLayer); pruefGrenzLayer = null; }
     if (pruefOverlayLayer) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
 
     pruefGrenzLayer = L.layerGroup().addTo(map);
-    pruefOverlayLayer = L.layerGroup().addTo(map);
     pruefMapLayer = L.layerGroup().addTo(map);
 
     let radiusKm = 5;
@@ -4080,35 +4176,22 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     let aktuelleGemeinde = (km > 0 && strName) ? ermittleGemeindePraezise(strName, km, achse) : null;
     zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde);
 
-    if (strName && pt) {
-        holeStrassenFeatures(strName, "Bestandsachse", false).forEach(f => {
+    if (strName && strName.startsWith("A") && km > 0) {
+        holeRefsFuerPruefKarte(strName, strName, km, kmVon, kmBis).forEach(r => {
             try {
-                L.geoJSON(f, { style: { color: "#28a745", weight: 3, opacity: 0.75 } }).addTo(pruefOverlayLayer);
+                let kmStr = r.km.toFixed(1).replace(".", ",");
+                L.circleMarker([r.coord[1], r.coord[0]], {
+                    radius: 5, color: "#d39e00", fillColor: "#ffc107", fillOpacity: 1, weight: 2
+                }).bindTooltip(strName + " km " + kmStr, { permanent: true, direction: "top", className: "pruef-ref-tooltip" })
+                    .addTo(pruefMapLayer);
             } catch (e) {}
         });
     }
-
-    let babNamenSet = new Set();
-    if (strName && strName.startsWith("A")) babNamenSet.add(strName);
-    findeKandidatenFuerPin(pt, radiusKm, false).filter(k => k.name.startsWith("A")).forEach(k => babNamenSet.add(k.name));
-    let babNamen = [...babNamenSet];
 
     let amDaten = sammleAmGrenzenFuerKarte(strName, kmVon, kmBis, pt);
     amDaten.grenzKm.forEach(gKm => zeichneAmGrenzLinie(strName, gKm, amDaten.amSegs, pt));
 
     sammleWachGrenzenFuerKarte(strName, kmVon, kmBis).forEach(g => zeichneWachGrenzLinie(strName, g, pt));
-
-    babNamen.forEach(bab => {
-        holeRefsFuerPruefKarte(bab, pt, strName, km, kmVon, kmBis, radiusKm).forEach(r => {
-            try {
-                let kmStr = r.km.toFixed(1).replace(".", ",");
-                L.circleMarker([r.coord[1], r.coord[0]], {
-                    radius: 5, color: "#d39e00", fillColor: "#ffc107", fillOpacity: 1, weight: 2
-                }).bindTooltip(bab + " km " + kmStr, { permanent: true, direction: "top", className: "pruef-ref-tooltip" })
-                    .addTo(pruefMapLayer);
-            } catch (e) {}
-        });
-    });
 
     if (pt) {
         let pc = pt.geometry.coordinates;
@@ -4118,7 +4201,7 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     }
 
     try {
-        let bounds = L.featureGroup([pruefGrenzLayer, pruefOverlayLayer, pruefMapLayer]).getBounds();
+        let bounds = L.featureGroup([pruefGrenzLayer, pruefMapLayer]).getBounds();
         if (bounds.isValid()) map.fitBounds(bounds.pad(0.12));
     } catch (e) {}
 }
@@ -4146,10 +4229,10 @@ function openPositionPruefen() {
         }
     }
     if (ctx.km > 0 && ctx.strName) {
-        let pos = ermittleFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
+        let pos = ermittlePruefFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
         if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
     } else if (!ctx.pt && ctx.km > 0) {
-        let pos = ermittleFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
+        let pos = ermittlePruefFahrbahnPosition(ctx.strName, ctx.km, ctx.achse);
         if (pos && pos.coords) ctx.pt = turf.point(pos.coords);
     }
     if (!ctx.pt) {
