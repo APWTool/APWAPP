@@ -560,6 +560,7 @@ const datenWachen={"Hilden":{grenzen:{"A1":[363.315,381.658],"A3":[101.2,122.819
 const meistereiAdressen={"AM Weilerswist":"Kastanienweg 4, 53919 Weilerswist","AM Titz":"An den Teichen 1, 52445 Titz","AM Sankt Augustin":"Frankfurter Str. 140, 53757 Sankt Augustin","AM St. Augustin":"Frankfurter Str. 140, 53757 Sankt Augustin","AM Rheinberg":"Moerser Str. 123, 47495 Rheinberg","AM Remscheid":"Talsperre 23, 42859 Remscheid","AM Recklinghausen":"Friedrich-Ebert-Straße 241, 45659 Recklinghausen","AM Ratingen":"Brachter Str. 45A, 40882 Ratingen","AM Overath":"Balkener-Straße 1, 51491 Overath","AM Oelde":"Böckenfördeweg 24, 59302 Oelde","AM Münster":"Feuerstiege 16, 48163 Münster","AM Mönchengladbach":"Waldnieler Str. 600, 41068 Mönchengladbach","AM Lüdenscheid":"Werdohler Landstraße 10, 58511 Lüdenscheid","AM Leverkusen":"Bonner Str. 71, 51379 Leverkusen","AM Lengerich":"Ibbenbürener Str. 10, 49525 Lengerich","AM Köln":"Dürener Str. 462, 50858 Köln","AM Kamen":"Zollpost 26, 59174 Kamen","AM Kaarst":"Neersener Str. 9, 41564 Kaarst","AM Isselburg":"Am Wolfssee 26, 46419 Isselburg","AM Herford":"Vlothoer Str. 289, 32049 Herford","AM Hagen":"In d. Krone 20, 58099 Hagen","AM Gelsenkirchen":"Reckfeldstraße 1, 45889 Gelsenkirchen","AM Freudenberg":"Wilhelmshöhe 15, 57258 Freudenberg","AM Düren":"Nordstraße 149, 52353 Düren","AM Duisburg":"Carl-Benz-Straße 11, 47058 Duisburg","AM Dorsten":"Königsberger Allee 200, 46282 Dorsten","AM Bonn":"Euskirchener Str. 1, 53347 Alfter","AM Werl":"Waltringer Weg 25, 59457 Werl","AM Wünnenberg-Haaren":"Fiegenburg 16, 33181 Bad Wünnenberg","SM Heinsberg":"-"};
 const meistereiTelefon={"AM Weilerswist":"02254 601410","AM Titz":"-","AM Sankt Augustin":"02241 127250","AM St. Augustin":"02241 127250","AM Rheinberg":"02843 903640","AM Remscheid":"02191 469740","AM Recklinghausen":"02361 9420","AM Ratingen":"02102 20437","AM Overath":"02206 863780","AM Oelde":"02522 9120","AM Münster":"02501 9670","AM Mönchengladbach":"02161 901550","AM Lüdenscheid":"02351 9240","AM Leverkusen":"-","AM Lengerich":"05481 9220","AM Köln":"02234 20370","AM Kamen":"-","AM Kaarst":"02131 898670","AM Isselburg":"02874 902720","AM Herford":"05221 92350","AM Hagen":"02331 6210","AM Gelsenkirchen":"0209 98010","AM Freudenberg":"02734 2870","AM Düren":"02421 224980","AM Duisburg":"0203 6086040","AM Dorsten":"02362 9230","AM Bonn":"0228 3918910","AM Werl":"02922 9840","AM Wünnenberg-Haaren":"02957 9700","SM Heinsberg":"-"};
 const wachenAnker={"Hilden":[6.935,51.168],"Mülheim":[6.881,51.424],"Hünxe":[6.765,51.642],"Moers":[6.628,51.458],"Gladbach":[6.439,51.196]};
+const WACHE_AUSSERHALB = "Außerhalb des PP Düsseldorf";
 
 let aktuelleWache = "Hilden"; 
 let datenLand=[], datenAutobahn=[], datenBund=[], datenBAB=[], referenzPunkte=[], datenGemeinden=[];
@@ -882,7 +883,7 @@ function aktualisiereZustaendigkeitenSeite() {
     else if (rfListe && achse === 'Nebenachse') kmAnzeige += ' · ' + rfListe[1];
 
     box.innerHTML = '<div class="zust-grid">' +
-        baueZustZeile('Wachbereich', aktuelleWache) +
+        baueZustZeile('Wachbereich', holeWachbereichAnzeige(strName, km, anchor)) +
         baueZustZeile('Kilometer', kmAnzeige) +
         baueZustZeile('Gemeinde (Kreis / Regierungsbezirk)', gemeindeZeile) +
         baueZustZeile('Zuständigkeit AM / SM', m_name) +
@@ -1634,11 +1635,35 @@ function waehleReferenzCluster(mitKm, pt, strName, hintKm, feature) {
     return scored[0].c;
 }
 
+function wacheDecktPositionGeografisch(wache, strName, bkm, pt) {
+    if (!pt) return true;
+    let g = datenWachen[wache]?.grenzen?.[strName];
+    if (!g) return false;
+    if (bkm < Math.min(...g) || bkm > Math.max(...g)) return false;
+    let wacheAnchor = wachenAnker[wache] ? turf.point(wachenAnker[wache]) : null;
+    if (!wacheAnchor) return true;
+    let erwartet = holeKoordinateFuerKM(strName, bkm, wacheAnchor, { kmOnly: true });
+    if (!erwartet) return true;
+    return turf.distance(pt, turf.point(erwartet), { units: "kilometers" }) <= 15;
+}
+
+function holeWachbereichAnzeige(strName, km, pt) {
+    pt = pt || holeKontextAnkerPt(strName, km, null);
+    let w = findeWacheFuerAutobahnKm(strName, km, pt);
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeWachbereichAnzeige',message:'wache lookup',data:{strName:strName,km:km,wache:w,anzeige:w||WACHE_AUSSERHALB,pt:pt?pt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-wache',runId:'bestwig'})}).catch(()=>{});
+  // #endregion
+    return w || WACHE_AUSSERHALB;
+}
+
 function findeWacheFuerAutobahnKm(strName, bkm, pt) {
     let kandidaten = [];
     for (let wache in datenWachen) {
         let g = datenWachen[wache].grenzen[strName];
         if (g && bkm >= Math.min(...g) && bkm <= Math.max(...g)) kandidaten.push(wache);
+    }
+    if (pt) {
+        kandidaten = kandidaten.filter(w => wacheDecktPositionGeografisch(w, strName, bkm, pt));
     }
     if (kandidaten.length === 0) return null;
     if (kandidaten.length === 1) return kandidaten[0];
@@ -3561,24 +3586,12 @@ function berechnen(isManual = false){
         return;
     }
  
-    if(isManual || holeBkmKorridorAnker(a, km)) {
+    if (isManual || holeBkmKorridorAnker(a, km)) {
         let anchorPt = holeKontextAnkerPt(a, km, null);
         let zielWache = findeWacheFuerAutobahnKm(a, km, anchorPt);
         if (zielWache && zielWache !== aktuelleWache) {
             wechsleWache(zielWache, true, a);
             return;
-        }
-        let currentGrenzen = datenWachen[aktuelleWache].grenzen[a];
-        if (currentGrenzen) {
-            let minKm = Math.min(...currentGrenzen);
-            let maxKm = Math.max(...currentGrenzen);
-            if (km < minKm || km > maxKm) {
-                if (zielWache) { wechsleWache(zielWache, true, a); return; }
-                for (let wache in datenWachen) {
-                   let g = datenWachen[wache].grenzen[a];
-                    if (g && km >= Math.min(...g) && km <= Math.max(...g)) { wechsleWache(wache, true, a); return; }
-                }
-            }
         }
     }
  
