@@ -4405,16 +4405,17 @@ function holeVerwaltungsGrenze(cacheKey, features) {
     return merged;
 }
 
-function filtereRefsImGleichenKorridor(mitKm, kette, strName, km, kmVon, kmBis, maxAbstandKm) {
+function filtereRefsImGleichenKorridor(mitKm, kette, strName, km, kmVon, kmBis, maxAbstandKm, pt) {
     maxAbstandKm = maxAbstandKm || 4.5;
+    let anchor = pt || holeKontextAnkerPt(strName, km, null);
     let imKm = mitKm.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
     if (!kette || !kette.length) return imKm;
     let refs = imKm.filter(r => {
         let minD = Math.min(...kette.map(c => turf.distance(turf.point(c.coord), turf.point(r.coord), { units: "kilometers" })));
         return minD <= maxAbstandKm;
     });
-    if (refs.length >= 4) return refs;
-    let basis = (km > 0 && strName) ? holeKoordinateFuerKM(strName, km, null, { kmOnly: true }) : null;
+    if (refs.length > 0) return refs;
+    let basis = koordinateImKorridor(strName, km, anchor);
     if (!basis && kette.length) {
         basis = [
             kette.reduce((s, p) => s + p.coord[0], 0) / kette.length,
@@ -4424,17 +4425,21 @@ function filtereRefsImGleichenKorridor(mitKm, kette, strName, km, kmVon, kmBis, 
     if (basis) {
         let bp = turf.point(basis);
         let byBasis = imKm.filter(r => turf.distance(bp, turf.point(r.coord), { units: "kilometers" }) <= maxAbstandKm);
-        if (byBasis.length > refs.length) refs = byBasis;
+        if (byBasis.length > 0) return byBasis;
     }
-    return refs.length > 0 ? refs : kette.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
+    return kette.filter(r => r.km >= kmVon - 1.2 && r.km <= kmBis + 1.2);
 }
 
 function holeRefsFuerPruefKarte(bab, strName, km, kmVon, kmBis) {
+    let anchor = holeKontextAnkerPt(bab, km, null);
     let mitKm = referenzPunkteMitKm(holeReferenzFuerStrasse(bab));
     if (!mitKm.length) return [];
-    let kette = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true }) : mitKm;
-    let refs = filtereRefsImGleichenKorridor(mitKm, kette, bab, km, kmVon, kmBis, 4.5);
+    let kette = km > 0 ? waehleReferenzGeoKette(mitKm, km, bab, { kmOnly: true, pt: anchor }) : mitKm;
+    let refs = filtereRefsImGleichenKorridor(mitKm, kette, bab, km, kmVon, kmBis, 4.5, anchor);
     refs.sort((a, b) => a.km - b.km);
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeRefsFuerPruefKarte',message:'refs korridor',data:{bab:bab,km:km,kmVon:kmVon,kmBis:kmBis,chainLen:kette.length,refCount:refs.length,refKm:refs.map(r=>r.km).slice(0,8),anchor:anchor?anchor.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-refs',runId:'bestwig'})}).catch(()=>{});
+  // #endregion
     return dedupliziereRefsNachKm(refs);
 }
 
