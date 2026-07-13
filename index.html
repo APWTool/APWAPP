@@ -286,10 +286,10 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 .pruef-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .pruef-legend-swatch { width: 22px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 .pruef-legend-swatch--fill { width: 14px; height: 14px; border-radius: 3px; border: 2px solid; background: transparent; }
-.ort-anzeige { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ort-anzeige { display: inline; }
 .ort-name { font-weight: 600; }
-.ort-detail { font-size: 0.88em; color: var(--text-secondary); line-height: 1.35; }
-.ort-zeile { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.ort-name-klickbar { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.ort-zeile { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
 .bkm-doppel-badge {
     display: none; align-items: center; gap: 4px; flex-shrink: 0;
     margin: 0; padding: 4px 10px; width: auto; font-size: 0.78em; font-weight: 600;
@@ -304,6 +304,8 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
 }
 .bkm-doppel-detail ul { margin: 6px 0 0; padding-left: 18px; }
 .bkm-doppel-detail li { margin-bottom: 4px; }
+.bkm-doppel-detail li.bkm-doppel-wahl { cursor: pointer; }
+.bkm-doppel-detail li.bkm-doppel-wahl:hover { text-decoration: underline; }
 .bkm-doppel-detail li.bkm-doppel-aktiv { font-weight: 600; color: var(--accent); }
  
 /* FUSSEILE – entfernt, Links in Sidebar */
@@ -398,11 +400,7 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
 
     <div class="result">
        <p><strong>Position:</strong> <span id="erfasste-strasse">-</span></p>
-       <p><strong>Ort:</strong></p>
-       <div class="ort-zeile">
-           <div id="g" class="ort-anzeige"><span class="ort-name">-</span></div>
-           <button type="button" id="bkm-doppel-toggle" class="bkm-doppel-badge" style="display:none;" aria-expanded="false" onclick="toggleBkmDoppelDetail()" title="BKM-Mehrfachvergabe">⚠ BKM doppelt</button>
-       </div>
+       <p class="ort-zeile"><strong>Ort:</strong> <span id="g" class="ort-anzeige"><span class="ort-name">-</span></span> <button type="button" id="bkm-doppel-toggle" class="bkm-doppel-badge" style="display:none;" aria-expanded="false" onclick="toggleBkmDoppelDetail()" title="BKM-Mehrfachvergabe">⚠ BKM doppelt</button></p>
        <div id="bkm-doppel-detail" class="bkm-doppel-detail"></div>
        <div id="vertrauen-info" style="display:none;"></div>
        <p><strong>Zuständigkeit:</strong> <span id="m">-</span></p>
@@ -602,6 +600,9 @@ let wzStartKm = 0;
 let wzSpeed = 0;
 let wzDir = 1;
 let letzteBkmDoppelInfo = null;
+let bkmKorridorAnkerPt = null;
+let bkmKorridorAnkerStr = null;
+let bkmKorridorAnkerKm = null;
 
 if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
    document.documentElement.setAttribute("data-theme", "dark");
@@ -819,8 +820,10 @@ function setzeGemeindeAnzeigeHtml(name, detail) {
     let el = document.getElementById("g");
     if (!el) return;
     let safeName = name || "-";
-    let html = '<span class="ort-name">' + safeName + '</span>';
-    if (detail) html += '<span class="ort-detail">' + detail + '</span>';
+    let klickbar = letzteBkmDoppelInfo && letzteBkmDoppelInfo.anzahl > 1;
+    let html = klickbar
+        ? '<span class="ort-name ort-name-klickbar" onclick="toggleBkmDoppelDetail()" title="Streckenabschnitt wählen">' + safeName + '</span>'
+        : '<span class="ort-name">' + safeName + '</span>';
     el.innerHTML = html;
 }
 
@@ -1495,6 +1498,13 @@ function holeKmAnkerKoordinaten() {
     return wachenAnker["Hilden"] || [6.95, 51.17];
 }
 
+function holeBkmKorridorAnker(autobahn, km) {
+    if (bkmKorridorAnkerPt && bkmKorridorAnkerStr === autobahn && Math.abs(bkmKorridorAnkerKm - km) <= 1.5) {
+        return bkmKorridorAnkerPt;
+    }
+    return null;
+}
+
 function holeKmAnkerFuerAutobahn(strName, km) {
     if (strName && km > 0) {
         let wache = findeWacheFuerAutobahnKm(strName, km, null);
@@ -1698,7 +1708,7 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
         anchorPt = turf.point([letzteLon, letzteLat]);
     }
     if (!anchorPt && opts.kmOnly) {
-        anchorPt = turf.point(holeKmAnkerFuerAutobahn(autobahn, km));
+        anchorPt = holeBkmKorridorAnker(autobahn, km) || turf.point(holeKmAnkerFuerAutobahn(autobahn, km));
     }
 
     let chain = waehleReferenzGeoKette(mitKm, km, autobahn, Object.assign({}, opts, { pt: anchorPt }));
@@ -2713,7 +2723,8 @@ function ermittleBkmMehrfachvergabe(strName, km, pt, achse) {
                 label: "Abschnitt " + (i + 1) + ": " + gemeinde
             };
         }),
-        gewaehltIndex: gewaehltIdx
+        gewaehltIndex: gewaehltIdx,
+        _korridore: korridore
     };
   // #region agent log
     fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittleBkmMehrfachvergabe',message:'bkm korridore',data:{strName:strName,km:km,anzahl:result.anzahl,labels:result.abschnitte.map(a=>a.label)},timestamp:Date.now(),hypothesisId:'H-bkm',runId:'pruef-a46'})}).catch(()=>{});
@@ -2736,6 +2747,8 @@ function setzeBkmDoppelWarnung(info, sichtbar) {
     badge.style.display = "inline-flex";
     badge.textContent = "⚠ BKM " + info.anzahl + "×";
     badge.title = "km " + info.km.toFixed(3).replace(".", ",") + " auf " + info.anzahl + " Streckenabschnitten – Details";
+    let name = leseGemeindeNameAusAnzeige();
+    if (name && name !== "-") setzeGemeindeAnzeigeHtml(name.replace(/ ≈$/, ""), "");
     if (detail.style.display === "block") toggleBkmDoppelDetail(true);
 }
 
@@ -2750,12 +2763,32 @@ function toggleBkmDoppelDetail(forceOpen) {
     let kmStr = letzteBkmDoppelInfo.km.toFixed(3).replace(".", ",");
     let html = "<strong>Mehrfachvergabe " + letzteBkmDoppelInfo.strName + " km " + kmStr + ":</strong><ul>";
     letzteBkmDoppelInfo.abschnitte.forEach(a => {
-        html += '<li class="' + (a.gewaehlt ? "bkm-doppel-aktiv" : "") + '">' + a.label;
+        let cls = "bkm-doppel-wahl" + (a.gewaehlt ? " bkm-doppel-aktiv" : "");
+        html += '<li class="' + cls + '" onclick="waehleBkmAbschnitt(' + a.index + ')" role="button" tabindex="0">' + a.label;
         if (a.gewaehlt) html += " ← gewählt";
         html += "</li>";
     });
-    html += "</ul><p class=\"hilfs-hinweis\">In NRW trägt dieselbe BAB ggf. mehrere km-Bereiche. Ohne GPS wird der Abschnitt über Wache/Anker gewählt – bitte mit „Position prüfen“ oder GPS verifizieren.</p>";
+    html += "</ul><p class=\"hilfs-hinweis\">Tippen Sie auf einen Abschnitt, um die Gemeinde für diesen km-Bereich zu übernehmen.</p>";
     detail.innerHTML = html;
+}
+
+function waehleBkmAbschnitt(index) {
+    if (!letzteBkmDoppelInfo || !letzteBkmDoppelInfo._korridore) return;
+    let k = letzteBkmDoppelInfo._korridore[index];
+    if (!k) return;
+    let coord = korridorZentrumKoordinate(k, letzteBkmDoppelInfo.km);
+    if (!coord) return;
+    bkmKorridorAnkerPt = turf.point(coord);
+    bkmKorridorAnkerStr = letzteBkmDoppelInfo.strName;
+    bkmKorridorAnkerKm = letzteBkmDoppelInfo.km;
+    letzteLat = coord[1];
+    letzteLon = coord[0];
+    letzteKontextMeta.manuell = true;
+    letzteBkmDoppelInfo.abschnitte.forEach((a, i) => { a.gewaehlt = i === index; });
+    letzteBkmDoppelInfo.gewaehltIndex = index;
+    setzeBkmDoppelWarnung(letzteBkmDoppelInfo, true);
+    toggleBkmDoppelDetail(true);
+    berechnen(true);
 }
 
 function aktualisiereBkmDoppelWarnung(strName, km, opts) {
@@ -2785,19 +2818,9 @@ function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
         setzeGemeindeAnzeigeHtml(gemeinde || "-", "");
         return gemeinde;
     }
-    let detail = "";
-    let pos = ermittleFahrbahnPosition(strName, km, achse);
-    if (pos && pos.point) {
-        let treffer = findeGemeindeTreffer(pos.point);
-        if (treffer.length > 0) {
-            let geo = decodeGemeindeKennzeichen(gemeindeJustizAusFeature(treffer[0]).kn);
-            if (geo.kreisCode && geo.kreisCode !== "-") {
-                detail = "Kreis " + geo.kreisCode + " · " + geo.regierungsbezirk;
-            }
-        }
-    }
-    if (opts.approximiert && datenBAB.length === 0) detail += (detail ? " · " : "") + "≈ ohne BAB-Geometrie";
-    setzeGemeindeAnzeigeHtml(gemeinde, detail);
+    let suffix = "";
+    if (opts.approximiert && datenBAB.length === 0) suffix = " ≈";
+    setzeGemeindeAnzeigeHtml(gemeinde + suffix, "");
     return gemeinde;
 }
 
@@ -3723,10 +3746,15 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
     let bestandSnap = null;
     let snapCoords = null;
     try {
-        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature);
+        let alongKm = berechneAlongFuerKm(strName, km, bestandMatch.feature, { pt: basisPt });
         if (alongKm !== null && alongKm >= 0) {
-            bestandSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
-            snapCoords = turf.getCoord(bestandSnap);
+            let alongSnap = turf.along(bestandMatch.feature, alongKm, { units: "kilometers" });
+            let alongCoords = turf.getCoord(alongSnap);
+            let distBasisAlong = turf.distance(basisPt, turf.point(alongCoords), { units: "kilometers" });
+            if (distBasisAlong < 0.6) {
+                bestandSnap = alongSnap;
+                snapCoords = alongCoords;
+            }
         }
     } catch (e) {}
     if (!bestandSnap) {
@@ -3804,10 +3832,18 @@ function holeAktuellePruefPosition() {
     return { strName: strName, km: km, achse: achse, pt: pt };
 }
 
-function berechneAlongFuerKm(strName, km, feature) {
+function berechneAlongFuerKm(strName, km, feature, opts) {
+    opts = opts || {};
     let passende = holeReferenzFuerStrasse(strName);
     if (!passende.length || !feature) return null;
-    let refs = referenzPunkteMitKm(passende).map(p => {
+    let mitKm = referenzPunkteMitKm(passende);
+    let anchorPt = opts.pt;
+    if (!anchorPt && opts.basisCoord) anchorPt = turf.point(opts.basisCoord);
+    if (!anchorPt) anchorPt = holeBkmKorridorAnker(strName, km);
+    if (!anchorPt && letzteLat !== 0) anchorPt = turf.point([letzteLon, letzteLat]);
+    if (!anchorPt) anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
+    let chain = waehleReferenzGeoKette(mitKm, km, strName, { kmOnly: true, pt: anchorPt });
+    let refs = chain.map(p => {
         try {
             let refPt = turf.point(p.coord);
             if (turf.pointToLineDistance(refPt, feature, { units: "kilometers" }) > 2.5) return null;
@@ -3815,6 +3851,9 @@ function berechneAlongFuerKm(strName, km, feature) {
             return { km: p.km, along: sn.properties.location || 0 };
         } catch (e) { return null; }
     }).filter(Boolean).sort((a, b) => a.km - b.km);
+  // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:berechneAlongFuerKm',message:'along refs',data:{strName:strName,km:km,refKms:refs.map(r=>r.km),chainLen:chain.length},timestamp:Date.now(),hypothesisId:'H-along',runId:'pruef-a46'})}).catch(()=>{});
+  // #endregion
     if (refs.length < 1) return null;
     let before = null;
     let after = null;
@@ -3859,7 +3898,7 @@ function punktUndBearingAufFahrbahn(strName, km, pt) {
     let bearing = berechneFahrtBearing(strName, km);
     if (!feature) return { coords: coords, bearing: bearing };
     try {
-        let alongKm = berechneAlongFuerKm(strName, km, feature);
+        let alongKm = berechneAlongFuerKm(strName, km, feature, { pt: pt, basisCoord: basis });
         if (alongKm === null) {
             let sn = turf.nearestPointOnLine(feature, turf.point(basis), { units: "kilometers" });
             alongKm = sn.properties.location || 0;
