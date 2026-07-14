@@ -1,4 +1,4 @@
-const CACHE_NAME = 'autobahn-tool-v60';
+const CACHE_NAME = 'autobahn-tool-v62';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -26,7 +26,6 @@ self.addEventListener('fetch', (event) => {
                 clone.text().then((text) => {
                     const t = text.trim();
                     if (t.startsWith('version https://git-lfs') || t.startsWith('<!')) return;
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
                 }).catch(() => {});
 
                 return response;
