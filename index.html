@@ -25,7 +25,7 @@ if ('serviceWorker' in navigator) {
 [data-theme="dark"] { --bg-body: #121212; --bg-card: #1e1e1e; --text-main: #e0e0e0; --text-secondary: #4dabff; --input-bg: #2d2d2d; --input-border: #444; --table-head: #333; --result-bg: #2a2d31; }
  
 body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; box-sizing: border-box; }
-.card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shaQdow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
+.card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; box-sizing: border-box; position: relative; border: 1px solid var(--input-border); }
 h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bottom: 15px; font-size: 1.4em; padding: 0 44px; box-sizing: border-box; }
 .theme-switch { position: absolute; top: 10px; right: 8px; z-index: 2; cursor: pointer; font-size: 20px; user-select: none; }
 .home-switch {
@@ -558,6 +558,7 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
     <div class="info-text" style="font-size: 0.9em; line-height: 1.5;">
        <p><strong>Angaben gemäß Digitale-Dienste-Gesetz (DDG):</strong><br>Patrick Stahlberg, PK<br>PP Düsseldorf<br>Dir.V VI3 APW Hilden<br>Zum Forsthaus 16, 40724 Hilden<br><a href="mailto:patrick.stahlberg@polizei.nrw.de">patrick.stahlberg@polizei.nrw.de</a></p>
        <p><strong>Datenschutzhinweis:</strong><br>Diese Applikation nutzt die GPS-Funktion des Endgerätes ausschließlich zur lokalen Berechnung von Straßenparametern. Es werden grundlegende, vollständig anonymisierte Aufrufstatistiken über GoatCounter erhoben.</p>
+       <p><strong>Gerichtsbarkeit (Verwaltungsgrenzen):</strong><br>© Daten (im Auftrag der Herausgebergemeinschaft Statistische Ämter des Bundes und der Länder)<br>Statistisches Bundesamt (Destatis), 2025</p>
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück</button>
 </div>
@@ -641,8 +642,6 @@ let distanzStartMarker = null;
 let distanzZielMarker = null;
 let distanzLinie = null;
 let distanzAktuellMarker = null;
-let distanzUpdateZaehler = 0;
-
 if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
    document.documentElement.setAttribute("data-theme", "dark");
 }
@@ -843,7 +842,7 @@ function decodeGemeindeKennzeichen(kn) {
     if (!kn) return { regierungsbezirk: '-', kreisCode: '-' };
     let s = String(kn).padStart(8, '0');
     return {
-        regierungsbezirk: NRW_REGIERUNGSBEZIRKE[s.substring(2, 4)] || ('RB ' + s.substring(2, 4)),
+        regierungsbezirk: NRW_REGIERUNGSBEZIRKE[s.substring(1, 3)] || ('RB ' + s.substring(1, 3)),
         kreisCode: s.substring(0, 5)
     };
 }
@@ -1900,13 +1899,7 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     }
 
     let bracket = waehleRefsFuerKmInterpolation(mitKm, km, anchorPt);
-    let result = interpoliereKmKoordinate(bracket.before, bracket.after, km);
-  // #region agent log
-    (function() {
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'geo interp',data:{autobahn:autobahn,km:km,beforeKm:bracket.before?bracket.before.km:null,afterKm:bracket.after?bracket.after.km:null,result:result,anchor:anchorPt?anchorPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-interp',runId:'interp-fix2'})}).catch(()=>{});
-    })();
-  // #endregion
-    return result;
+    return interpoliereKmKoordinate(bracket.before, bracket.after, km);
 }
  
 function updateRichtungDropdown(a) {
@@ -2086,6 +2079,23 @@ function ermittleWacheFuerDuessel(strName, km) {
     return "Hilden";
 }
 
+function holeDuesselWachSegmente(strName) {
+    let segs = [];
+    for (let wache in datenWachen) {
+        let g = datenWachen[wache].grenzen?.[strName];
+        if (!g || g.length < 2) continue;
+        segs.push({ wache: wache, minKm: Math.min(...g), maxKm: Math.max(...g) });
+    }
+    segs.sort((a, b) => a.minKm - b.minKm || a.maxKm - b.maxKm);
+    return segs;
+}
+
+function holeDuesselKombinierteGrenzen(strName) {
+    let segs = holeDuesselWachSegmente(strName);
+    if (!segs.length) return null;
+    return [segs[0].minKm, segs[segs.length - 1].maxKm];
+}
+
 function fuelleInfraTabelle(cfg) {
     let tbody = document.getElementById(cfg.listeId);
     if (!tbody) return;
@@ -2117,32 +2127,7 @@ function fuelleInfraTabelle(cfg) {
     });
 
     wachenListen.forEach(e => {
-        let typ = e[0], name = e[1], kmRaw = e[2], rf = e[3];
-        let baseKm = parseFloat(kmRaw.split("-")[0].replace(",", "."));
-        let nameHtml = name;
-        if (!isNaN(baseKm)) {
-            let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
-            let coords = holeKoordinateFuerKM(strName, baseKm, anchor);
-            if (coords) {
-                let mapLink = "https://www.google.com/maps/search/?api=1&query=" + coords[1] + "," + coords[0];
-                nameHtml = '<a href="' + mapLink + '" target="_blank">' + name + "</a>";
-            }
-        }
-        if (rf) {
-            let achseRf = rfTextZuAchse(rf, strName, wacheName);
-            if (achseRf && cfg.onRfClick) {
-                nameHtml += '<br><a href="#" onclick="' + cfg.onRfClick + "('" + achseRf + "'); return false;\" title=\"Richtungsfahrbahn wählen\" style=\"font-size:0.85em; color:var(--text-secondary); font-weight:normal;\">" + rf + "</a>";
-            } else {
-                nameHtml += '<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">' + rf + "</span>";
-            }
-        }
-        let kmHtml = kmRaw;
-        if (!isNaN(baseKm) && cfg.onKmClick) {
-            kmHtml = '<a href="#" onclick="' + cfg.onKmClick + "(" + baseKm + '); return false;" title="KM übernehmen">' + kmRaw + "</a>";
-        }
-        let tr = document.createElement("tr");
-        tr.innerHTML = "<td>" + typ + "</td><td>" + nameHtml + "</td><td>" + kmHtml + "</td>";
-        tbody.appendChild(tr);
+        fuelleInfraZeile(tbody, cfg, e, strName, wacheName);
     });
 
     fuegeWacheGrenzZeile(tbody, {
@@ -2150,6 +2135,91 @@ function fuelleInfraTabelle(cfg) {
         km: bereich.maxKm,
         wacheName: bereich.oben,
         wacheBereich: wacheName,
+        strName: strName,
+        onWacheClick: cfg.onWacheClick,
+        onAutobahnClick: cfg.onAutobahnClick,
+        einfuegen: "append"
+    });
+}
+
+function fuelleInfraZeile(tbody, cfg, e, strName, wacheName) {
+    let typ = e[0], name = e[1], kmRaw = e[2], rf = e[3];
+    let baseKm = parseFloat(kmRaw.split("-")[0].replace(",", "."));
+    let nameHtml = name;
+    if (!isNaN(baseKm)) {
+        let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
+        let coords = holeKoordinateFuerKM(strName, baseKm, anchor);
+        if (coords) {
+            let mapLink = "https://www.google.com/maps/search/?api=1&query=" + coords[1] + "," + coords[0];
+            nameHtml = '<a href="' + mapLink + '" target="_blank">' + name + "</a>";
+        }
+    }
+    if (rf) {
+        let achseRf = rfTextZuAchse(rf, strName, wacheName);
+        if (achseRf && cfg.onRfClick) {
+            nameHtml += '<br><a href="#" onclick="' + cfg.onRfClick + "('" + achseRf + "'); return false;\" title=\"Richtungsfahrbahn wählen\" style=\"font-size:0.85em; color:var(--text-secondary); font-weight:normal;\">" + rf + "</a>";
+        } else {
+            nameHtml += '<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">' + rf + "</span>";
+        }
+    }
+    let kmHtml = kmRaw;
+    if (!isNaN(baseKm) && cfg.onKmClick) {
+        kmHtml = '<a href="#" onclick="' + cfg.onKmClick + "(" + baseKm + '); return false;" title="KM übernehmen">' + kmRaw + "</a>";
+    }
+    let tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + typ + "</td><td>" + nameHtml + "</td><td>" + kmHtml + "</td>";
+    tbody.appendChild(tr);
+}
+
+function fuelleInfraTabelleDuessel(cfg) {
+    let tbody = document.getElementById(cfg.listeId);
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    let strName = cfg.strName;
+    let segs = holeDuesselWachSegmente(strName);
+
+    if (!segs.length) {
+        tbody.innerHTML = "<tr><td colspan='3' style='text-align:center;'>Keine Liste hinterlegt.</td></tr>";
+        return;
+    }
+
+    let untenNachbar = findeNachbarWachenAnStreckenende(strName, segs[0].wache).unten;
+    fuegeWacheGrenzZeile(tbody, {
+        richtung: "unten",
+        km: segs[0].minKm,
+        wacheName: untenNachbar,
+        wacheBereich: segs[0].wache,
+        strName: strName,
+        onWacheClick: cfg.onWacheClick,
+        onAutobahnClick: cfg.onAutobahnClick,
+        einfuegen: "append"
+    });
+
+    segs.forEach((seg, idx) => {
+        if (idx > 0) {
+            let prev = segs[idx - 1];
+            fuegeWacheGrenzZeile(tbody, {
+                richtung: "oben",
+                km: prev.maxKm,
+                wacheName: seg.wache,
+                wacheBereich: prev.wache,
+                strName: strName,
+                onWacheClick: cfg.onWacheClick,
+                onAutobahnClick: cfg.onAutobahnClick,
+                einfuegen: "append"
+            });
+        }
+        let wachenListen = (datenWachen[seg.wache].listen || {})[strName] || [];
+        wachenListen.forEach(e => fuelleInfraZeile(tbody, cfg, e, strName, seg.wache));
+    });
+
+    let last = segs[segs.length - 1];
+    let obenNachbar = findeNachbarWachenAnStreckenende(strName, last.wache).oben;
+    fuegeWacheGrenzZeile(tbody, {
+        richtung: "oben",
+        km: last.maxKm,
+        wacheName: obenNachbar,
+        wacheBereich: last.wache,
         strName: strName,
         onWacheClick: cfg.onWacheClick,
         onAutobahnClick: cfg.onAutobahnClick,
@@ -2203,8 +2273,14 @@ function updateDusselUI() {
     let leftArrow = document.getElementById("dir-plus-duessel");
     let rightArrow = document.getElementById("dir-minus-duessel");
     let bereichDiv = document.getElementById("bereich-info-duessel");
+    let segs = holeDuesselWachSegmente(a);
+    let kombi = holeDuesselKombinierteGrenzen(a);
 
-    if (!wachenGrenzen[a]) {
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:updateDusselUI',message:'Duessel segmente',data:{autobahn:a,segs:segs.map(s=>({w:s.wache,min:s.minKm,max:s.maxKm})),kombi:kombi,kontextWache:duesselKontextWache},timestamp:Date.now(),hypothesisId:'H7',runId:'pre-fix'})}).catch(()=>{});
+    // #endregion
+
+    if (!segs.length) {
         document.getElementById("b-duessel").innerText = "-";
         bereichDiv.style.display = "none";
         if (leftArrow) leftArrow.style.display = "none";
@@ -2214,9 +2290,9 @@ function updateDusselUI() {
         return;
     }
 
-    document.getElementById("b-duessel").innerText = wachenGrenzen[a][0].toFixed(3).replace(".", ",") + " - " + wachenGrenzen[a][1].toFixed(3).replace(".", ",");
+    document.getElementById("b-duessel").innerText = kombi[0].toFixed(3).replace(".", ",") + " - " + kombi[1].toFixed(3).replace(".", ",");
 
-    if (wachenRichtungen[a] && leftArrow && rightArrow) {
+    if (wachenRichtungen && wachenRichtungen[a] && leftArrow && rightArrow) {
         document.getElementById("dir-plus-text-duessel").innerText = wachenRichtungen[a][0] || "";
         document.getElementById("dir-minus-text-duessel").innerText = wachenRichtungen[a][1] || "";
         leftArrow.style.display = "flex";
@@ -2229,10 +2305,9 @@ function updateDusselUI() {
     }
 
     updateRichtungDropdownFuerWache("richtung-duessel", a, duesselKontextWache);
-    fuelleInfraTabelle({
+    fuelleInfraTabelleDuessel({
         listeId: "liste-duessel",
         strName: a,
-        wacheName: duesselKontextWache,
         onKmClick: "uebernehmeKmAusListeDuessel",
         onRfClick: "uebernehmeRichtungAusListeDuessel",
         onWacheClick: "wechsleWacheNachGrenzeDuessel",
@@ -2355,7 +2430,7 @@ function berechnenDuessel(isManual) {
         document.getElementById("g-duessel").innerText = datenGemeinden.length === 0 ? "-" : "Außerhalb NRW";
     }
 
-    let wG = datenWachen[duesselKontextWache].grenzen[a];
+    let wG = holeDuesselKombinierteGrenzen(a);
     if (wG) {
         let percent = ((km - wG[0]) / (wG[1] - wG[0])) * 100;
         document.getElementById("progress-duessel").style.width = Math.max(0, Math.min(100, percent)) + "%";
@@ -4032,9 +4107,6 @@ function aktualisiereDistanzDarstellung(nurVorschau) {
         ergebnisEl.style.display = "none";
         ergebnisEl.textContent = "";
     }
-  // #region agent log
-    if (!nurVorschau) fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:aktualisiereDistanzDarstellung',message:'distanz update',data:{nurVorschau:!!nurVorschau,modus:distanzModus,phase:distanzPhase,distM:Math.round(distM),updateZaehler:++distanzUpdateZaehler},timestamp:Date.now(),hypothesisId:'H-perf',runId:'distanz-fix'})}).catch(()=>{});
-  // #endregion
 }
 
 function planeDistanzVorschau() {
@@ -4163,10 +4235,6 @@ function openDistanzMessen() {
         return;
     }
     let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
-    let pruefPos = (km > 0 && strName) ? ermittlePruefFahrbahnPosition(strName, km, achse) : null;
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:openDistanzMessen',message:'pos compare',data:{strName:strName,km:km,uiKm:holeAngezeigteKm(aufDuessel),aktiveKM:aktiveKM,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,aktiv:[aktiveLon,aktiveLat],pruef:pruefPos?pruefPos.coords:null,anchor:bkmKorridorAnkerPt?bkmKorridorAnkerPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-pos',runId:'marker-fix'})}).catch(()=>{});
-  // #endregion
     if (!kartenPunkt.pt) {
         alert("Position konnte nicht ermittelt werden.");
         return;
@@ -4259,11 +4327,6 @@ function ermittlePruefFahrbahnPosition(strName, km, achse) {
     }
 
     let locationKm = bestandSnap.properties ? (bestandSnap.properties.location || 0) : 0;
-  // #region agent log
-    (function() {
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:ermittlePruefFahrbahnPosition',message:'bkm snap',data:{strName:strName,km:km,achse:zielAchse,snapMethode:snapMethode,snapDistKm:snapDistKm,basisCoords:coords.slice(),coords:snapCoords.slice(),anchor:anchorPt?anchorPt.geometry.coordinates:null},timestamp:Date.now(),hypothesisId:'H-geo',runId:'geo-fix'})}).catch(()=>{});
-    })();
-  // #endregion
 
     if (!zielAchse || zielAchse === "Bestandsachse") {
         return {
@@ -4310,9 +4373,6 @@ function holeAktuellePruefPosition() {
     let km = holeAngezeigteKm(aufDuessel);
     let achse = holeAngezeigteAchse(aufDuessel);
     let kartenPunkt = ermittleKontextKartenPunkt(strName, km, achse);
-  // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeAktuellePruefPosition',message:'pos compare',data:{strName:strName,km:km,aktiveKM:aktiveKM,quelle:kartenPunkt.quelle,coords:kartenPunkt.coords,aktiv:[aktiveLon,aktiveLat]},timestamp:Date.now(),hypothesisId:'H-pos',runId:'marker-fix'})}).catch(()=>{});
-  // #endregion
     return { strName: strName, km: km, achse: achse, pt: kartenPunkt.pt };
 }
 
@@ -4768,10 +4828,11 @@ function findeAngrenzendeGemeinden(strName, km, achse, pt, radiusKm, kmSpan) {
     let byName = new Map();
     findeGemeindenImUmkreis(pt, radiusKm).forEach(f => byName.set(gemeindeNameAusFeature(f), f));
     if (strName && km > 0) {
+        let sampleAchse = "Bestandsachse";
         for (let d = -kmSpan; d <= kmSpan; d += 0.25) {
             let sampleKm = km + d;
             if (sampleKm < 0) continue;
-            let pos = ermittleFahrbahnPosition(strName, sampleKm, achse);
+            let pos = ermittleFahrbahnPosition(strName, sampleKm, sampleAchse);
             if (!pos || !pos.point) continue;
             let gname = findeGemeindeFuerPunktInner(pos.point);
             if (!gname || byName.has(gname)) continue;
@@ -4790,7 +4851,11 @@ function findeAngrenzendeGemeinden(strName, km, achse, pt, radiusKm, kmSpan) {
             }
         }
     }
-    return [...byName.values()];
+    let result = [...byName.values()];
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:findeAngrenzendeGemeinden',message:'Gemeinden im Korridor',data:{strName:strName,km:km,count:result.length,names:result.slice(0,8).map(gemeindeNameAusFeature)},timestamp:Date.now(),hypothesisId:'H3',runId:'pre-fix'})}).catch(()=>{});
+    // #endregion
+    return result;
 }
 
 function dedupliziereRefsNachKm(refs, anchorPt) {
@@ -4835,21 +4900,73 @@ function gemeindeKreisCode(f) {
 
 function gemeindeRbCode(f) {
     let kn = String((f.properties || {}).KN || "").padStart(8, "0");
-    return kn.substring(2, 4);
+    return kn.substring(1, 3);
+}
+
+function erweitereGemeindenFuerVerwaltungsgrenzeSet(basisGemeinden, pt, radiusKm) {
+    let byKn = new Map();
+    basisGemeinden.forEach(f => {
+        let key = String((f.properties || {}).KN || gemeindeNameAusFeature(f));
+        byKn.set(key, f);
+    });
+    if (!pt || !pt.geometry) return [...byKn.values()];
+    let kreise = new Set(basisGemeinden.map(gemeindeKreisCode));
+    let rbs = new Set(basisGemeinden.map(gemeindeRbCode));
+    let lon = pt.geometry.coordinates[0];
+    let lat = pt.geometry.coordinates[1];
+    let pad = (radiusKm + 3) / 85;
+    let kandidaten = gemeindeBboxIndex && gemeindeBboxIndex.length > 0
+        ? gemeindeBboxIndex.filter(e => bboxNahePunkt(e.bb, lon, lat, pad)).map(e => e.feature)
+        : datenGemeinden;
+    kandidaten.forEach(f => {
+        let k = gemeindeKreisCode(f);
+        let r = gemeindeRbCode(f);
+        if (!kreise.has(k) && !rbs.has(r)) return;
+        let key = String((f.properties || {}).KN || gemeindeNameAusFeature(f));
+        if (!byKn.has(key)) byKn.set(key, f);
+    });
+    return [...byKn.values()];
+}
+
+function verwaltungsGrenzeCacheKey(prefix, code, features) {
+    let ids = features.map(f => String((f.properties || {}).KN || gemeindeNameAusFeature(f))).sort().join("|");
+    return prefix + ":" + code + ":" + features.length + ":" + ids.slice(0, 160);
 }
 
 function vereinigePolygone(features) {
     if (!features || !features.length) return null;
-    if (features.length === 1) return features[0];
-    if (typeof turf.union !== "function") return features[0];
-    try {
-        let acc = features[0];
-        for (let i = 1; i < features.length; i++) {
-            acc = turf.union(acc, features[i]);
+    let polys = [];
+    features.forEach(f => {
+        try {
+            turf.flatten(f).features.forEach(sub => {
+                if (sub.geometry && (sub.geometry.type === "Polygon" || sub.geometry.type === "MultiPolygon")) {
+                    polys.push(sub);
+                }
+            });
+        } catch (e) {
+            if (f.geometry) polys.push(f);
         }
+    });
+    if (!polys.length) return features[0] || null;
+    if (polys.length === 1) return polys[0];
+    if (typeof turf.union !== "function") {
+        return { type: "FeatureCollection", features: polys };
+    }
+    try {
+        let acc = polys[0];
+        for (let i = 1; i < polys.length; i++) {
+            let merged = turf.union(acc, polys[i]);
+            if (merged) acc = merged;
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:vereinigePolygone',message:'Union erfolgreich',data:{inputCount:polys.length,resultType:acc&&acc.geometry&&acc.geometry.type},timestamp:Date.now(),hypothesisId:'H2',runId:'pre-fix'})}).catch(()=>{});
+        // #endregion
         return acc;
     } catch (e) {
-        return features[0];
+        // #region agent log
+        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:vereinigePolygone',message:'Union fallback',data:{inputCount:polys.length,error:String(e&&e.message||e)},timestamp:Date.now(),hypothesisId:'H2',runId:'pre-fix'})}).catch(()=>{});
+        // #endregion
+        return { type: "FeatureCollection", features: polys };
     }
 }
 
@@ -4908,9 +5025,22 @@ function togglePruefGrenzLayer(layer) {
     if (pruefCtxCache) zeichnePositionsPruefung(pruefCtxCache.strName, pruefCtxCache.km, pruefCtxCache.achse, pruefCtxCache.pt);
 }
 
+function zeichneVerwaltungsLabel(feature, text, className) {
+    try {
+        let c = turf.centroid(feature);
+        let cc = turf.getCoord(c);
+        zeichnePruefMarker(cc[1], cc[0], className || "pruef-gemeinde-nachbar-label", text, pruefGrenzLayer);
+    } catch (e) {}
+}
+
 function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
     if (!pruefGrenzLayer) return;
     pruefGrenzLayer.clearLayers();
+    let pt = pruefCtxCache ? pruefCtxCache.pt : null;
+    if (pt) gemeindenUmkreis = erweitereGemeindenFuerVerwaltungsgrenzeSet(gemeindenUmkreis, pt, 6);
+
+    let rbDebug = [];
+    let kreisDebug = [];
 
     if (pruefLayerOpts.rb) {
         let rbMap = new Map();
@@ -4920,11 +5050,14 @@ function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
             rbMap.get(rb).push(f);
         });
         rbMap.forEach((features, rb) => {
-            let poly = holeVerwaltungsGrenze("rb:" + rb + ":" + features.length, features);
+            let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("rb", rb, features), features);
             if (!poly) return;
             L.geoJSON(poly, {
                 style: { color: PRUEF_FARBEN.rb, weight: 4, fillOpacity: 0.04, opacity: 0.9, dashArray: "10 6" }
             }).addTo(pruefGrenzLayer);
+            let rbName = NRW_REGIERUNGSBEZIRKE[rb] || ("RB " + rb);
+            zeichneVerwaltungsLabel(poly, "RB " + rbName, "pruef-gemeinde-nachbar-label");
+            rbDebug.push({ rb: rb, name: rbName, count: features.length });
         });
     }
 
@@ -4936,13 +5069,19 @@ function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
             kreisMap.get(k).push(f);
         });
         kreisMap.forEach((features, kreis) => {
-            let poly = holeVerwaltungsGrenze("kreis:" + kreis + ":" + features.length, features);
+            let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("kreis", kreis, features), features);
             if (!poly) return;
             L.geoJSON(poly, {
                 style: { color: PRUEF_FARBEN.kreis, weight: 3, fillOpacity: 0, opacity: 0.88, dashArray: "6 4" }
             }).addTo(pruefGrenzLayer);
+            zeichneVerwaltungsLabel(poly, "Kreis " + kreis, "pruef-gemeinde-nachbar-label");
+            kreisDebug.push({ kreis: kreis, count: features.length });
         });
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:zeichneVerwaltungsgrenzen',message:'RB/Kreis gezeichnet',data:{gemeindenCount:gemeindenUmkreis.length,rb:rbDebug,kreis:kreisDebug,sampleKn:gemeindenUmkreis[0]&&gemeindenUmkreis[0].properties&&gemeindeRbCode(gemeindenUmkreis[0])},timestamp:Date.now(),hypothesisId:'H1',runId:'pre-fix'})}).catch(()=>{});
+    // #endregion
 
     if (pruefLayerOpts.gemeinde) {
         gemeindenUmkreis.forEach(f => {
@@ -4986,8 +5125,8 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     pruefGrenzLayer = L.layerGroup().addTo(map);
     pruefMapLayer = L.layerGroup().addTo(map);
 
-    let radiusKm = 5;
-    let kmSpan = 4;
+    let radiusKm = 6;
+    let kmSpan = 5;
     let kmVon = Math.max(0, (km || 0) - kmSpan);
     let kmBis = (km || 0) + kmSpan;
 
@@ -5170,8 +5309,20 @@ function calculateMapResult() {
             if (strName.startsWith("A") && bkm > 0) {
                 let selectedRichtung = document.getElementById("richtung").value;
                 let gemeindeAchse = selectedRichtung || achse;
+                bkmKorridorAnkerPt = ptPin;
+                bkmKorridorAnkerStr = strName;
+                bkmKorridorAnkerKm = bkm;
+                // #region agent log
+                fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:calculateMapResult',message:'KM-Karte Anker gesetzt',data:{strName:strName,bkm:bkm,pin:[pos.lng,pos.lat]},timestamp:Date.now(),hypothesisId:'H6',runId:'pre-fix'})}).catch(()=>{});
+                // #endregion
                 setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
-                setzeMeistereiAnzeige(strName, bkm);
+                let m = ermittleMeistereiFuerKM(strName, bkm);
+                // #region agent log
+                fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:calculateMapResult',message:'AM nach KM-Karte',data:{strName:strName,bkm:bkm,am:m.name},timestamp:Date.now(),hypothesisId:'H6',runId:'pre-fix'})}).catch(()=>{});
+                // #endregion
+                document.getElementById("m").innerText = m.name;
+                document.getElementById("m_address").innerText = m.addr;
+                document.getElementById("m_phone").innerText = m.phone;
                 aktiveStrasse = strName;
                 aktiveAchse = gemeindeAchse;
                 aktiveKM = bkm;
