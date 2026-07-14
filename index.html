@@ -283,6 +283,7 @@ td a { text-decoration: none; color: var(--accent); font-weight: bold; }
     background: rgba(255,255,255,0.94); border: 1px solid var(--input-border);
     border-radius: 8px; padding: 8px 10px; font-size: 0.82em; line-height: 1.5;
     box-shadow: 0 2px 8px rgba(0,0,0,0.18); max-width: 170px;
+    pointer-events: auto; touch-action: manipulation;
 }
 [data-theme="dark"] .pruef-layer-toggle { background: rgba(30,30,30,0.92); }
 .pruef-layer-toggle label { display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 2px 0; }
@@ -558,7 +559,6 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
     <div class="info-text" style="font-size: 0.9em; line-height: 1.5;">
        <p><strong>Angaben gemäß Digitale-Dienste-Gesetz (DDG):</strong><br>Patrick Stahlberg, PK<br>PP Düsseldorf<br>Dir.V VI3 APW Hilden<br>Zum Forsthaus 16, 40724 Hilden<br><a href="mailto:patrick.stahlberg@polizei.nrw.de">patrick.stahlberg@polizei.nrw.de</a></p>
        <p><strong>Datenschutzhinweis:</strong><br>Diese Applikation nutzt die GPS-Funktion des Endgerätes ausschließlich zur lokalen Berechnung von Straßenparametern. Es werden grundlegende, vollständig anonymisierte Aufrufstatistiken über GoatCounter erhoben.</p>
-       <p><strong>Gerichtsbarkeit (Verwaltungsgrenzen):</strong><br>© Daten (im Auftrag der Herausgebergemeinschaft Statistische Ämter des Bundes und der Länder)<br>Statistisches Bundesamt (Destatis), 2025</p>
     </div>
     <button class="btn-action" onclick="showPage('page-main')">Zurück</button>
 </div>
@@ -571,6 +571,7 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
            <li><strong>Grenzübergänge, Kilometrierung BAB:</strong> © BKG (2024) dl-de/by-2-0.</li>
            <li><strong>Straßennetz & Kilometerdaten (NWSIB):</strong> © Landesbetrieb Straßenbau NRW.</li>
            <li><strong>Verwaltungsgrenzen (Gemeinden):</strong> © Geobasis NRW.</li>
+           <li><strong>Gerichtsbarkeit (Verwaltungsgrenzen):</strong> © Daten (im Auftrag der Herausgebergemeinschaft Statistische Ämter des Bundes und der Länder), Statistisches Bundesamt (Destatis), 2025</li>
            <li><strong>Kartenmaterial:</strong> © OpenStreetMap-Mitwirkende (ODbL) / Esri, Maxar.</li>
         </ul>
     </div>
@@ -613,6 +614,9 @@ let map = null;
 let mapLineLayer = null;
 let pruefMapLayer = null;
 let pruefGrenzLayer = null;
+let pruefLayerRb = null;
+let pruefLayerKreis = null;
+let pruefLayerGemeinde = null;
 let pruefOverlayLayer = null;
 let pruefCtxCache = null;
 let pruefLayerOpts = { gemeinde: true, kreis: true, rb: true };
@@ -3925,7 +3929,7 @@ function openMap(mode = 'NK') {
     document.getElementById('distanz-map-controls').style.display = 'none';
     document.querySelector('.center-pin').style.display = '';
     if (pruefMapLayer && map) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
-    if (pruefGrenzLayer && map) { map.removeLayer(pruefGrenzLayer); pruefGrenzLayer = null; }
+    entfernePruefVerwaltungsLayer();
     if (pruefOverlayLayer && map) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
     setzePruefKartenOverlays(false);
     if (mode === 'NK') {
@@ -3959,7 +3963,7 @@ function closeMap() {
     setzeMenuSichtbarkeit(true);
     if (mapLineLayer) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
-    if (pruefGrenzLayer) { map.removeLayer(pruefGrenzLayer); pruefGrenzLayer = null; }
+    entfernePruefVerwaltungsLayer();
     if (pruefOverlayLayer) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
     pruefCtxCache = null;
     setzePruefKartenOverlays(false);
@@ -4253,7 +4257,7 @@ function openDistanzMessen() {
     document.querySelector(".center-pin").style.display = "";
     if (mapLineLayer && map) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
     if (pruefMapLayer && map) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
-    if (pruefGrenzLayer && map) { map.removeLayer(pruefGrenzLayer); pruefGrenzLayer = null; }
+    entfernePruefVerwaltungsLayer();
     if (pruefOverlayLayer && map) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
     setzePruefKartenOverlays(false);
 
@@ -4829,7 +4833,7 @@ function findeAngrenzendeGemeinden(strName, km, achse, pt, radiusKm, kmSpan) {
     findeGemeindenImUmkreis(pt, radiusKm).forEach(f => byName.set(gemeindeNameAusFeature(f), f));
     if (strName && km > 0) {
         let sampleAchse = "Bestandsachse";
-        for (let d = -kmSpan; d <= kmSpan; d += 0.25) {
+        for (let d = -kmSpan; d <= kmSpan; d += 0.5) {
             let sampleKm = km + d;
             if (sampleKm < 0) continue;
             let pos = ermittleFahrbahnPosition(strName, sampleKm, sampleAchse);
@@ -4851,11 +4855,40 @@ function findeAngrenzendeGemeinden(strName, km, achse, pt, radiusKm, kmSpan) {
             }
         }
     }
-    let result = [...byName.values()];
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:findeAngrenzendeGemeinden',message:'Gemeinden im Korridor',data:{strName:strName,km:km,count:result.length,names:result.slice(0,8).map(gemeindeNameAusFeature)},timestamp:Date.now(),hypothesisId:'H3',runId:'pre-fix'})}).catch(()=>{});
-    // #endregion
+    let result = filtereGemeindenNahePunkt([...byName.values()], pt, radiusKm);
     return result;
+}
+
+function filtereGemeindenNahePunkt(gemeinden, pt, maxKm) {
+    if (!pt || !pt.geometry || !gemeinden.length) return gemeinden;
+    let buf;
+    try { buf = turf.buffer(pt, maxKm, { units: "kilometers" }); } catch (e) { return gemeinden; }
+    return gemeinden.filter(f => {
+        try { return turf.booleanIntersects(buf, f); } catch (e) { return false; }
+    });
+}
+
+function entfernePruefVerwaltungsLayer() {
+    if (!map) return;
+    [pruefLayerRb, pruefLayerKreis, pruefLayerGemeinde, pruefGrenzLayer].forEach(lg => {
+        if (lg && map.hasLayer(lg)) map.removeLayer(lg);
+    });
+    pruefLayerRb = null;
+    pruefLayerKreis = null;
+    pruefLayerGemeinde = null;
+    pruefGrenzLayer = null;
+}
+
+function aktualisierePruefGrenzSichtbarkeit() {
+    if (!map) return;
+    [[pruefLayerRb, "rb"], [pruefLayerKreis, "kreis"], [pruefLayerGemeinde, "gemeinde"]].forEach(([lg, key]) => {
+        if (!lg) return;
+        if (pruefLayerOpts[key]) {
+            if (!map.hasLayer(lg)) lg.addTo(map);
+        } else if (map.hasLayer(lg)) {
+            map.removeLayer(lg);
+        }
+    });
 }
 
 function dedupliziereRefsNachKm(refs, anchorPt) {
@@ -4883,13 +4916,13 @@ function zeichnePruefMarker(lat, lon, className, html, targetLayer) {
     }).addTo(layer);
 }
 
-function zeichneGemeindeLabel(f, isAktiv) {
+function zeichneGemeindeLabel(f, isAktiv, targetLayer) {
     try {
         let name = gemeindeNameAusFeature(f);
         let c = turf.centroid(f);
         let cc = turf.getCoord(c);
         let className = isAktiv ? "pruef-gemeinde-label" : "pruef-gemeinde-nachbar-label";
-        zeichnePruefMarker(cc[1], cc[0], className, name, pruefGrenzLayer);
+        zeichnePruefMarker(cc[1], cc[0], className, name, targetLayer || pruefLayerGemeinde);
     } catch (e) {}
 }
 
@@ -4901,31 +4934,6 @@ function gemeindeKreisCode(f) {
 function gemeindeRbCode(f) {
     let kn = String((f.properties || {}).KN || "").padStart(8, "0");
     return kn.substring(1, 3);
-}
-
-function erweitereGemeindenFuerVerwaltungsgrenzeSet(basisGemeinden, pt, radiusKm) {
-    let byKn = new Map();
-    basisGemeinden.forEach(f => {
-        let key = String((f.properties || {}).KN || gemeindeNameAusFeature(f));
-        byKn.set(key, f);
-    });
-    if (!pt || !pt.geometry) return [...byKn.values()];
-    let kreise = new Set(basisGemeinden.map(gemeindeKreisCode));
-    let rbs = new Set(basisGemeinden.map(gemeindeRbCode));
-    let lon = pt.geometry.coordinates[0];
-    let lat = pt.geometry.coordinates[1];
-    let pad = (radiusKm + 3) / 85;
-    let kandidaten = gemeindeBboxIndex && gemeindeBboxIndex.length > 0
-        ? gemeindeBboxIndex.filter(e => bboxNahePunkt(e.bb, lon, lat, pad)).map(e => e.feature)
-        : datenGemeinden;
-    kandidaten.forEach(f => {
-        let k = gemeindeKreisCode(f);
-        let r = gemeindeRbCode(f);
-        if (!kreise.has(k) && !rbs.has(r)) return;
-        let key = String((f.properties || {}).KN || gemeindeNameAusFeature(f));
-        if (!byKn.has(key)) byKn.set(key, f);
-    });
-    return [...byKn.values()];
 }
 
 function verwaltungsGrenzeCacheKey(prefix, code, features) {
@@ -4949,7 +4957,7 @@ function vereinigePolygone(features) {
     });
     if (!polys.length) return features[0] || null;
     if (polys.length === 1) return polys[0];
-    if (typeof turf.union !== "function") {
+    if (polys.length > 8 || typeof turf.union !== "function") {
         return { type: "FeatureCollection", features: polys };
     }
     try {
@@ -4958,14 +4966,8 @@ function vereinigePolygone(features) {
             let merged = turf.union(acc, polys[i]);
             if (merged) acc = merged;
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:vereinigePolygone',message:'Union erfolgreich',data:{inputCount:polys.length,resultType:acc&&acc.geometry&&acc.geometry.type},timestamp:Date.now(),hypothesisId:'H2',runId:'pre-fix'})}).catch(()=>{});
-        // #endregion
         return acc;
     } catch (e) {
-        // #region agent log
-        fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:vereinigePolygone',message:'Union fallback',data:{inputCount:polys.length,error:String(e&&e.message||e)},timestamp:Date.now(),hypothesisId:'H2',runId:'pre-fix'})}).catch(()=>{});
-        // #endregion
         return { type: "FeatureCollection", features: polys };
     }
 }
@@ -5022,93 +5024,87 @@ function setzePruefKartenOverlays(sichtbar) {
 function togglePruefGrenzLayer(layer) {
     let el = document.getElementById("pruef-show-" + layer);
     if (el) pruefLayerOpts[layer] = !!el.checked;
-    if (pruefCtxCache) zeichnePositionsPruefung(pruefCtxCache.strName, pruefCtxCache.km, pruefCtxCache.achse, pruefCtxCache.pt);
+    aktualisierePruefGrenzSichtbarkeit();
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:togglePruefGrenzLayer',message:'Layer-Toggle',data:{layer:layer,opts:pruefLayerOpts,rbOn:map&&pruefLayerRb&&map.hasLayer(pruefLayerRb),kreisOn:map&&pruefLayerKreis&&map.hasLayer(pruefLayerKreis),gemOn:map&&pruefLayerGemeinde&&map.hasLayer(pruefLayerGemeinde)},timestamp:Date.now(),hypothesisId:'H8',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
 }
 
-function zeichneVerwaltungsLabel(feature, text, className) {
+function zeichneVerwaltungsLabel(feature, text, className, targetLayer) {
     try {
         let c = turf.centroid(feature);
         let cc = turf.getCoord(c);
-        zeichnePruefMarker(cc[1], cc[0], className || "pruef-gemeinde-nachbar-label", text, pruefGrenzLayer);
+        zeichnePruefMarker(cc[1], cc[0], className || "pruef-gemeinde-nachbar-label", text, targetLayer);
     } catch (e) {}
 }
 
-function zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde) {
-    if (!pruefGrenzLayer) return;
-    pruefGrenzLayer.clearLayers();
-    let pt = pruefCtxCache ? pruefCtxCache.pt : null;
-    if (pt) gemeindenUmkreis = erweitereGemeindenFuerVerwaltungsgrenzeSet(gemeindenUmkreis, pt, 6);
+function baueVerwaltungsGrenzLayer(gemeindenUmkreis, aktuelleGemeinde) {
+    entfernePruefVerwaltungsLayer();
+    pruefLayerRb = L.layerGroup();
+    pruefLayerKreis = L.layerGroup();
+    pruefLayerGemeinde = L.layerGroup();
 
-    let rbDebug = [];
-    let kreisDebug = [];
+    let rbMap = new Map();
+    let kreisMap = new Map();
+    gemeindenUmkreis.forEach(f => {
+        let rb = gemeindeRbCode(f);
+        if (!rbMap.has(rb)) rbMap.set(rb, []);
+        rbMap.get(rb).push(f);
+        let k = gemeindeKreisCode(f);
+        if (!kreisMap.has(k)) kreisMap.set(k, []);
+        kreisMap.get(k).push(f);
+    });
 
-    if (pruefLayerOpts.rb) {
-        let rbMap = new Map();
-        gemeindenUmkreis.forEach(f => {
-            let rb = gemeindeRbCode(f);
-            if (!rbMap.has(rb)) rbMap.set(rb, []);
-            rbMap.get(rb).push(f);
-        });
-        rbMap.forEach((features, rb) => {
-            let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("rb", rb, features), features);
-            if (!poly) return;
-            L.geoJSON(poly, {
-                style: { color: PRUEF_FARBEN.rb, weight: 4, fillOpacity: 0.04, opacity: 0.9, dashArray: "10 6" }
-            }).addTo(pruefGrenzLayer);
-            let rbName = NRW_REGIERUNGSBEZIRKE[rb] || ("RB " + rb);
-            zeichneVerwaltungsLabel(poly, "RB " + rbName, "pruef-gemeinde-nachbar-label");
-            rbDebug.push({ rb: rb, name: rbName, count: features.length });
-        });
-    }
+    rbMap.forEach((features, rb) => {
+        let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("rb", rb, features), features);
+        if (!poly) return;
+        L.geoJSON(poly, {
+            style: { color: PRUEF_FARBEN.rb, weight: 4, fillOpacity: 0.04, opacity: 0.9, dashArray: "10 6" }
+        }).addTo(pruefLayerRb);
+        let rbName = NRW_REGIERUNGSBEZIRKE[rb] || ("RB " + rb);
+        zeichneVerwaltungsLabel(poly, "RB " + rbName, "pruef-gemeinde-nachbar-label", pruefLayerRb);
+    });
 
-    if (pruefLayerOpts.kreis) {
-        let kreisMap = new Map();
-        gemeindenUmkreis.forEach(f => {
-            let k = gemeindeKreisCode(f);
-            if (!kreisMap.has(k)) kreisMap.set(k, []);
-            kreisMap.get(k).push(f);
-        });
-        kreisMap.forEach((features, kreis) => {
-            let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("kreis", kreis, features), features);
-            if (!poly) return;
-            L.geoJSON(poly, {
-                style: { color: PRUEF_FARBEN.kreis, weight: 3, fillOpacity: 0, opacity: 0.88, dashArray: "6 4" }
-            }).addTo(pruefGrenzLayer);
-            zeichneVerwaltungsLabel(poly, "Kreis " + kreis, "pruef-gemeinde-nachbar-label");
-            kreisDebug.push({ kreis: kreis, count: features.length });
-        });
+    kreisMap.forEach((features, kreis) => {
+        let poly = holeVerwaltungsGrenze(verwaltungsGrenzeCacheKey("kreis", kreis, features), features);
+        if (!poly) return;
+        L.geoJSON(poly, {
+            style: { color: PRUEF_FARBEN.kreis, weight: 3, fillOpacity: 0, opacity: 0.88, dashArray: "6 4" }
+        }).addTo(pruefLayerKreis);
+        zeichneVerwaltungsLabel(poly, "Kreis " + kreis, "pruef-gemeinde-nachbar-label", pruefLayerKreis);
+    });
+
+    gemeindenUmkreis.forEach(f => {
+        let name = gemeindeNameAusFeature(f);
+        let isAktiv = aktuelleGemeinde && name === aktuelleGemeinde;
+        L.geoJSON(f, {
+            style: {
+                color: isAktiv ? PRUEF_FARBEN.gemeindeAktiv : PRUEF_FARBEN.gemeindeNachbar,
+                weight: isAktiv ? 4 : 2,
+                fillOpacity: 0,
+                opacity: isAktiv ? 0.95 : 0.75
+            }
+        }).addTo(pruefLayerGemeinde);
+        zeichneGemeindeLabel(f, isAktiv, pruefLayerGemeinde);
+    });
+
+    if (aktuelleGemeinde && pruefCtxCache && pruefCtxCache.pt) {
+        let gezeichnet = gemeindenUmkreis.some(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
+        if (!gezeichnet) {
+            findeGemeindeTreffer(pruefCtxCache.pt).filter(f => gemeindeNameAusFeature(f) === aktuelleGemeinde).forEach(f => {
+                L.geoJSON(f, {
+                    style: { color: PRUEF_FARBEN.gemeindeAktiv, weight: 4, fillOpacity: 0, opacity: 0.95 }
+                }).addTo(pruefLayerGemeinde);
+                zeichneGemeindeLabel(f, true, pruefLayerGemeinde);
+            });
+        }
     }
 
     // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:zeichneVerwaltungsgrenzen',message:'RB/Kreis gezeichnet',data:{gemeindenCount:gemeindenUmkreis.length,rb:rbDebug,kreis:kreisDebug,sampleKn:gemeindenUmkreis[0]&&gemeindenUmkreis[0].properties&&gemeindeRbCode(gemeindenUmkreis[0])},timestamp:Date.now(),hypothesisId:'H1',runId:'pre-fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:baueVerwaltungsGrenzLayer',message:'Layer gebaut',data:{gemeindenCount:gemeindenUmkreis.length,rbGroups:rbMap.size,kreisGroups:kreisMap.size},timestamp:Date.now(),hypothesisId:'H9',runId:'post-fix'})}).catch(()=>{});
     // #endregion
 
-    if (pruefLayerOpts.gemeinde) {
-        gemeindenUmkreis.forEach(f => {
-            let name = gemeindeNameAusFeature(f);
-            let isAktiv = aktuelleGemeinde && name === aktuelleGemeinde;
-            L.geoJSON(f, {
-                style: {
-                    color: isAktiv ? PRUEF_FARBEN.gemeindeAktiv : PRUEF_FARBEN.gemeindeNachbar,
-                    weight: isAktiv ? 4 : 2,
-                    fillOpacity: 0,
-                    opacity: isAktiv ? 0.95 : 0.75
-                }
-            }).addTo(pruefGrenzLayer);
-            zeichneGemeindeLabel(f, isAktiv);
-        });
-        if (aktuelleGemeinde && pruefCtxCache && pruefCtxCache.pt) {
-            let gezeichnet = gemeindenUmkreis.some(f => gemeindeNameAusFeature(f) === aktuelleGemeinde);
-            if (!gezeichnet) {
-                findeGemeindeTreffer(pruefCtxCache.pt).filter(f => gemeindeNameAusFeature(f) === aktuelleGemeinde).forEach(f => {
-                    L.geoJSON(f, {
-                        style: { color: PRUEF_FARBEN.gemeindeAktiv, weight: 4, fillOpacity: 0, opacity: 0.95 }
-                    }).addTo(pruefGrenzLayer);
-                    zeichneGemeindeLabel(f, true);
-                });
-            }
-        }
-    }
+    aktualisierePruefGrenzSichtbarkeit();
 }
 
 function zeichnePositionsPruefung(strName, km, achse, pt) {
@@ -5119,20 +5115,21 @@ function zeichnePositionsPruefung(strName, km, achse, pt) {
     }
     pruefCtxCache = { strName: strName, km: km || 0, achse: achse, pt: pt };
     if (pruefMapLayer) { map.removeLayer(pruefMapLayer); pruefMapLayer = null; }
-    if (pruefGrenzLayer) { map.removeLayer(pruefGrenzLayer); pruefGrenzLayer = null; }
+    entfernePruefVerwaltungsLayer();
     if (pruefOverlayLayer) { map.removeLayer(pruefOverlayLayer); pruefOverlayLayer = null; }
 
-    pruefGrenzLayer = L.layerGroup().addTo(map);
     pruefMapLayer = L.layerGroup().addTo(map);
 
-    let radiusKm = 6;
-    let kmSpan = 5;
+    let radiusKm = 4;
+    let kmSpan = 2.5;
     let kmVon = Math.max(0, (km || 0) - kmSpan);
     let kmBis = (km || 0) + kmSpan;
 
     let gemeindenUmkreis = findeAngrenzendeGemeinden(strName, km || 0, achse, pt, radiusKm, kmSpan);
     let aktuelleGemeinde = (km > 0 && strName) ? ermittleGemeindePraezise(strName, km, achse) : null;
-    zeichneVerwaltungsgrenzen(gemeindenUmkreis, aktuelleGemeinde);
+    pruefCtxCache.gemeindenUmkreis = gemeindenUmkreis;
+    pruefCtxCache.aktuelleGemeinde = aktuelleGemeinde;
+    baueVerwaltungsGrenzLayer(gemeindenUmkreis, aktuelleGemeinde);
 
     if (strName && strName.startsWith("A") && km > 0) {
         holeRefsFuerPruefKarte(strName, strName, km, kmVon, kmBis, pt).forEach(r => {
@@ -5222,6 +5219,10 @@ function openPositionPruefen() {
     if (mapLineLayer && map) { map.removeLayer(mapLineLayer); mapLineLayer = null; }
 
     setzePruefKartenOverlays(true);
+    ["gemeinde", "kreis", "rb"].forEach(k => {
+        let el = document.getElementById("pruef-show-" + k);
+        if (el) el.checked = !!pruefLayerOpts[k];
+    });
     let c = ctx.pt.geometry.coordinates;
     if (!map) {
         map = L.map("karte", { zoomControl: false }).setView([c[1], c[0]], 15);
