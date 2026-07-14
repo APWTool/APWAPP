@@ -2283,10 +2283,6 @@ function updateDusselUI() {
     let segs = holeDuesselWachSegmente(a);
     let kombi = holeDuesselKombinierteGrenzen(a);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:updateDusselUI',message:'Duessel segmente',data:{autobahn:a,segs:segs.map(s=>({w:s.wache,min:s.minKm,max:s.maxKm})),kombi:kombi,kontextWache:duesselKontextWache},timestamp:Date.now(),hypothesisId:'H7',runId:'pre-fix'})}).catch(()=>{});
-    // #endregion
-
     if (!segs.length) {
         document.getElementById("b-duessel").innerText = "-";
         bereichDiv.style.display = "none";
@@ -5136,9 +5132,6 @@ function togglePruefGrenzLayer(layer) {
         }
     }
     aktualisierePruefGrenzSichtbarkeit();
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:togglePruefGrenzLayer',message:'Layer-Toggle v2',data:{layer:layer,opts:pruefLayerOpts,gemVisible:!!(pruefLayerOpts.gemeinde),kreisVisible:!!(pruefLayerOpts.kreis),rbVisible:!!(pruefLayerOpts.rb)},timestamp:Date.now(),hypothesisId:'H8',runId:'post-fix-v2'})}).catch(()=>{});
-    // #endregion
 }
 
 function zeichneVerwaltungsLabel(feature, text, className, targetLayer) {
@@ -5181,10 +5174,6 @@ function baueVerwaltungsGrenzLayer(pt, aktuelleGemeinde) {
 
     if (pruefLayerOpts.kreis) ergaenzeKreisGrenzLayer(aktiv, pt);
     if (pruefLayerOpts.rb) ergaenzeRbGrenzLayer(aktiv, pt);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:baueVerwaltungsGrenzLayer',message:'Layer gebaut v2',data:{gemeinden:alle.length,kreisName:holeKreisName(kreisCode,aktiv),rbName:holeRbName(rbCode),opts:pruefLayerOpts},timestamp:Date.now(),hypothesisId:'H10',runId:'post-fix-v2'})}).catch(()=>{});
-    // #endregion
 
     aktualisierePruefGrenzSichtbarkeit();
 }
@@ -5392,14 +5381,8 @@ function calculateMapResult() {
                 bkmKorridorAnkerPt = ptPin;
                 bkmKorridorAnkerStr = strName;
                 bkmKorridorAnkerKm = bkm;
-                // #region agent log
-                fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:calculateMapResult',message:'KM-Karte Anker gesetzt',data:{strName:strName,bkm:bkm,pin:[pos.lng,pos.lat]},timestamp:Date.now(),hypothesisId:'H6',runId:'pre-fix'})}).catch(()=>{});
-                // #endregion
                 setzeGemeindeAnzeige(strName, bkm, gemeindeAchse);
                 let m = ermittleMeistereiFuerKM(strName, bkm);
-                // #region agent log
-                fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:calculateMapResult',message:'AM nach KM-Karte',data:{strName:strName,bkm:bkm,am:m.name},timestamp:Date.now(),hypothesisId:'H6',runId:'pre-fix'})}).catch(()=>{});
-                // #endregion
                 document.getElementById("m").innerText = m.name;
                 document.getElementById("m_address").innerText = m.addr;
                 document.getElementById("m_phone").innerText = m.phone;
