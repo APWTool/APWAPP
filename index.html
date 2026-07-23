@@ -413,7 +413,7 @@ try { if (localStorage.getItem('schriftGross') === '1') document.documentElement
     <button type="button" class="menu-switch" id="menu-switch" onclick="toggleSidebar()" title="Menü ein-/ausklappen">☰</button>
     <div class="theme-switch" id="theme-switch" onclick="toggleTheme()" title="Hell/Dunkel umschalten">🌓</div>
     <button type="button" class="home-switch" id="home-switch" onclick="showPage('page-main')" title="Zurück zur Startseite" style="display:none;">⬅</button>
-   <h2>Zuständigkeitsfinder LIVE</h2>
+   <h2>Zuständigkeitsfinder</h2>
     
     <div class="wache-buttons" id="wache-container">
         <button class="wache-btn" data-wache="Hilden" onclick="wechsleWache('Hilden', true)">Hilden</button>
@@ -2046,11 +2046,7 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
     let kette = waehleReferenzGeoKette(mitKm, km, autobahn, { pt: anchorPt, kmOnly: !!opts.kmOnly });
     let quelle = (kette && kette.length >= 2) ? kette : filtereRefsNachAnkerKorridor(mitKm, anchorPt, 15);
     let bracket = waehleRefsFuerKmInterpolation(quelle, km, anchorPt);
-    let result = interpoliereKmKoordinate(bracket.before, bracket.after, km);
-    // #region agent log
-    if (autobahn === "A59" && result) fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'A59 coord',data:{km:km,result:result,anchor:anchorPt?turf.getCoord(anchorPt):null,ketteN:kette?kette.length:0,beforeKm:bracket.before&&bracket.before.km,afterKm:bracket.after&&bracket.after.km,beforeC:bracket.before&&bracket.before.coord,afterC:bracket.after&&bracket.after.coord},timestamp:Date.now(),hypothesisId:'H-A59',runId:'a59-fix'})}).catch(()=>{});
-    // #endregion
-    return result;
+    return interpoliereKmKoordinate(bracket.before, bracket.after, km);
 }
  
 function updateRichtungDropdown(a) {
@@ -2089,9 +2085,6 @@ function uebernehmeKmAusListe(kmWert) {
     let a = document.getElementById("autobahn").value;
     document.getElementById("km").value = km.toFixed(3).replace('.', ',');
     setzeWachbereichKorridorAnker(a, km, aktuelleWache);
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:uebernehmeKmAusListe',message:'KM aus Liste',data:{strName:a,km:km,wache:aktuelleWache,anker:bkmKorridorAnkerPt?turf.getCoord(bkmKorridorAnkerPt):null},timestamp:Date.now(),hypothesisId:'H-LISTE',runId:'wache-korridor'})}).catch(()=>{});
-    // #endregion
     berechnen(true);
 }
 
@@ -2434,9 +2427,6 @@ function fuelleInfraZeile(tbody, cfg, e, strName, wacheName) {
         if (coords) {
             let mapLink = "https://www.google.com/maps/search/?api=1&query=" + coords[1] + "," + coords[0];
             nameMain = '<a href="' + mapLink + '" target="_blank">' + name + "</a>";
-            // #region agent log
-            if (strName === "A59") fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:fuelleInfraZeile',message:'A59 maps link',data:{wache:wacheName,name:name,km:baseKm,coords:coords,anchor:turf.getCoord(anchor)},timestamp:Date.now(),hypothesisId:'H-A59-MAPS',runId:'a59-test'})}).catch(()=>{});
-            // #endregion
         }
     }
     if (rf) {
@@ -3388,9 +3378,6 @@ function waehleBkmAbschnitt(index) {
     let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
     let gemeinde = gemeindeLabelFuerBkmKorridor(strName, km, achse, k);
     setzeGemeindeAnzeigeHtml(gemeinde, "");
-    // #region agent log
-    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:waehleBkmAbschnitt',message:'Abschnitt gewählt',data:{strName:strName,km:km,index:index,gemeinde:gemeinde,coord:coord},timestamp:Date.now(),hypothesisId:'H-WARN',runId:'wache-korridor'})}).catch(()=>{});
-    // #endregion
 
     setzeBkmDoppelWarnung(letzteBkmDoppelInfo, true);
     toggleBkmDoppelDetail(true);
@@ -3456,9 +3443,6 @@ function formatiereGemeindeAnzeige(name, bereich, km) {
 
 function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
     let gemeinde = findeGemeindeAnFahrbahn(strName, km, achse);
-    // #region agent log
-    if (strName === "A46" || strName === "A59") fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:setzeGemeindeAnzeige',message:'Gemeinde',data:{strName:strName,km:km,gemeinde:gemeinde,wache:aktuelleWache,anker:holeBkmKorridorAnker(strName,km)?turf.getCoord(bkmKorridorAnkerPt):null,aktive:[aktiveLon,aktiveLat]},timestamp:Date.now(),hypothesisId:'H-GEMEINDE',runId:'wache-korridor'})}).catch(()=>{});
-    // #endregion
     if (!gemeinde || gemeinde === "-") {
         setzeGemeindeAnzeigeHtml(gemeinde || "-", "");
         return gemeinde;
@@ -3708,11 +3692,53 @@ function aktualisiereKontextAnzeigen(opts) {
 }
  
 let watchId=null;
+let gpsFehlerZaehler = 0;
+
+function istGpsTransienterFehler(err) {
+    if (!err) return false;
+    // 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT; iOS meldet oft kCLErrorDomain 0 (LocationUnknown)
+    if (err.code === 2 || err.code === 3) return true;
+    let msg = String(err.message || "");
+    return /kCLErrorDomain/i.test(msg) || /location unknown/i.test(msg) || /temporarily/i.test(msg);
+}
+
+function behandleGpsFehler(err) {
+    if (!watchId) return;
+
+    // 1 = PERMISSION_DENIED → hart stoppen
+    if (err && err.code === 1) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        lastGpsStrasse = null;
+        lastGpsBkm = 0;
+        gpsFehlerZaehler = 0;
+        let btn = document.getElementById("gpsBtn");
+        if (btn) {
+            btn.innerHTML = "📡 GPS Live-Erfassung starten";
+            btn.classList.remove("active");
+        }
+        zeigeGpsInfo("❌ GPS-Zugriff verweigert. Bitte Standortfreigabe in den Browser-/Geräte-Einstellungen erlauben.");
+        return;
+    }
+
+    if (istGpsTransienterFehler(err)) {
+        gpsFehlerZaehler++;
+        // Kurzzeitige iOS-/Netz-Aussetzer: Watch läuft weiter, keine Abbruch-Meldung
+        if (gpsFehlerZaehler >= 3) {
+            zeigeGpsInfo("⏳ GPS-Signal kurzzeitig ungenau – warte auf bessere Position…");
+        }
+        return;
+    }
+
+    zeigeGpsInfo("❌ GPS-Fehler: " + ((err && err.message) || "unbekannt"));
+}
+
 function toggleGPS(){
     const btn=document.getElementById("gpsBtn"), info=document.getElementById("gps-info");
     if(watchId){
        navigator.geolocation.clearWatch(watchId); watchId=null;
        lastGpsStrasse = null; lastGpsBkm = 0;
+       gpsFehlerZaehler = 0;
        btn.innerHTML="📡 GPS Live-Erfassung starten"; btn.classList.remove("active");
        if (geoDatenBereit) { info.className = "gps-info--versteckt"; info.innerHTML = ""; }
        else info.innerHTML="GPS pausiert.";
@@ -3720,10 +3746,12 @@ function toggleGPS(){
        if(!navigator.geolocation) return zeigeGpsInfo("GPS nicht unterstützt");
        if (!geoDatenBereit) return zeigeGpsInfo("⏳ Geo-Daten noch nicht geladen – bitte kurz warten.");
        btn.innerHTML="⏹️ GPS stoppen"; btn.classList.add("active"); zeigeGpsInfo("⏳ Suche Signal...");
+       gpsFehlerZaehler = 0;
         // AM-Grenzen sind als feste Datei geladen; kein Runtime-Build nötig.
         watchId = navigator.geolocation.watchPosition(pos => {
+           gpsFehlerZaehler = 0;
            queueVerarbeiteGPS(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-        }, err => { zeigeGpsInfo("❌ GPS-Fehler: " + err.message); }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 27000 });
+        }, behandleGpsFehler, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
     }
 }
  
@@ -4274,7 +4302,7 @@ function istLandesOderBundesstrasse(strName) {
 function formatiereLbErfassungHtml(strName, abschnitt, stationKm) {
     let kl = String(strName || "").charAt(0).toUpperCase();
     let icon = kl === "B" ? "🚙" : "🌲";
-    let absFmt = abschnitt && abschnitt !== "Unbekannt" ? abschnitt + " (Abschnitt)" : "Unbekannt (Abschnitt)";
+    let absFmt = abschnitt && abschnitt !== "Unbekannt" ? abschnitt : "Unbekannt";
     let kmFmt = Number(stationKm || 0).toFixed(3);
     return '<span style="color:green;font-weight:bold;">' + icon + ' ' + strName + ' erkannt</span><br><span style="font-size:0.9em;">Abschnitt: ' + absFmt + ' | KM: ' + kmFmt + '</span>';
 }
