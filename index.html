@@ -1867,11 +1867,25 @@ function holeBkmInterpolationsAnker(strName, km) {
             return turf.point(wachenAnker[aktuelleWache]);
         }
     }
+    // Mehrere Wachen mit gleichem KM-Band (A59): geografisch nächsten Wachenanker wählen
+    let kandidaten = [];
     for (let wache in datenWachen) {
         let g = datenWachen[wache].grenzen[strName];
         if (g && km >= Math.min(...g) && km <= Math.max(...g) && wachenAnker[wache]) {
-            return turf.point(wachenAnker[wache]);
+            kandidaten.push(wache);
         }
+    }
+    if (kandidaten.length === 1) return turf.point(wachenAnker[kandidaten[0]]);
+    if (kandidaten.length > 1) {
+        let refPt = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
+        if (refPt) {
+            kandidaten.sort((a, b) =>
+                turf.distance(refPt, turf.point(wachenAnker[a])) - turf.distance(refPt, turf.point(wachenAnker[b]))
+            );
+            return turf.point(wachenAnker[kandidaten[0]]);
+        }
+        if (kandidaten.includes(aktuelleWache)) return turf.point(wachenAnker[aktuelleWache]);
+        return turf.point(wachenAnker[kandidaten[0]]);
     }
     return turf.point(holeKmAnkerKoordinaten());
 }
@@ -1911,16 +1925,32 @@ function findeKmGeoBracket(refs, km, anchorPt) {
     return { before: before, after: after };
 }
 
+function filtereRefsNachAnkerKorridor(refs, anchorPt, maxExtraKm) {
+    if (!anchorPt || !refs || refs.length < 2) return refs || [];
+    maxExtraKm = maxExtraKm == null ? 12 : maxExtraKm;
+    let scored = refs.map(r => ({
+        r: r,
+        d: turf.distance(anchorPt, turf.point(r.coord), { units: "kilometers" })
+    }));
+    scored.sort((a, b) => a.d - b.d);
+    let d0 = scored[0].d;
+    let gefiltert = scored.filter(s => s.d <= d0 + maxExtraKm).map(s => s.r);
+    return gefiltert.length >= 2 ? gefiltert : refs;
+}
+
 function waehleRefsFuerKmInterpolation(mitKm, km, anchorPt) {
     let fenster = mitKm.filter(r => r.km >= km - 4 && r.km <= km + 4);
-    let quelle = fenster.length >= 2 ? fenster : mitKm;
+    if (fenster.length < 2) fenster = mitKm;
+    // Mehrfach-Korridore (z.B. A59 Duisburg/Düsseldorf/Köln): nur geo-nahen Korridor nutzen
+    let quelle = filtereRefsNachAnkerKorridor(fenster, anchorPt, 12);
     let bracket = findeKmGeoBracket(quelle, km, anchorPt);
     if (bracket.before && bracket.after &&
         bracket.before.km <= km + 0.05 && bracket.after.km >= km - 0.05 &&
         Math.abs(bracket.after.km - bracket.before.km) > 1e-4) {
         return bracket;
     }
-    return findeKmGeoBracket(mitKm, km, anchorPt);
+    let fallback = filtereRefsNachAnkerKorridor(mitKm, anchorPt, 15);
+    return findeKmGeoBracket(fallback, km, anchorPt);
 }
 
 function interpoliereKmKoordinate(before, after, km) {
@@ -1945,9 +1975,9 @@ function autobahnSuchNummer(strName) {
 function waehleReferenzGeoKette(mitKm, km, strName, opts) {
     opts = opts || {};
     if (!mitKm || !mitKm.length) return [];
-    let kmCluster = waehleKmCluster(mitKm, km, opts.pt || null, strName, opts);
-    let sorted = kmCluster.slice().sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
+    let sorted = mitKm.slice().sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]);
 
+    // Ketten über alle Punkte: bei geo-Sprung (Duisburg↔Köln) trennen, auch wenn KM überlappen
     let chains = [];
     let cur = [sorted[0]];
     for (let i = 1; i < sorted.length; i++) {
@@ -1962,9 +1992,26 @@ function waehleReferenzGeoKette(mitKm, km, strName, opts) {
     }
     if (cur.length) chains.push(cur);
 
-    let passend = chains.filter(c => km >= c[0].km - 0.5 && km <= c[c.length - 1].km + 0.5);
-    let pool = passend.length > 0 ? passend : chains.filter(c => c.some(p => Math.abs(p.km - km) <= 4));
-    if (!pool.length) pool = chains;
+    // Interleaved Korridore erzeugen viele Mikro-Ketten: zu geografischen Gruppen mergen
+    let groups = [];
+    chains.forEach(chain => {
+        let mid = chain[Math.floor(chain.length / 2)].coord;
+        let joined = false;
+        for (let g of groups) {
+            let gMid = g[Math.floor(g.length / 2)].coord;
+            if (turf.distance(turf.point(mid), turf.point(gMid), { units: "kilometers" }) <= 18) {
+                g.push(...chain);
+                joined = true;
+                break;
+            }
+        }
+        if (!joined) groups.push(chain.slice());
+    });
+    groups.forEach(g => g.sort((a, b) => a.km - b.km || a.coord[0] - b.coord[0]));
+
+    let passend = groups.filter(c => km >= c[0].km - 0.5 && km <= c[c.length - 1].km + 0.5);
+    let pool = passend.length > 0 ? passend : groups.filter(c => c.some(p => Math.abs(p.km - km) <= 4));
+    if (!pool.length) pool = groups;
 
     let anchorPt = opts.pt;
     if (!anchorPt) anchorPt = turf.point(holeKmAnkerFuerAutobahn(strName, km));
@@ -1995,8 +2042,15 @@ function holeKoordinateFuerKM(autobahn, km, pt, opts) {
         if (!anchorPt) anchorPt = holeBkmInterpolationsAnker(autobahn, km);
     }
 
-    let bracket = waehleRefsFuerKmInterpolation(mitKm, km, anchorPt);
-    return interpoliereKmKoordinate(bracket.before, bracket.after, km);
+    // Zuerst geografische Kette wählen (A59 u.ä. haben mehrere Abschnitte mit gleichen KM)
+    let kette = waehleReferenzGeoKette(mitKm, km, autobahn, { pt: anchorPt, kmOnly: !!opts.kmOnly });
+    let quelle = (kette && kette.length >= 2) ? kette : filtereRefsNachAnkerKorridor(mitKm, anchorPt, 15);
+    let bracket = waehleRefsFuerKmInterpolation(quelle, km, anchorPt);
+    let result = interpoliereKmKoordinate(bracket.before, bracket.after, km);
+    // #region agent log
+    if (autobahn === "A59" && result) fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:holeKoordinateFuerKM',message:'A59 coord',data:{km:km,result:result,anchor:anchorPt?turf.getCoord(anchorPt):null,ketteN:kette?kette.length:0,beforeKm:bracket.before&&bracket.before.km,afterKm:bracket.after&&bracket.after.km,beforeC:bracket.before&&bracket.before.coord,afterC:bracket.after&&bracket.after.coord},timestamp:Date.now(),hypothesisId:'H-A59',runId:'a59-fix'})}).catch(()=>{});
+    // #endregion
+    return result;
 }
  
 function updateRichtungDropdown(a) {
@@ -2012,8 +2066,32 @@ function updateRichtungDropdown(a) {
     if (Array.from(rDrop.options).some(o => o.value === saved)) rDrop.value = saved;
 }
 
+function setzeWachbereichKorridorAnker(strName, km, wacheName) {
+    if (!strName || !(km > 0) || isNaN(km)) return null;
+    wacheName = wacheName || aktuelleWache;
+    let wachePt = (wacheName && wachenAnker[wacheName]) ? turf.point(wachenAnker[wacheName]) : null;
+    let coords = holeKoordinateFuerKM(strName, km, wachePt, { kmOnly: true });
+    if (!coords && wachePt) coords = turf.getCoord(wachePt);
+    if (!coords) return null;
+    bkmKorridorAnkerPt = turf.point(coords);
+    bkmKorridorAnkerStr = strName;
+    bkmKorridorAnkerKm = km;
+    aktiveLat = coords[1];
+    aktiveLon = coords[0];
+    aktiveStrasse = strName;
+    aktiveKM = km;
+    letzteKontextMeta.manuell = true;
+    return bkmKorridorAnkerPt;
+}
+
 function uebernehmeKmAusListe(kmWert) {
-    document.getElementById("km").value = Number(kmWert).toFixed(3).replace('.', ',');
+    let km = Number(kmWert);
+    let a = document.getElementById("autobahn").value;
+    document.getElementById("km").value = km.toFixed(3).replace('.', ',');
+    setzeWachbereichKorridorAnker(a, km, aktuelleWache);
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:uebernehmeKmAusListe',message:'KM aus Liste',data:{strName:a,km:km,wache:aktuelleWache,anker:bkmKorridorAnkerPt?turf.getCoord(bkmKorridorAnkerPt):null},timestamp:Date.now(),hypothesisId:'H-LISTE',runId:'wache-korridor'})}).catch(()=>{});
+    // #endregion
     berechnen(true);
 }
 
@@ -2337,16 +2415,28 @@ function fuelleInfraTabelle(cfg) {
     });
 }
 
+function holeListenKartenAnker(strName, km, wacheName) {
+    // Listen-Links müssen zum Wachbereich passen (A59 Duisburg ≠ A59 Köln)
+    if (wacheName && wachenAnker[wacheName]) return turf.point(wachenAnker[wacheName]);
+    let korridor = holeBkmKorridorAnker(strName, km);
+    if (korridor) return korridor;
+    if (letzteLat !== 0) return turf.point([letzteLon, letzteLat]);
+    return turf.point(holeKmAnkerFuerAutobahn(strName, km));
+}
+
 function fuelleInfraZeile(tbody, cfg, e, strName, wacheName) {
     let typ = e[0], name = e[1], kmRaw = e[2], rf = e[3];
     let baseKm = parseFloat(String(kmRaw || "").split("-")[0].replace(",", "."));
     let nameMain = name;
     if (!isNaN(baseKm)) {
-        let anchor = letzteLat !== 0 ? turf.point([letzteLon, letzteLat]) : null;
-        let coords = holeKoordinateFuerKM(strName, baseKm, anchor);
+        let anchor = holeListenKartenAnker(strName, baseKm, wacheName);
+        let coords = holeKoordinateFuerKM(strName, baseKm, anchor, { kmOnly: true });
         if (coords) {
             let mapLink = "https://www.google.com/maps/search/?api=1&query=" + coords[1] + "," + coords[0];
             nameMain = '<a href="' + mapLink + '" target="_blank">' + name + "</a>";
+            // #region agent log
+            if (strName === "A59") fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:fuelleInfraZeile',message:'A59 maps link',data:{wache:wacheName,name:name,km:baseKm,coords:coords,anchor:turf.getCoord(anchor)},timestamp:Date.now(),hypothesisId:'H-A59-MAPS',runId:'a59-test'})}).catch(()=>{});
+            // #endregion
         }
     }
     if (rf) {
@@ -2522,7 +2612,11 @@ function updateDusselUI() {
 }
 
 function uebernehmeKmAusListeDuessel(kmWert) {
-    document.getElementById("km-duessel").value = Number(kmWert).toFixed(3).replace(".", ",");
+    let km = Number(kmWert);
+    let a = document.getElementById("autobahn-duessel").value;
+    document.getElementById("km-duessel").value = km.toFixed(3).replace(".", ",");
+    let wache = duesselKontextWache || ermittleWacheFuerDuessel(a, km) || aktuelleWache;
+    setzeWachbereichKorridorAnker(a, km, wache);
     berechnenDuessel(true);
 }
 
@@ -2723,7 +2817,8 @@ function updateUI() {
 }
  
 function ermittleGemeindePunkt(strName, km) {
-    let coords = holeKoordinateFuerKM(strName, km);
+    let anchor = holeKontextAnkerPt(strName, km, null);
+    let coords = holeKoordinateFuerKM(strName, km, anchor, { kmOnly: true });
     if (!coords) return null;
     let pt = turf.point(coords);
 
@@ -2914,9 +3009,7 @@ function waehleStreckenRegion(strName, km, pt) {
             let strictA = (km >= a.kmVon && km <= a.kmBis) ? 0 : 1;
             let strictB = (km >= b.kmVon && km <= b.kmBis) ? 0 : 1;
             if (strictA !== strictB) return strictA - strictB;
-            let spanA = a.kmBis - a.kmVon;
-            let spanB = b.kmBis - b.kmVon;
-            if (Math.abs(spanA - spanB) > 0.2) return spanB - spanA;
+            // Bei Mehrfach-Korridoren (A46/A59) Geografie vor Spanne priorisieren
             let scoreA = anchor ? turf.distance(anchor, turf.point(a.mid || [0, 0]), { units: "kilometers" }) : 0;
             let scoreB = anchor ? turf.distance(anchor, turf.point(b.mid || [0, 0]), { units: "kilometers" }) : 0;
             if (wGrenzen) {
@@ -2925,6 +3018,10 @@ function waehleStreckenRegion(strName, km, pt) {
                 if (midA >= wGrenzen[0] - 1 && midA <= wGrenzen[1] + 1) scoreA -= 80;
                 if (midB >= wGrenzen[0] - 1 && midB <= wGrenzen[1] + 1) scoreB -= 80;
             }
+            if (anchor && Math.abs(scoreA - scoreB) > 2) return scoreA - scoreB;
+            let spanA = a.kmBis - a.kmVon;
+            let spanB = b.kmBis - b.kmVon;
+            if (Math.abs(spanA - spanB) > 0.2) return spanB - spanA;
             return scoreA - scoreB;
         });
         return cand[0];
@@ -3171,8 +3268,19 @@ function gemeindeLabelFuerBkmKorridor(strName, km, achse, refs) {
     let coord = korridorZentrumKoordinate(refs, km);
     if (!coord) return "Unbekannt";
     let g = findeGemeindeFuerPunkt(turf.point(coord), strName, km);
-    if (g && g !== "-") return g;
-    return gemeindeBeiKm(strName, km, achse || "Bestandsachse") || "Unbekannt";
+    if (g && g !== "-" && g !== "Außerhalb NRW") return g;
+    // Fallback nur mit Korridor-Anker, nie mit globalem Fremdkorridor
+    let prevAnker = bkmKorridorAnkerPt;
+    let prevStr = bkmKorridorAnkerStr;
+    let prevKm = bkmKorridorAnkerKm;
+    bkmKorridorAnkerPt = turf.point(coord);
+    bkmKorridorAnkerStr = strName;
+    bkmKorridorAnkerKm = km;
+    let fallback = gemeindeBeiKm(strName, km, achse || "Bestandsachse");
+    bkmKorridorAnkerPt = prevAnker;
+    bkmKorridorAnkerStr = prevStr;
+    bkmKorridorAnkerKm = prevKm;
+    return fallback || "Unbekannt";
 }
 
 function ermittleBkmMehrfachvergabe(strName, km, pt, achse) {
@@ -3247,7 +3355,7 @@ function toggleBkmDoppelDetail(forceOpen) {
     let html = "<strong>Mehrfachvergabe " + letzteBkmDoppelInfo.strName + " km " + kmStr + ":</strong><ul>";
     letzteBkmDoppelInfo.abschnitte.forEach(a => {
         let cls = "bkm-doppel-wahl" + (a.gewaehlt ? " bkm-doppel-aktiv" : "");
-        html += '<li class="' + cls + '" onclick="waehleBkmAbschnitt(' + a.index + ')" role="button" tabindex="0">' + a.label;
+        html += '<li class="' + cls + '" data-bkm-abschnitt="' + a.index + '" role="button" tabindex="0">' + a.label;
         if (a.gewaehlt) html += " ← gewählt";
         html += "</li>";
     });
@@ -3257,20 +3365,33 @@ function toggleBkmDoppelDetail(forceOpen) {
 
 function waehleBkmAbschnitt(index) {
     if (!letzteBkmDoppelInfo || !letzteBkmDoppelInfo._korridore) return;
+    index = Number(index);
     let k = letzteBkmDoppelInfo._korridore[index];
     if (!k) return;
-    let coord = korridorZentrumKoordinate(k, letzteBkmDoppelInfo.km);
+    let km = letzteBkmDoppelInfo.km;
+    let strName = letzteBkmDoppelInfo.strName;
+    let coord = korridorZentrumKoordinate(k, km);
     if (!coord) return;
     bkmKorridorAnkerPt = turf.point(coord);
-    bkmKorridorAnkerStr = letzteBkmDoppelInfo.strName;
-    bkmKorridorAnkerKm = letzteBkmDoppelInfo.km;
+    bkmKorridorAnkerStr = strName;
+    bkmKorridorAnkerKm = km;
     aktiveLat = coord[1];
     aktiveLon = coord[0];
+    aktiveStrasse = strName;
+    aktiveKM = km;
     letzteLat = coord[1];
     letzteLon = coord[0];
     letzteKontextMeta.manuell = true;
     letzteBkmDoppelInfo.abschnitte.forEach((a, i) => { a.gewaehlt = i === index; });
     letzteBkmDoppelInfo.gewaehltIndex = index;
+
+    let achse = document.getElementById("richtung").value || aktiveAchse || "Bestandsachse";
+    let gemeinde = gemeindeLabelFuerBkmKorridor(strName, km, achse, k);
+    setzeGemeindeAnzeigeHtml(gemeinde, "");
+    // #region agent log
+    fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:waehleBkmAbschnitt',message:'Abschnitt gewählt',data:{strName:strName,km:km,index:index,gemeinde:gemeinde,coord:coord},timestamp:Date.now(),hypothesisId:'H-WARN',runId:'wache-korridor'})}).catch(()=>{});
+    // #endregion
+
     setzeBkmDoppelWarnung(letzteBkmDoppelInfo, true);
     toggleBkmDoppelDetail(true);
     berechnen(true);
@@ -3282,8 +3403,9 @@ function aktualisiereBkmDoppelWarnung(strName, km, opts) {
         setzeBkmDoppelWarnung(null, false);
         return;
     }
-    let pt = (watchId && letzteLat !== 0) ? turf.point([letzteLon, letzteLat])
-        : (aktiveLat !== 0 ? turf.point([aktiveLon, aktiveLat]) : null);
+    let pt = holeBkmKorridorAnker(strName, km)
+        || ((watchId && letzteLat !== 0) ? turf.point([letzteLon, letzteLat]) : null)
+        || (aktiveLat !== 0 ? turf.point([aktiveLon, aktiveLat]) : null);
     let aufDuessel = istDuesselAktiv();
     let achse = document.getElementById(aufDuessel ? "richtung-duessel" : "richtung").value || aktiveAchse || "Bestandsachse";
     let info = ermittleBkmMehrfachvergabe(strName, km, pt, achse);
@@ -3307,6 +3429,20 @@ function aktualisiereBkmDoppelWarnung(strName, km, opts) {
         setzeBkmDoppelWarnung(null, false);
         return;
     }
+    // Manuell gewählten Korridor-Anker beibehalten (nicht durch Neuberechnung überschreiben)
+    if (info && info.anzahl > 1 && holeBkmKorridorAnker(strName, km) && info._korridore) {
+        let ankerCoord = turf.getCoord(bkmKorridorAnkerPt);
+        let bestIdx = info.gewaehltIndex;
+        let bestD = Infinity;
+        info._korridore.forEach((k, i) => {
+            let c = korridorZentrumKoordinate(k, km);
+            if (!c) return;
+            let d = turf.distance(turf.point(ankerCoord), turf.point(c), { units: "kilometers" });
+            if (d < bestD) { bestD = d; bestIdx = i; }
+        });
+        info.gewaehltIndex = bestIdx;
+        info.abschnitte.forEach((a, i) => { a.gewaehlt = i === bestIdx; });
+    }
     setzeBkmDoppelWarnung(info, true);
 }
 
@@ -3320,6 +3456,9 @@ function formatiereGemeindeAnzeige(name, bereich, km) {
 
 function setzeGemeindeAnzeige(strName, km, achse, opts = {}) {
     let gemeinde = findeGemeindeAnFahrbahn(strName, km, achse);
+    // #region agent log
+    if (strName === "A46" || strName === "A59") fetch('http://127.0.0.1:7712/ingest/6ec8cf99-2de0-417c-b5f5-9850e31109d6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2a3a11'},body:JSON.stringify({sessionId:'2a3a11',location:'index.html:setzeGemeindeAnzeige',message:'Gemeinde',data:{strName:strName,km:km,gemeinde:gemeinde,wache:aktuelleWache,anker:holeBkmKorridorAnker(strName,km)?turf.getCoord(bkmKorridorAnkerPt):null,aktive:[aktiveLon,aktiveLat]},timestamp:Date.now(),hypothesisId:'H-GEMEINDE',runId:'wache-korridor'})}).catch(()=>{});
+    // #endregion
     if (!gemeinde || gemeinde === "-") {
         setzeGemeindeAnzeigeHtml(gemeinde || "-", "");
         return gemeinde;
@@ -4042,10 +4181,15 @@ function berechnen(isManual = false){
  
     if (isManual || holeBkmKorridorAnker(a, km)) {
         let anchorPt = holeKontextAnkerPt(a, km, null);
-        let zielWache = findeWacheFuerAutobahnKm(a, km, anchorPt);
-        if (zielWache && zielWache !== aktuelleWache) {
-            wechsleWache(zielWache, true, a);
-            return;
+        let currentGrenzen = datenWachen[aktuelleWache]?.grenzen?.[a];
+        let kmImAktuellenWachbereich = !!(currentGrenzen && km >= Math.min(...currentGrenzen) && km <= Math.max(...currentGrenzen));
+        // Bei KM aus aktueller Wachenliste: Wache nicht wegen Mehrfach-Korridor wechseln
+        if (!kmImAktuellenWachbereich) {
+            let zielWache = findeWacheFuerAutobahnKm(a, km, anchorPt);
+            if (zielWache && zielWache !== aktuelleWache) {
+                wechsleWache(zielWache, true, a);
+                return;
+            }
         }
     }
  
@@ -4573,7 +4717,7 @@ function openDistanzMessen() {
 
 function ermittlePruefFahrbahnPosition(strName, km, achse) {
     if (!strName || !(km > 0) || isNaN(km)) return null;
-    let anchorPt = holeBkmInterpolationsAnker(strName, km);
+    let anchorPt = holeKontextAnkerPt(strName, km, null);
     let coords = holeKoordinateFuerKM(strName, km, anchorPt, { kmOnly: true });
     if (!coords) return null;
 
@@ -5867,6 +6011,21 @@ function highlightWzList(currentKm) {
 document.getElementById('gps-info').addEventListener('click', function(ev) {
     let btn = ev.target.closest('.gps-wechsel-btn');
     if (btn && btn.dataset.str) wechsleFokus(btn.dataset.str);
+});
+
+document.addEventListener('click', function(ev) {
+    let li = ev.target.closest('[data-bkm-abschnitt]');
+    if (!li) return;
+    let idx = Number(li.getAttribute('data-bkm-abschnitt'));
+    if (!isNaN(idx)) waehleBkmAbschnitt(idx);
+});
+document.addEventListener('keydown', function(ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    let li = ev.target.closest('[data-bkm-abschnitt]');
+    if (!li) return;
+    ev.preventDefault();
+    let idx = Number(li.getAttribute('data-bkm-abschnitt'));
+    if (!isNaN(idx)) waehleBkmAbschnitt(idx);
 });
 </script>
 </body>
