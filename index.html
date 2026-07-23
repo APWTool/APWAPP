@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Autobahn Tool v2.9</title>
+<title>Autobahn Tool v3.0</title>
  
 <script data-goatcounter="https://apwpatrick.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
  
@@ -56,16 +56,16 @@ h2 { text-align: center; color: var(--text-secondary); margin-top: 0; margin-bot
 .wache-grenze-km { font-family: monospace; font-weight: bold; }
 .wache-grenze-autobahn { color: var(--accent); font-weight: bold; text-decoration: none; }
 .wache-grenze-autobahn:hover { text-decoration: underline; }
-.sb-name-cell { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.sb-name-cell { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .sb-name-main { flex: 1; min-width: 0; }
-.sb-link-btn {
-    flex-shrink: 0; width: 28px; height: 28px; margin: 0; padding: 0;
-    border-radius: 6px; border: 1px solid var(--accent); background: transparent;
-    color: var(--accent); font-size: 0.95em; line-height: 1; cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
+.sb-row-linked td { background: color-mix(in srgb, var(--accent) 7%, var(--result-bg)); }
+.sb-row-linked td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent);
+    font-weight: 700;
 }
-.sb-link-btn:hover { background: var(--accent); color: #fff; filter: none; }
-.sb-link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sb-link-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; flex-shrink: 0; max-width: 48%; }
+.sb-link-chip-km { font-weight: 600; opacity: 0.9; }
+[data-theme="dark"] .sb-row-linked td { background: color-mix(in srgb, var(--accent) 12%, var(--result-bg)); }
 #bereich-info, #bereich-info-duessel { display: none !important; }
 .aml-label { font-size: 0.88em; font-weight: bold; color: var(--text-secondary); margin: 12px 0 4px; text-align: left; }
  
@@ -73,6 +73,15 @@ select, input, button { width: 100%; margin-top: 10px; padding: 12px; border-rad
 button { background: var(--accent); color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
 button:hover { filter: brightness(1.1); }
 button.active { background: #dc3545; }
+button.sb-link-chip {
+    margin: 0; padding: 3px 8px; width: auto; min-height: 26px;
+    border-radius: 999px; border: 1px solid var(--accent); background: var(--bg-card);
+    color: var(--accent); font-size: 0.72em; font-weight: 700; line-height: 1.2;
+    cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 2px;
+}
+button.sb-link-chip:hover { background: var(--accent); color: #fff; filter: none; }
+button.sb-link-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
  
 .btn-action { background: #6c757d; margin-top: 8px; }
 .btn-action:hover { filter: brightness(1.1); }
@@ -2171,55 +2180,80 @@ function normiereStreckenbandName(name) {
         .trim();
 }
 
-function holeStreckenbandLink(wacheName, strasse, typ, name, km) {
+function holeStreckenbandLinks(wacheName, strasse, typ, name, km) {
     let links = (streckenbandLinks && streckenbandLinks.links) || {};
     let n = normiereStreckenbandName(name);
     let t = String(typ || "").toUpperCase();
     let kmKey = (km == null || isNaN(km)) ? "-" : String(Math.round(km * 10) / 10);
-    let keys = [
-        [wacheName, strasse, t, n, kmKey].join("|"),
-        [wacheName, strasse, t, n, "*"].join("|")
-    ];
-    for (let i = 0; i < keys.length; i++) {
-        if (links[keys[i]]) return links[keys[i]];
+    let found = [];
+    let seenKeys = {};
+    function addLink(key) {
+        if (!key || seenKeys[key] || !links[key]) return;
+        seenKeys[key] = true;
+        found.push(links[key]);
     }
-    // Fallback: gleiche Wache/Straße/Name, KM ±0,3
-    if (km != null && !isNaN(km)) {
-        for (let key in links) {
-            let parts = key.split("|");
-            if (parts.length < 5) continue;
-            if (parts[0] !== wacheName || parts[1] !== strasse || parts[2] !== t || parts[3] !== n) continue;
-            if (parts[4] === "*" || parts[4] === "-") return links[key];
+    addLink([wacheName, strasse, t, n, kmKey].join("|"));
+    addLink([wacheName, strasse, t, n, "*"].join("|"));
+    // Fallback: gleiche Wache/Straße/Name, KM ±0,35
+    for (let key in links) {
+        if (seenKeys[key]) continue;
+        let parts = key.split("|");
+        if (parts.length < 5) continue;
+        if (parts[0] !== wacheName || parts[1] !== strasse || parts[2] !== t || parts[3] !== n) continue;
+        if (parts[4] === "*" || parts[4] === "-") {
+            addLink(key);
+            continue;
+        }
+        if (km != null && !isNaN(km)) {
             let k = parseFloat(parts[4]);
-            if (!isNaN(k) && Math.abs(k - km) <= 0.35) return links[key];
+            if (!isNaN(k) && Math.abs(k - km) <= 0.35) addLink(key);
         }
     }
-    return null;
+    // Nach Zielstraße deduplizieren (erster Treffer gewinnt)
+    let byZiel = {};
+    let out = [];
+    for (let i = 0; i < found.length; i++) {
+        let link = found[i];
+        if (!link || !link.zielStrasse) continue;
+        let z = String(link.zielStrasse).toUpperCase().replace(/\s/g, "");
+        if (byZiel[z]) continue;
+        byZiel[z] = true;
+        out.push(link);
+    }
+    return out;
+}
+
+function holeStreckenbandLink(wacheName, strasse, typ, name, km) {
+    let links = holeStreckenbandLinks(wacheName, strasse, typ, name, km);
+    return links.length ? links[0] : null;
 }
 
 function wechsleStrasseAusStreckenband(zielStrasse, zielKm, zielWache, duessel) {
     zielStrasse = String(zielStrasse || "").toUpperCase().replace(/\s/g, "");
     if (!zielStrasse) return;
+    let zielKmNum = (zielKm != null && !isNaN(Number(zielKm))) ? Number(zielKm) : null;
+    let wacheFuerAnker = zielWache || aktuelleWache;
+
     if (duessel) {
         let drop = document.getElementById("autobahn-duessel");
         if (!drop) return;
-        if (!Array.from(drop.options).some(o => o.value === zielStrasse)) {
-            // Straße ggf. erst nach Wache-Kontext verfügbar – bei Düssel alle BAB
-            return;
-        }
+        if (!Array.from(drop.options).some(o => o.value === zielStrasse)) return;
         drop.value = zielStrasse;
         onAutobahnWechselDuessel();
-        if (zielKm != null && !isNaN(Number(zielKm))) {
-            document.getElementById("km-duessel").value = Number(zielKm).toFixed(3).replace(".", ",");
+        if (zielKmNum != null) {
+            setzeWachbereichKorridorAnker(zielStrasse, zielKmNum, wacheFuerAnker);
+            document.getElementById("km-duessel").value = zielKmNum.toFixed(3).replace(".", ",");
             berechnenDuessel(true);
         }
         return;
     }
+
     if (zielWache && datenWachen[zielWache] && zielWache !== aktuelleWache) {
         let inZiel = !!(datenWachen[zielWache].grenzen || {})[zielStrasse];
-        let inAktuell = !!(datenWachen[aktuelleWache].grenzen || {})[zielStrasse];
+        let inAktuell = !!(datenWachen[aktuelleWache] && (datenWachen[aktuelleWache].grenzen || {})[zielStrasse]);
         if (inZiel && !inAktuell) {
             wechsleWache(zielWache, true, zielStrasse, true);
+            wacheFuerAnker = zielWache;
         }
     }
     let drop = document.getElementById("autobahn");
@@ -2227,37 +2261,62 @@ function wechsleStrasseAusStreckenband(zielStrasse, zielKm, zielWache, duessel) 
     if (!Array.from(drop.options).some(o => o.value === zielStrasse)) {
         // Zielstraße nicht in aktueller Wache → passende Wache suchen
         let found = null;
-        for (let w in datenWachen) {
-            if ((datenWachen[w].grenzen || {})[zielStrasse]) { found = w; break; }
+        if (zielWache && datenWachen[zielWache] && (datenWachen[zielWache].grenzen || {})[zielStrasse]) {
+            found = zielWache;
+        } else {
+            for (let w in datenWachen) {
+                if ((datenWachen[w].grenzen || {})[zielStrasse]) { found = w; break; }
+            }
         }
-        if (found) wechsleWache(found, true, zielStrasse, true);
-        drop = document.getElementById("autobahn");
+        if (found) {
+            wechsleWache(found, true, zielStrasse, true);
+            wacheFuerAnker = found;
+            drop = document.getElementById("autobahn");
+        }
     }
-    if (!Array.from(drop.options).some(o => o.value === zielStrasse)) {
-        alert("Zielstraße " + zielStrasse + " ist in keiner Wache als Strecke hinterlegt.");
+    // L/B-Ziele o.ä. ohne Wachen-Grenzen: Dropdown nur setzen, wenn Option existiert
+    if (!drop || !Array.from(drop.options).some(o => o.value === zielStrasse)) {
         return;
     }
     drop.value = zielStrasse;
     manuellerFokus = zielStrasse;
     onAutobahnWechsel();
-    if (zielKm != null && !isNaN(Number(zielKm))) {
-        document.getElementById("km").value = Number(zielKm).toFixed(3).replace(".", ",");
+    if (zielKmNum != null) {
+        setzeWachbereichKorridorAnker(zielStrasse, zielKmNum, wacheFuerAnker || aktuelleWache);
+        document.getElementById("km").value = zielKmNum.toFixed(3).replace(".", ",");
         berechnen(true);
     }
 }
 
-function baueStreckenbandLinkButton(link, duessel) {
-    if (!link || !link.zielStrasse) return "";
-    let zielKm = (link.zielKm != null && !isNaN(Number(link.zielKm))) ? Number(link.zielKm) : "null";
-    let zielWache = link.zielWache ? String(link.zielWache).replace(/'/g, "\\'") : "";
-    let fn = duessel ? "wechsleStrasseAusStreckenband" : "wechsleStrasseAusStreckenband";
+function formatiereStreckenbandZielKm(km) {
+    if (km == null || isNaN(Number(km))) return "";
+    return Number(km).toFixed(1).replace(".", ",");
+}
+
+function baueStreckenbandLinkChips(links, duessel) {
+    if (!links || !links.length) return "";
     let duesselFlag = duessel ? "true" : "false";
-    let title = "Zu " + link.zielStrasse + " wechseln";
-    if (link.zielKm != null && !isNaN(Number(link.zielKm))) {
-        title += " (km " + Number(link.zielKm).toFixed(1).replace(".", ",") + ")";
+    let chips = [];
+    for (let i = 0; i < links.length; i++) {
+        let link = links[i];
+        if (!link || !link.zielStrasse) continue;
+        let zielStrasse = String(link.zielStrasse).toUpperCase().replace(/\s/g, "");
+        let zielKm = (link.zielKm != null && !isNaN(Number(link.zielKm))) ? Number(link.zielKm) : "null";
+        let zielWache = link.zielWache ? String(link.zielWache).replace(/'/g, "\\'") : "";
+        let kmTxt = formatiereStreckenbandZielKm(link.zielKm);
+        let label = kmTxt
+            ? ("→ " + zielStrasse + ' <span class="sb-link-chip-km">· ' + kmTxt + "</span>")
+            : (link.label ? String(link.label) : ("→ " + zielStrasse));
+        let title = "Zu " + zielStrasse + " wechseln";
+        if (kmTxt) title += " (km " + kmTxt + ")";
+        chips.push(
+            '<button type="button" class="sb-link-chip" title="' + title + '" aria-label="' + title + '" onclick="' +
+            "wechsleStrasseAusStreckenband('" + zielStrasse + "', " + zielKm + ", '" + zielWache + "', " + duesselFlag +
+            '); event.stopPropagation(); return false;">' + label + "</button>"
+        );
     }
-    return '<button type="button" class="sb-link-btn" title="' + title + '" aria-label="' + title + '" onclick="' +
-        fn + "('" + link.zielStrasse + "', " + zielKm + ", '" + zielWache + "', " + duesselFlag + '); event.stopPropagation(); return false;">⇄</button>';
+    if (!chips.length) return "";
+    return '<div class="sb-link-chips">' + chips.join("") + "</div>";
 }
 
 function baueGrenzEndeHtml(opts, strName, richtung) {
@@ -2437,25 +2496,23 @@ function fuelleInfraZeile(tbody, cfg, e, strName, wacheName) {
             nameMain += '<br><span style="font-size:0.85em; color:var(--text-secondary); font-weight:normal;">' + rf + "</span>";
         }
     }
-    let link = holeStreckenbandLink(wacheName, strName, typ, name, isNaN(baseKm) ? null : baseKm);
-    // Notiz-Übergänge ohne AK/AD: z.B. „Abzweig L 418“
-    if (!link && rf && !rfTextZuAchse(rf, strName, wacheName)) {
-        link = holeStreckenbandLink(wacheName, strName, typ, name, isNaN(baseKm) ? null : baseKm);
-        // zweiter Versuch über Listen-Key mit *
-        if (!link && streckenbandLinks && streckenbandLinks.links) {
-            let n = normiereStreckenbandName(name);
-            let keyNotiz = [wacheName, strName, String(typ || "").toUpperCase(), n, "*"].join("|");
-            link = streckenbandLinks.links[keyNotiz] || null;
-        }
+    let kmForLink = isNaN(baseKm) ? null : baseKm;
+    let links = holeStreckenbandLinks(wacheName, strName, typ, name, kmForLink);
+    // Notiz-Übergänge ohne AK/AD: z.B. „Abzweig L 418“ – zusätzlicher *-Key
+    if ((!links || !links.length) && streckenbandLinks && streckenbandLinks.links) {
+        let n = normiereStreckenbandName(name);
+        let keyNotiz = [wacheName, strName, String(typ || "").toUpperCase(), n, "*"].join("|");
+        let notizLink = streckenbandLinks.links[keyNotiz] || null;
+        if (notizLink) links = [notizLink];
     }
-    let btn = baueStreckenbandLinkButton(link, !!cfg.duessel);
-    let nameHtml = '<div class="sb-name-cell"><div class="sb-name-main">' + nameMain + "</div>" + btn + "</div>";
+    let chips = baueStreckenbandLinkChips(links, !!cfg.duessel);
+    let nameHtml = '<div class="sb-name-cell"><div class="sb-name-main">' + nameMain + "</div>" + chips + "</div>";
     let kmHtml = kmRaw;
     if (!isNaN(baseKm) && cfg.onKmClick) {
         kmHtml = '<a href="#" onclick="' + cfg.onKmClick + "(" + baseKm + '); return false;" title="KM übernehmen">' + kmRaw + "</a>";
     }
     let tr = document.createElement("tr");
-    if (link) tr.classList.add("sb-row-linked");
+    if (links && links.length) tr.classList.add("sb-row-linked");
     tr.innerHTML = "<td>" + typ + "</td><td>" + nameHtml + "</td><td>" + kmHtml + "</td>";
     tbody.appendChild(tr);
 }
